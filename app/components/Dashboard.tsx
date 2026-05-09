@@ -8,6 +8,7 @@ import {
   Bot,
   Box,
   ChevronRight,
+  MessageCircle,
   RefreshCw,
   Sparkles,
   Store,
@@ -22,6 +23,7 @@ import {
   Tooltip,
   XAxis,
 } from "recharts";
+import { createClient } from "../../utils/supabase/client";
 
 const API_URL = "https://sentinel-api.tssheets1.workers.dev";
 
@@ -30,6 +32,12 @@ type DashboardProps = {
 };
 
 type Range = "today" | "yesterday" | "30d";
+
+type StoreType = {
+  id: string;
+  store_name: string;
+  shopify_domain: string;
+};
 
 type DashboardData = {
   revenue: number;
@@ -62,7 +70,10 @@ type TopProduct = {
 };
 
 export default function Dashboard({ activeStoreId }: DashboardProps) {
-  const storeId = activeStoreId || "ceofo";
+  const supabase = createClient();
+
+  const [stores, setStores] = useState<StoreType[]>([]);
+  const [storeId, setStoreId] = useState(activeStoreId || "ceofo");
 
   const [range, setRange] = useState<Range>("30d");
   const [loading, setLoading] = useState(false);
@@ -73,6 +84,15 @@ export default function Dashboard({ activeStoreId }: DashboardProps) {
   const [products, setProducts] = useState<TopProduct[]>([]);
   const [error, setError] = useState("");
 
+  async function loadStores() {
+    const { data } = await supabase
+      .from("stores")
+      .select("id, store_name, shopify_domain")
+      .order("created_at", { ascending: false });
+
+    setStores(data || []);
+  }
+
   async function loadData() {
     try {
       setLoading(true);
@@ -80,15 +100,17 @@ export default function Dashboard({ activeStoreId }: DashboardProps) {
 
       const query = `store_id=${storeId}&range=${range}`;
 
-      const overviewRes = await fetch(`${API_URL}/api/dashboard/overview?${query}`, {
-        cache: "no-store",
-      });
+      const overviewRes = await fetch(
+        `${API_URL}/api/dashboard/overview?${query}`,
+        { cache: "no-store" }
+      );
       const overviewJson = await overviewRes.json();
       setData(overviewJson);
 
-      const alertsRes = await fetch(`${API_URL}/api/product-alerts?store_id=${storeId}`, {
-        cache: "no-store",
-      });
+      const alertsRes = await fetch(
+        `${API_URL}/api/product-alerts?store_id=${storeId}`,
+        { cache: "no-store" }
+      );
       const alertsJson = await alertsRes.json();
       setAlerts(alertsJson.alerts || []);
 
@@ -107,16 +129,30 @@ export default function Dashboard({ activeStoreId }: DashboardProps) {
 
   async function scanAlerts() {
     setScanning(true);
+
     await fetch(`${API_URL}/api/alerts/scan-products?store_id=${storeId}`, {
       cache: "no-store",
     });
+
     await loadData();
     setScanning(false);
   }
 
   useEffect(() => {
+    loadStores();
+  }, []);
+
+  useEffect(() => {
+    if (activeStoreId) {
+      setStoreId(activeStoreId);
+    }
+  }, [activeStoreId]);
+
+  useEffect(() => {
     loadData();
   }, [storeId, range]);
+
+  const activeStore = stores.find((store) => store.id === storeId);
 
   const revenue = Number(data?.revenue || 0);
   const orders = Number(data?.orders || 0);
@@ -125,13 +161,17 @@ export default function Dashboard({ activeStoreId }: DashboardProps) {
   const profit = Number(data?.profit ?? revenue - adSpend - productCost);
   const roas = Number(data?.roas || 0);
   const aov = Number(data?.aov || (orders > 0 ? revenue / orders : 0));
-  const sessions = Number(data?.sessions || 0);
   const cvr = Number(data?.cvr || 0);
 
   const chartData =
     data?.revenueTrend && data.revenueTrend.length > 0
       ? data.revenueTrend
       : [{ day: "No data", revenue: 0 }];
+
+  function changeStore(newStoreId: string) {
+    setStoreId(newStoreId);
+    window.history.pushState({}, "", `/?store_id=${newStoreId}`);
+  }
 
   return (
     <div className="min-h-screen bg-[#07070b] text-white">
@@ -142,6 +182,7 @@ export default function Dashboard({ activeStoreId }: DashboardProps) {
               <div className="h-11 w-11 rounded-2xl bg-indigo-600 flex items-center justify-center">
                 <Sparkles size={22} />
               </div>
+
               <div>
                 <h1 className="text-2xl font-black tracking-tight">Sentinel</h1>
                 <p className="text-xs text-zinc-500">AI Commerce OS</p>
@@ -154,6 +195,7 @@ export default function Dashboard({ activeStoreId }: DashboardProps) {
             <Nav icon={<Store size={18} />} label="Stores" href="/stores" />
             <Nav icon={<Box size={18} />} label="Product Insights" href="/product-insights" />
             <Nav icon={<Bot size={18} />} label="AI Recommendations" href="/ai-recommendations" />
+            <Nav icon={<MessageCircle size={18} />} label="AI Chat" href="/ai-chat" />
             <Nav icon={<BarChart3 size={18} />} label="Google Ads" href="/google-ads" />
             <Nav icon={<Target size={18} />} label="Scale Command Center" />
           </nav>
@@ -163,6 +205,7 @@ export default function Dashboard({ activeStoreId }: DashboardProps) {
               <Zap size={16} />
               AI Status
             </div>
+
             <p className="text-sm text-zinc-400">
               Monitoring products, margin risk and scaling signals.
             </p>
@@ -173,18 +216,55 @@ export default function Dashboard({ activeStoreId }: DashboardProps) {
           <div className="flex items-start justify-between mb-8">
             <div>
               <p className="text-sm text-zinc-500">Active store</p>
-              <h2 className="text-3xl font-black tracking-tight mt-1 break-all">
-                {storeId}
-              </h2>
-              <p className="text-zinc-500 mt-2">
-                Sentinel is watching revenue, profit, orders and product signals.
+
+              <div className="flex items-center gap-3 mt-2">
+                <select
+                  value={storeId}
+                  onChange={(e) => changeStore(e.target.value)}
+                  className="bg-[#111118] border border-white/10 rounded-2xl px-4 py-3 text-white min-w-[280px]"
+                >
+                  {stores.length === 0 && (
+                    <option value={storeId}>{storeId}</option>
+                  )}
+
+                  {stores.map((store) => (
+                    <option key={store.id} value={store.id}>
+                      {store.store_name}
+                    </option>
+                  ))}
+                </select>
+
+                <a
+                  href="/stores"
+                  className="h-11 px-4 rounded-2xl bg-[#111118] border border-white/10 flex items-center"
+                >
+                  Manage
+                </a>
+              </div>
+
+              <p className="text-zinc-500 mt-3">
+                {activeStore?.shopify_domain || "Store context active"}
               </p>
             </div>
 
             <div className="flex items-center gap-3">
-              <RangeButton label="Today" active={range === "today"} onClick={() => setRange("today")} />
-              <RangeButton label="Yesterday" active={range === "yesterday"} onClick={() => setRange("yesterday")} />
-              <RangeButton label="30 Days" active={range === "30d"} onClick={() => setRange("30d")} />
+              <RangeButton
+                label="Today"
+                active={range === "today"}
+                onClick={() => setRange("today")}
+              />
+
+              <RangeButton
+                label="Yesterday"
+                active={range === "yesterday"}
+                onClick={() => setRange("yesterday")}
+              />
+
+              <RangeButton
+                label="30 Days"
+                active={range === "30d"}
+                onClick={() => setRange("30d")}
+              />
 
               <button
                 onClick={loadData}
@@ -217,10 +297,12 @@ export default function Dashboard({ activeStoreId }: DashboardProps) {
               <div className="absolute top-0 right-0 h-40 w-40 bg-indigo-600/20 blur-3xl" />
 
               <p className="text-zinc-500">Revenue</p>
+
               <div className="flex items-end gap-4 mt-3">
                 <h1 className="text-6xl font-black tracking-tight">
                   €{revenue.toLocaleString("nl-NL")}
                 </h1>
+
                 <p className="text-emerald-400 font-semibold mb-2">
                   Profit €{profit.toLocaleString("nl-NL")}
                 </p>
@@ -258,14 +340,19 @@ export default function Dashboard({ activeStoreId }: DashboardProps) {
                   <Empty title="No alerts yet" text="Run Scan Alerts to let Sentinel inspect products." />
                 ) : (
                   alerts.slice(0, 7).map((alert) => (
-                    <div key={alert.id} className="flex items-start justify-between gap-5 border-b border-white/5 pb-4">
+                    <div
+                      key={alert.id}
+                      className="flex items-start justify-between gap-5 border-b border-white/5 pb-4"
+                    >
                       <div>
                         <p className="font-bold">{alert.product_title}</p>
                         <p className="text-sm text-zinc-500 mt-1">{alert.message}</p>
                         <p className="text-xs text-zinc-700 mt-2">
-                          {alert.alert_type} · {new Date(alert.created_at).toLocaleString("nl-NL")}
+                          {alert.alert_type} ·{" "}
+                          {new Date(alert.created_at).toLocaleString("nl-NL")}
                         </p>
                       </div>
+
                       <Badge severity={alert.severity} />
                     </div>
                   ))
@@ -279,13 +366,17 @@ export default function Dashboard({ activeStoreId }: DashboardProps) {
                   <Empty title="No product data" text="No products found for this date range." />
                 ) : (
                   products.slice(0, 6).map((product, index) => (
-                    <div key={index} className="flex items-center justify-between border-b border-white/5 pb-4">
+                    <div
+                      key={index}
+                      className="flex items-center justify-between border-b border-white/5 pb-4"
+                    >
                       <div>
                         <p className="font-bold leading-tight">{product.product_title}</p>
                         <p className="text-sm text-zinc-500">
                           {product.variant_title || "Default"} · {product.sold} sold
                         </p>
                       </div>
+
                       <p className="text-emerald-400 font-bold">
                         €{Number(product.profit || 0).toFixed(2)}
                       </p>
@@ -294,21 +385,6 @@ export default function Dashboard({ activeStoreId }: DashboardProps) {
                 )}
               </div>
             </Panel>
-          </section>
-
-          <section className="grid grid-cols-3 gap-6">
-            <AiCard
-              title="What to do today"
-              text="Check early winners, fix missing costs, and scan alerts after importing products."
-            />
-            <AiCard
-              title="Scaling logic"
-              text="Do not scale products under 5 orders. Validate CPA, ROAS and margin first."
-            />
-            <AiCard
-              title="Risk monitor"
-              text="Sentinel flags 0-order products, weak margin, missing costs and loss risk."
-            />
           </section>
         </main>
       </div>
@@ -330,13 +406,16 @@ function Nav({
   const content = (
     <div
       className={`flex items-center justify-between px-4 py-3 rounded-2xl transition ${
-        active ? "bg-indigo-600 text-white" : "text-zinc-400 hover:bg-white/5 hover:text-white"
+        active
+          ? "bg-indigo-600 text-white"
+          : "text-zinc-400 hover:bg-white/5 hover:text-white"
       }`}
     >
       <div className="flex items-center gap-3">
         {icon}
         {label}
       </div>
+
       {href && <ChevronRight size={15} />}
     </div>
   );
@@ -357,7 +436,9 @@ function RangeButton({
     <button
       onClick={onClick}
       className={`h-11 px-4 rounded-2xl font-semibold ${
-        active ? "bg-indigo-600 text-white" : "bg-[#111118] border border-white/10 text-zinc-400"
+        active
+          ? "bg-indigo-600 text-white"
+          : "bg-[#111118] border border-white/10 text-zinc-400"
       }`}
     >
       {label}
@@ -391,6 +472,7 @@ function Panel({
         <div className="text-indigo-400">{icon}</div>
         <h3 className="text-xl font-black">{title}</h3>
       </div>
+
       {children}
     </div>
   );
@@ -417,18 +499,6 @@ function Empty({ title, text }: { title: string; text: string }) {
     <div className="rounded-2xl bg-black/40 border border-white/5 p-5">
       <p className="font-bold">{title}</p>
       <p className="text-sm text-zinc-500 mt-1">{text}</p>
-    </div>
-  );
-}
-
-function AiCard({ title, text }: { title: string; text: string }) {
-  return (
-    <div className="rounded-3xl bg-gradient-to-br from-[#111118] to-[#0b0b11] border border-white/8 p-6">
-      <div className="flex items-center gap-2 text-indigo-400 mb-3">
-        <Sparkles size={18} />
-        <h3 className="font-black">{title}</h3>
-      </div>
-      <p className="text-zinc-500">{text}</p>
     </div>
   );
 }
