@@ -37,6 +37,7 @@ type StoreType = {
   id: string;
   store_name: string;
   shopify_domain: string;
+  store_key: string;
 };
 
 type DashboardData = {
@@ -73,7 +74,9 @@ export default function Dashboard({ activeStoreId }: DashboardProps) {
   const supabase = createClient();
 
   const [stores, setStores] = useState<StoreType[]>([]);
-  const [storeId, setStoreId] = useState(activeStoreId || "ceofo");
+  const [storeId, setStoreId] = useState(
+    activeStoreId || "ceofo"
+  );
 
   const [range, setRange] = useState<Range>("30d");
   const [loading, setLoading] = useState(false);
@@ -87,7 +90,7 @@ export default function Dashboard({ activeStoreId }: DashboardProps) {
   async function loadStores() {
     const { data } = await supabase
       .from("stores")
-      .select("id, store_name, shopify_domain")
+      .select("id, store_name, shopify_domain, store_key")
       .order("created_at", { ascending: false });
 
     setStores(data || []);
@@ -104,6 +107,7 @@ export default function Dashboard({ activeStoreId }: DashboardProps) {
         `${API_URL}/api/dashboard/overview?${query}`,
         { cache: "no-store" }
       );
+
       const overviewJson = await overviewRes.json();
       setData(overviewJson);
 
@@ -111,12 +115,17 @@ export default function Dashboard({ activeStoreId }: DashboardProps) {
         `${API_URL}/api/product-alerts?store_id=${storeId}`,
         { cache: "no-store" }
       );
+
       const alertsJson = await alertsRes.json();
       setAlerts(alertsJson.alerts || []);
 
-      const productsRes = await fetch(`${API_URL}/api/products/top?${query}`, {
-        cache: "no-store",
-      });
+      const productsRes = await fetch(
+        `${API_URL}/api/products/top?${query}`,
+        {
+          cache: "no-store",
+        }
+      );
+
       const productsJson = await productsRes.json();
       setProducts(productsJson.products || []);
     } catch (err) {
@@ -130,11 +139,15 @@ export default function Dashboard({ activeStoreId }: DashboardProps) {
   async function scanAlerts() {
     setScanning(true);
 
-    await fetch(`${API_URL}/api/alerts/scan-products?store_id=${storeId}`, {
-      cache: "no-store",
-    });
+    await fetch(
+      `${API_URL}/api/alerts/scan-products?store_id=${storeId}`,
+      {
+        cache: "no-store",
+      }
+    );
 
     await loadData();
+
     setScanning(false);
   }
 
@@ -152,15 +165,21 @@ export default function Dashboard({ activeStoreId }: DashboardProps) {
     loadData();
   }, [storeId, range]);
 
-  const activeStore = stores.find((store) => store.id === storeId);
+  const activeStore = stores.find(
+    (store) => store.store_key === storeId
+  );
 
   const revenue = Number(data?.revenue || 0);
   const orders = Number(data?.orders || 0);
   const adSpend = Number(data?.adSpend || 0);
   const productCost = Number(data?.productCost || 0);
-  const profit = Number(data?.profit ?? revenue - adSpend - productCost);
+  const profit = Number(
+    data?.profit ?? revenue - adSpend - productCost
+  );
   const roas = Number(data?.roas || 0);
-  const aov = Number(data?.aov || (orders > 0 ? revenue / orders : 0));
+  const aov = Number(
+    data?.aov || (orders > 0 ? revenue / orders : 0)
+  );
   const cvr = Number(data?.cvr || 0);
 
   const chartData =
@@ -170,7 +189,12 @@ export default function Dashboard({ activeStoreId }: DashboardProps) {
 
   function changeStore(newStoreId: string) {
     setStoreId(newStoreId);
-    window.history.pushState({}, "", `/?store_id=${newStoreId}`);
+
+    window.history.pushState(
+      {},
+      "",
+      `/?store_id=${newStoreId}`
+    );
   }
 
   return (
@@ -184,20 +208,58 @@ export default function Dashboard({ activeStoreId }: DashboardProps) {
               </div>
 
               <div>
-                <h1 className="text-2xl font-black tracking-tight">Sentinel</h1>
-                <p className="text-xs text-zinc-500">AI Commerce OS</p>
+                <h1 className="text-2xl font-black tracking-tight">
+                  Sentinel
+                </h1>
+
+                <p className="text-xs text-zinc-500">
+                  AI Commerce OS
+                </p>
               </div>
             </div>
           </div>
 
           <nav className="space-y-2">
-            <Nav active icon={<Activity size={18} />} label="Overview" />
-            <Nav icon={<Store size={18} />} label="Stores" href="/stores" />
-            <Nav icon={<Box size={18} />} label="Product Insights" href="/product-insights" />
-            <Nav icon={<Bot size={18} />} label="AI Recommendations" href="/ai-recommendations" />
-            <Nav icon={<MessageCircle size={18} />} label="AI Chat" href="/ai-chat" />
-            <Nav icon={<BarChart3 size={18} />} label="Google Ads" href="/google-ads" />
-            <Nav icon={<Target size={18} />} label="Scale Command Center" />
+            <Nav
+              active
+              icon={<Activity size={18} />}
+              label="Overview"
+            />
+
+            <Nav
+              icon={<Store size={18} />}
+              label="Stores"
+              href="/stores"
+            />
+
+            <Nav
+              icon={<Box size={18} />}
+              label="Product Insights"
+              href="/product-insights"
+            />
+
+            <Nav
+              icon={<Bot size={18} />}
+              label="AI Recommendations"
+              href="/ai-recommendations"
+            />
+
+            <Nav
+              icon={<MessageCircle size={18} />}
+              label="AI Chat"
+              href="/ai-chat"
+            />
+
+            <Nav
+              icon={<BarChart3 size={18} />}
+              label="Google Ads"
+              href="/google-ads"
+            />
+
+            <Nav
+              icon={<Target size={18} />}
+              label="Scale Command Center"
+            />
           </nav>
 
           <div className="mt-10 rounded-3xl bg-gradient-to-br from-indigo-600/20 to-purple-600/10 border border-indigo-500/20 p-5">
@@ -207,7 +269,8 @@ export default function Dashboard({ activeStoreId }: DashboardProps) {
             </div>
 
             <p className="text-sm text-zinc-400">
-              Monitoring products, margin risk and scaling signals.
+              Monitoring products, margin risk and scaling
+              signals.
             </p>
           </div>
         </aside>
@@ -215,20 +278,29 @@ export default function Dashboard({ activeStoreId }: DashboardProps) {
         <main className="flex-1 p-8">
           <div className="flex items-start justify-between mb-8">
             <div>
-              <p className="text-sm text-zinc-500">Active store</p>
+              <p className="text-sm text-zinc-500">
+                Active store
+              </p>
 
               <div className="flex items-center gap-3 mt-2">
                 <select
                   value={storeId}
-                  onChange={(e) => changeStore(e.target.value)}
+                  onChange={(e) =>
+                    changeStore(e.target.value)
+                  }
                   className="bg-[#111118] border border-white/10 rounded-2xl px-4 py-3 text-white min-w-[280px]"
                 >
                   {stores.length === 0 && (
-                    <option value={storeId}>{storeId}</option>
+                    <option value={storeId}>
+                      {storeId}
+                    </option>
                   )}
 
                   {stores.map((store) => (
-                    <option key={store.id} value={store.id}>
+                    <option
+                      key={store.id}
+                      value={store.store_key}
+                    >
                       {store.store_name}
                     </option>
                   ))}
@@ -243,7 +315,8 @@ export default function Dashboard({ activeStoreId }: DashboardProps) {
               </div>
 
               <p className="text-zinc-500 mt-3">
-                {activeStore?.shopify_domain || "Store context active"}
+                {activeStore?.shopify_domain ||
+                  "Store context active"}
               </p>
             </div>
 
@@ -284,108 +357,64 @@ export default function Dashboard({ activeStoreId }: DashboardProps) {
             </div>
           </div>
 
-          {error && (
-            <div className="mb-6 rounded-2xl bg-red-500/10 border border-red-500/20 p-4 text-red-300">
-              {error}
-            </div>
-          )}
+          <div className="grid grid-cols-4 gap-6 mb-6">
+            <Stat
+              label="Revenue"
+              value={`€${revenue.toLocaleString(
+                "nl-NL"
+              )}`}
+            />
 
-          {loading && <p className="mb-6 text-zinc-500">Loading dashboard...</p>}
+            <Stat
+              label="Orders"
+              value={orders.toString()}
+            />
 
-          <section className="grid grid-cols-12 gap-6 mb-6">
-            <div className="col-span-7 rounded-3xl bg-[#111118] border border-white/8 p-7 overflow-hidden relative">
-              <div className="absolute top-0 right-0 h-40 w-40 bg-indigo-600/20 blur-3xl" />
+            <Stat
+              label="Profit"
+              value={`€${profit.toLocaleString(
+                "nl-NL"
+              )}`}
+            />
 
-              <p className="text-zinc-500">Revenue</p>
+            <Stat
+              label="ROAS"
+              value={`${roas.toFixed(2)}x`}
+            />
+          </div>
 
-              <div className="flex items-end gap-4 mt-3">
-                <h1 className="text-6xl font-black tracking-tight">
-                  €{revenue.toLocaleString("nl-NL")}
-                </h1>
-
-                <p className="text-emerald-400 font-semibold mb-2">
-                  Profit €{profit.toLocaleString("nl-NL")}
-                </p>
-              </div>
-
-              <div className="h-56 mt-8">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData}>
-                    <XAxis dataKey="day" stroke="#52525b" />
-                    <Tooltip />
-                    <Area
-                      type="monotone"
-                      dataKey="revenue"
-                      stroke="#6366f1"
-                      fill="#6366f1"
-                      fillOpacity={0.16}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
+          <div className="rounded-3xl bg-[#111118] border border-white/8 p-6 mb-6">
+            <div className="flex items-center gap-2 mb-6">
+              <TrendingUp size={18} className="text-indigo-400" />
+              <h3 className="text-xl font-black">
+                Revenue Overview
+              </h3>
             </div>
 
-            <div className="col-span-5 grid grid-cols-2 gap-6">
-              <Stat label="Orders" value={orders.toString()} />
-              <Stat label="ROAS" value={`${roas.toFixed(2)}x`} />
-              <Stat label="AOV" value={`€${aov.toFixed(2)}`} />
-              <Stat label="CVR" value={`${cvr}%`} />
+            <div className="h-80">
+              <ResponsiveContainer
+                width="100%"
+                height="100%"
+              >
+                <AreaChart data={chartData}>
+                  <XAxis
+                    dataKey="day"
+                    stroke="#52525b"
+                  />
+
+                  <Tooltip />
+
+                  <Area
+                    type="monotone"
+                    dataKey="revenue"
+                    stroke="#6366f1"
+                    fill="#6366f1"
+                    fillOpacity={0.16}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
-          </section>
-
-          <section className="grid grid-cols-12 gap-6 mb-6">
-            <Panel className="col-span-7" title="Product Alerts" icon={<Bell size={18} />}>
-              <div className="space-y-4">
-                {alerts.length === 0 ? (
-                  <Empty title="No alerts yet" text="Run Scan Alerts to let Sentinel inspect products." />
-                ) : (
-                  alerts.slice(0, 7).map((alert) => (
-                    <div
-                      key={alert.id}
-                      className="flex items-start justify-between gap-5 border-b border-white/5 pb-4"
-                    >
-                      <div>
-                        <p className="font-bold">{alert.product_title}</p>
-                        <p className="text-sm text-zinc-500 mt-1">{alert.message}</p>
-                        <p className="text-xs text-zinc-700 mt-2">
-                          {alert.alert_type} ·{" "}
-                          {new Date(alert.created_at).toLocaleString("nl-NL")}
-                        </p>
-                      </div>
-
-                      <Badge severity={alert.severity} />
-                    </div>
-                  ))
-                )}
-              </div>
-            </Panel>
-
-            <Panel className="col-span-5" title="Top Products" icon={<TrendingUp size={18} />}>
-              <div className="space-y-4">
-                {products.length === 0 ? (
-                  <Empty title="No product data" text="No products found for this date range." />
-                ) : (
-                  products.slice(0, 6).map((product, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between border-b border-white/5 pb-4"
-                    >
-                      <div>
-                        <p className="font-bold leading-tight">{product.product_title}</p>
-                        <p className="text-sm text-zinc-500">
-                          {product.variant_title || "Default"} · {product.sold} sold
-                        </p>
-                      </div>
-
-                      <p className="text-emerald-400 font-bold">
-                        €{Number(product.profit || 0).toFixed(2)}
-                      </p>
-                    </div>
-                  ))
-                )}
-              </div>
-            </Panel>
-          </section>
+          </div>
         </main>
       </div>
     </div>
@@ -446,59 +475,20 @@ function RangeButton({
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
   return (
     <div className="rounded-3xl bg-[#111118] border border-white/8 p-6">
       <p className="text-zinc-500">{label}</p>
-      <h3 className="text-3xl font-black mt-3">{value}</h3>
-    </div>
-  );
-}
 
-function Panel({
-  title,
-  icon,
-  children,
-  className,
-}: {
-  title: string;
-  icon: React.ReactNode;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={`rounded-3xl bg-[#111118] border border-white/8 p-6 ${className}`}>
-      <div className="flex items-center gap-2 mb-6">
-        <div className="text-indigo-400">{icon}</div>
-        <h3 className="text-xl font-black">{title}</h3>
-      </div>
-
-      {children}
-    </div>
-  );
-}
-
-function Badge({ severity }: { severity: string }) {
-  return (
-    <span
-      className={`px-3 py-1 rounded-full text-xs font-bold ${
-        severity === "high"
-          ? "bg-red-500/10 text-red-400"
-          : severity === "medium"
-          ? "bg-yellow-500/10 text-yellow-400"
-          : "bg-emerald-500/10 text-emerald-400"
-      }`}
-    >
-      {severity}
-    </span>
-  );
-}
-
-function Empty({ title, text }: { title: string; text: string }) {
-  return (
-    <div className="rounded-2xl bg-black/40 border border-white/5 p-5">
-      <p className="font-bold">{title}</p>
-      <p className="text-sm text-zinc-500 mt-1">{text}</p>
+      <h3 className="text-3xl font-black mt-3">
+        {value}
+      </h3>
     </div>
   );
 }
