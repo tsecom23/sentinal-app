@@ -2,19 +2,17 @@
 
 import { useEffect, useState } from "react";
 import {
+  Activity,
   BarChart3,
   Bell,
+  Bot,
   Box,
-  Camera,
-  LogOut,
-  Moon,
+  ChevronRight,
   RefreshCw,
-  RotateCcw,
-  Send,
-  Settings,
+  Sparkles,
   Store,
-  Sun,
-  Tag,
+  Target,
+  TrendingUp,
   Zap,
 } from "lucide-react";
 import {
@@ -31,27 +29,26 @@ type DashboardProps = {
   activeStoreId?: string;
 };
 
-type DateRange = "today" | "yesterday" | "30d";
+type Range = "today" | "yesterday" | "30d";
 
 type DashboardData = {
   revenue: number;
-  netRevenue?: number;
   orders: number;
-  sessions?: number;
-  cvr?: number;
-  aov?: number;
+  profit?: number;
   adSpend?: number;
   productCost?: number;
-  profit?: number;
   roas?: number;
+  aov?: number;
+  cvr?: number;
+  sessions?: number;
   revenueTrend?: { day: string; revenue: number }[];
 };
 
 type ProductAlert = {
   id: string;
   product_title: string;
-  alert_type: string;
   message: string;
+  alert_type: string;
   severity: string;
   created_at: string;
 };
@@ -62,12 +59,12 @@ type TopProduct = {
   sold: number;
   revenue: number;
   profit: number;
-  unit_cost?: number;
 };
 
 export default function Dashboard({ activeStoreId }: DashboardProps) {
-  const [range, setRange] = useState<DateRange>("30d");
-  const [darkMode, setDarkMode] = useState(true);
+  const storeId = activeStoreId || "ceofo";
+
+  const [range, setRange] = useState<Range>("30d");
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
 
@@ -76,8 +73,6 @@ export default function Dashboard({ activeStoreId }: DashboardProps) {
   const [products, setProducts] = useState<TopProduct[]>([]);
   const [error, setError] = useState("");
 
-  const storeId = activeStoreId || "ceofo";
-
   async function loadData() {
     try {
       setLoading(true);
@@ -85,26 +80,21 @@ export default function Dashboard({ activeStoreId }: DashboardProps) {
 
       const query = `store_id=${storeId}&range=${range}`;
 
-      const overviewRes = await fetch(
-        `${API_URL}/api/dashboard/overview?${query}`,
-        { cache: "no-store" }
-      );
-
+      const overviewRes = await fetch(`${API_URL}/api/dashboard/overview?${query}`, {
+        cache: "no-store",
+      });
       const overviewJson = await overviewRes.json();
       setData(overviewJson);
 
-      const alertsRes = await fetch(
-        `${API_URL}/api/product-alerts?store_id=${storeId}`,
-        { cache: "no-store" }
-      );
-
+      const alertsRes = await fetch(`${API_URL}/api/product-alerts?store_id=${storeId}`, {
+        cache: "no-store",
+      });
       const alertsJson = await alertsRes.json();
       setAlerts(alertsJson.alerts || []);
 
       const productsRes = await fetch(`${API_URL}/api/products/top?${query}`, {
         cache: "no-store",
       });
-
       const productsJson = await productsRes.json();
       setProducts(productsJson.products || []);
     } catch (err) {
@@ -117,16 +107,11 @@ export default function Dashboard({ activeStoreId }: DashboardProps) {
 
   async function scanAlerts() {
     setScanning(true);
-
-    try {
-      await fetch(`${API_URL}/api/alerts/scan-products?store_id=${storeId}`, {
-        cache: "no-store",
-      });
-
-      await loadData();
-    } finally {
-      setScanning(false);
-    }
+    await fetch(`${API_URL}/api/alerts/scan-products?store_id=${storeId}`, {
+      cache: "no-store",
+    });
+    await loadData();
+    setScanning(false);
   }
 
   useEffect(() => {
@@ -149,237 +134,214 @@ export default function Dashboard({ activeStoreId }: DashboardProps) {
       : [{ day: "No data", revenue: 0 }];
 
   return (
-    <div
-      className={`min-h-screen ${
-        darkMode ? "bg-[#08080c] text-white" : "bg-zinc-100 text-black"
-      }`}
-    >
+    <div className="min-h-screen bg-[#07070b] text-white">
       <div className="flex">
-        <aside
-          className={`w-72 min-h-screen p-6 border-r ${
-            darkMode ? "bg-[#0f0f15] border-zinc-900" : "bg-white border-zinc-200"
-          }`}
-        >
+        <aside className="w-[300px] min-h-screen bg-[#0d0d13] border-r border-white/5 p-6">
           <div className="mb-10">
-            <h1 className="text-3xl font-black">Sentinel</h1>
-            <p className="text-zinc-500 text-sm mt-1">AI Commerce OS</p>
+            <div className="flex items-center gap-3">
+              <div className="h-11 w-11 rounded-2xl bg-indigo-600 flex items-center justify-center">
+                <Sparkles size={22} />
+              </div>
+              <div>
+                <h1 className="text-2xl font-black tracking-tight">Sentinel</h1>
+                <p className="text-xs text-zinc-500">AI Commerce OS</p>
+              </div>
+            </div>
           </div>
 
           <nav className="space-y-2">
-            <SidebarItem label="Dashboard" active icon={<Box size={18} />} />
-            <SidebarItem label="Orders" icon={<BarChart3 size={18} />} />
-            <SidebarItem label="Products" icon={<Store size={18} />} />
-            <SidebarItem label="AI Recommendations" icon={<Zap size={18} />} />
-            <SidebarItem label="Google Ads" icon={<BarChart3 size={18} />} />
-            <SidebarItem label="Returns & Disputes" icon={<RotateCcw size={18} />} />
-            <SidebarItem label="Quality Control" icon={<Camera size={18} />} />
-            <SidebarItem label="Price Negotiation" icon={<Tag size={18} />} />
-
-            <button onClick={scanAlerts} className="w-full">
-              <SidebarItem
-                label={scanning ? "Scanning..." : "Scan Alerts"}
-                icon={<Bell size={18} />}
-              />
-            </button>
-
-            <a href="/stores">
-              <SidebarItem label="Stores" icon={<Store size={18} />} />
-            </a>
-
-            <SidebarItem label="Settings" icon={<Settings size={18} />} />
+            <Nav active icon={<Activity size={18} />} label="Overview" />
+            <Nav icon={<Store size={18} />} label="Stores" href="/stores" />
+            <Nav icon={<Box size={18} />} label="Product Insights" href="/product-insights" />
+            <Nav icon={<Bot size={18} />} label="AI Recommendations" href="/ai-recommendations" />
+            <Nav icon={<BarChart3 size={18} />} label="Google Ads" href="/google-ads" />
+            <Nav icon={<Target size={18} />} label="Scale Command Center" />
           </nav>
 
-          <div className="mt-10 space-y-2">
-            <button onClick={() => setDarkMode(!darkMode)} className="w-full">
-              <SidebarItem
-                label={darkMode ? "Light Mode" : "Dark Mode"}
-                icon={darkMode ? <Sun size={18} /> : <Moon size={18} />}
-              />
-            </button>
-
-            <SidebarItem label="Log out" icon={<LogOut size={18} />} />
+          <div className="mt-10 rounded-3xl bg-gradient-to-br from-indigo-600/20 to-purple-600/10 border border-indigo-500/20 p-5">
+            <div className="flex items-center gap-2 text-indigo-300 font-semibold mb-2">
+              <Zap size={16} />
+              AI Status
+            </div>
+            <p className="text-sm text-zinc-400">
+              Monitoring products, margin risk and scaling signals.
+            </p>
           </div>
         </aside>
 
         <main className="flex-1 p-8">
-          <div className="flex justify-between items-start mb-8">
+          <div className="flex items-start justify-between mb-8">
             <div>
-              <p className="text-zinc-500 text-sm">Active Store</p>
-              <h2 className="text-3xl font-black mt-1 break-all">{storeId}</h2>
+              <p className="text-sm text-zinc-500">Active store</p>
+              <h2 className="text-3xl font-black tracking-tight mt-1 break-all">
+                {storeId}
+              </h2>
+              <p className="text-zinc-500 mt-2">
+                Sentinel is watching revenue, profit, orders and product signals.
+              </p>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex items-center gap-3">
               <RangeButton label="Today" active={range === "today"} onClick={() => setRange("today")} />
               <RangeButton label="Yesterday" active={range === "yesterday"} onClick={() => setRange("yesterday")} />
-              <RangeButton label="Last 30 days" active={range === "30d"} onClick={() => setRange("30d")} />
+              <RangeButton label="30 Days" active={range === "30d"} onClick={() => setRange("30d")} />
 
               <button
                 onClick={loadData}
-                className="bg-zinc-900 border border-zinc-800 px-4 py-2 rounded-xl flex items-center gap-2"
+                className="h-11 px-4 rounded-2xl bg-[#111118] border border-white/10 hover:bg-[#171722] flex items-center gap-2"
               >
                 <RefreshCw size={16} />
                 Refresh
               </button>
 
-              <a
-                href="/stores"
-                className="bg-indigo-600 px-5 py-2 rounded-xl font-semibold"
+              <button
+                onClick={scanAlerts}
+                className="h-11 px-4 rounded-2xl bg-indigo-600 hover:bg-indigo-500 font-semibold flex items-center gap-2"
               >
-                Manage Stores
-              </a>
+                <Bell size={16} />
+                {scanning ? "Scanning..." : "Scan Alerts"}
+              </button>
             </div>
           </div>
 
           {error && (
-            <div className="mb-6 bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-xl">
+            <div className="mb-6 rounded-2xl bg-red-500/10 border border-red-500/20 p-4 text-red-300">
               {error}
             </div>
           )}
 
-          {loading && (
-            <div className="mb-6 text-zinc-500">Loading dashboard...</div>
-          )}
+          {loading && <p className="mb-6 text-zinc-500">Loading dashboard...</p>}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
-            <MetricCard label="Revenue" value={`€${revenue.toLocaleString("nl-NL")}`} />
-            <MetricCard label="Orders" value={orders.toString()} />
-            <MetricCard label="Profit" value={`€${profit.toLocaleString("nl-NL")}`} />
-            <MetricCard label="ROAS" value={`${roas.toFixed(2)}x`} />
-          </div>
+          <section className="grid grid-cols-12 gap-6 mb-6">
+            <div className="col-span-7 rounded-3xl bg-[#111118] border border-white/8 p-7 overflow-hidden relative">
+              <div className="absolute top-0 right-0 h-40 w-40 bg-indigo-600/20 blur-3xl" />
 
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
-            <MetricCard label="Ad Spend" value={`€${adSpend.toLocaleString("nl-NL")}`} small />
-            <MetricCard label="Product Cost" value={`€${productCost.toLocaleString("nl-NL")}`} small />
-            <MetricCard label="AOV" value={`€${aov.toFixed(2)}`} small />
-            <MetricCard label="CVR" value={`${cvr}%`} small />
-          </div>
+              <p className="text-zinc-500">Revenue</p>
+              <div className="flex items-end gap-4 mt-3">
+                <h1 className="text-6xl font-black tracking-tight">
+                  €{revenue.toLocaleString("nl-NL")}
+                </h1>
+                <p className="text-emerald-400 font-semibold mb-2">
+                  Profit €{profit.toLocaleString("nl-NL")}
+                </p>
+              </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
-            <Panel title="Revenue Overview">
-              <div className="h-72">
+              <div className="h-56 mt-8">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={chartData}>
-                    <XAxis dataKey="day" stroke="#71717a" />
+                    <XAxis dataKey="day" stroke="#52525b" />
                     <Tooltip />
                     <Area
                       type="monotone"
                       dataKey="revenue"
                       stroke="#6366f1"
                       fill="#6366f1"
-                      fillOpacity={0.18}
+                      fillOpacity={0.16}
                     />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
-            </Panel>
+            </div>
 
-            <Panel title="AI Alerts">
+            <div className="col-span-5 grid grid-cols-2 gap-6">
+              <Stat label="Orders" value={orders.toString()} />
+              <Stat label="ROAS" value={`${roas.toFixed(2)}x`} />
+              <Stat label="AOV" value={`€${aov.toFixed(2)}`} />
+              <Stat label="CVR" value={`${cvr}%`} />
+            </div>
+          </section>
+
+          <section className="grid grid-cols-12 gap-6 mb-6">
+            <Panel className="col-span-7" title="Product Alerts" icon={<Bell size={18} />}>
               <div className="space-y-4">
                 {alerts.length === 0 ? (
-                  <AlertItem
-                    title="No alerts yet"
-                    description="AI monitoring will appear here after scanning."
-                    severity="low"
-                  />
+                  <Empty title="No alerts yet" text="Run Scan Alerts to let Sentinel inspect products." />
                 ) : (
-                  alerts.slice(0, 5).map((alert) => (
-                    <AlertItem
-                      key={alert.id}
-                      title={alert.product_title}
-                      description={alert.message}
-                      severity={alert.severity}
-                    />
-                  ))
-                )}
-              </div>
-            </Panel>
-          </div>
-
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
-            <Panel title="Top Products">
-              <div className="space-y-4">
-                {products.length === 0 ? (
-                  <p className="text-zinc-500">No product data for this range.</p>
-                ) : (
-                  products.slice(0, 8).map((product, index) => (
-                    <div
-                      key={`${product.product_title}-${index}`}
-                      className="bg-black border border-zinc-800 rounded-xl p-4"
-                    >
-                      <div className="flex justify-between gap-4">
-                        <div>
-                          <h4 className="font-bold">{product.product_title}</h4>
-                          <p className="text-sm text-zinc-500">
-                            {product.variant_title || "Default"} · {product.sold} sold
-                          </p>
-                        </div>
-
-                        <div className="text-right">
-                          <p className="text-emerald-400 font-bold">
-                            €{Number(product.profit || 0).toFixed(2)}
-                          </p>
-                          <p className="text-xs text-zinc-500">profit</p>
-                        </div>
+                  alerts.slice(0, 7).map((alert) => (
+                    <div key={alert.id} className="flex items-start justify-between gap-5 border-b border-white/5 pb-4">
+                      <div>
+                        <p className="font-bold">{alert.product_title}</p>
+                        <p className="text-sm text-zinc-500 mt-1">{alert.message}</p>
+                        <p className="text-xs text-zinc-700 mt-2">
+                          {alert.alert_type} · {new Date(alert.created_at).toLocaleString("nl-NL")}
+                        </p>
                       </div>
+                      <Badge severity={alert.severity} />
                     </div>
                   ))
                 )}
               </div>
             </Panel>
 
-            <Panel title="Today’s Scale Actions">
+            <Panel className="col-span-5" title="Top Products" icon={<TrendingUp size={18} />}>
               <div className="space-y-4">
-                <ActionItem
-                  title="Check early winners"
-                  description="Products with 1-5 orders need more data before scaling."
-                />
-                <ActionItem
-                  title="Fix missing costs"
-                  description="Profit is unreliable when COGS is missing."
-                />
-                <ActionItem
-                  title="Scan product alerts"
-                  description="Run alert scan after new product imports."
-                />
+                {products.length === 0 ? (
+                  <Empty title="No product data" text="No products found for this date range." />
+                ) : (
+                  products.slice(0, 6).map((product, index) => (
+                    <div key={index} className="flex items-center justify-between border-b border-white/5 pb-4">
+                      <div>
+                        <p className="font-bold leading-tight">{product.product_title}</p>
+                        <p className="text-sm text-zinc-500">
+                          {product.variant_title || "Default"} · {product.sold} sold
+                        </p>
+                      </div>
+                      <p className="text-emerald-400 font-bold">
+                        €{Number(product.profit || 0).toFixed(2)}
+                      </p>
+                    </div>
+                  ))
+                )}
               </div>
             </Panel>
-          </div>
+          </section>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            <ModuleCard title="Google Ads" description="Track campaigns, CPA, ROAS and spend." />
-            <ModuleCard title="Product Insights" description="Find winners, early signals and weak margins." />
-            <ModuleCard title="AI Recommendations" description="Get daily scaling decisions from Sentinel AI." />
-            <ModuleCard title="Returns & Disputes" description="Track refunds, dispute risk and loss impact." />
-            <ModuleCard title="Quality Control" description="Monitor supplier and product quality issues." />
-            <ModuleCard title="Price Negotiation" description="Find products where supplier costs should be negotiated." />
-          </div>
+          <section className="grid grid-cols-3 gap-6">
+            <AiCard
+              title="What to do today"
+              text="Check early winners, fix missing costs, and scan alerts after importing products."
+            />
+            <AiCard
+              title="Scaling logic"
+              text="Do not scale products under 5 orders. Validate CPA, ROAS and margin first."
+            />
+            <AiCard
+              title="Risk monitor"
+              text="Sentinel flags 0-order products, weak margin, missing costs and loss risk."
+            />
+          </section>
         </main>
       </div>
     </div>
   );
 }
 
-function SidebarItem({
+function Nav({
   label,
-  active,
   icon,
+  active,
+  href,
 }: {
   label: string;
-  active?: boolean;
   icon: React.ReactNode;
+  active?: boolean;
+  href?: string;
 }) {
-  return (
+  const content = (
     <div
-      className={`flex items-center gap-3 w-full text-left px-4 py-3 rounded-xl transition ${
-        active
-          ? "bg-indigo-600 text-white"
-          : "bg-zinc-900 hover:bg-zinc-800 text-zinc-300"
+      className={`flex items-center justify-between px-4 py-3 rounded-2xl transition ${
+        active ? "bg-indigo-600 text-white" : "text-zinc-400 hover:bg-white/5 hover:text-white"
       }`}
     >
-      {icon}
-      {label}
+      <div className="flex items-center gap-3">
+        {icon}
+        {label}
+      </div>
+      {href && <ChevronRight size={15} />}
     </div>
   );
+
+  return href ? <a href={href}>{content}</a> : content;
 }
 
 function RangeButton({
@@ -394,10 +356,8 @@ function RangeButton({
   return (
     <button
       onClick={onClick}
-      className={`px-4 py-2 rounded-xl font-semibold ${
-        active
-          ? "bg-indigo-600 text-white"
-          : "bg-zinc-900 border border-zinc-800 text-zinc-300"
+      className={`h-11 px-4 rounded-2xl font-semibold ${
+        active ? "bg-indigo-600 text-white" : "bg-[#111118] border border-white/10 text-zinc-400"
       }`}
     >
       {label}
@@ -405,100 +365,70 @@ function RangeButton({
   );
 }
 
-function MetricCard({
-  label,
-  value,
-  small,
-}: {
-  label: string;
-  value: string;
-  small?: boolean;
-}) {
+function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-zinc-900 rounded-2xl p-6 border border-zinc-800">
-      <p className="text-zinc-500 text-sm">{label}</p>
-      <h2 className={`${small ? "text-2xl" : "text-3xl"} font-black mt-3`}>
-        {value}
-      </h2>
+    <div className="rounded-3xl bg-[#111118] border border-white/8 p-6">
+      <p className="text-zinc-500">{label}</p>
+      <h3 className="text-3xl font-black mt-3">{value}</h3>
     </div>
   );
 }
 
 function Panel({
   title,
+  icon,
   children,
+  className,
 }: {
   title: string;
+  icon: React.ReactNode;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="bg-zinc-900 rounded-2xl p-6 border border-zinc-800">
-      <h3 className="text-xl font-bold mb-5">{title}</h3>
+    <div className={`rounded-3xl bg-[#111118] border border-white/8 p-6 ${className}`}>
+      <div className="flex items-center gap-2 mb-6">
+        <div className="text-indigo-400">{icon}</div>
+        <h3 className="text-xl font-black">{title}</h3>
+      </div>
       {children}
     </div>
   );
 }
 
-function AlertItem({
-  title,
-  description,
-  severity,
-}: {
-  title: string;
-  description: string;
-  severity: string;
-}) {
+function Badge({ severity }: { severity: string }) {
   return (
-    <div className="bg-black border border-zinc-800 rounded-xl p-4">
-      <div className="flex justify-between gap-4">
-        <div>
-          <h4 className="font-semibold mb-1">{title}</h4>
-          <p className="text-zinc-500 text-sm">{description}</p>
-        </div>
+    <span
+      className={`px-3 py-1 rounded-full text-xs font-bold ${
+        severity === "high"
+          ? "bg-red-500/10 text-red-400"
+          : severity === "medium"
+          ? "bg-yellow-500/10 text-yellow-400"
+          : "bg-emerald-500/10 text-emerald-400"
+      }`}
+    >
+      {severity}
+    </span>
+  );
+}
 
-        <span
-          className={`h-fit text-xs px-3 py-1 rounded-full font-bold ${
-            severity === "high"
-              ? "bg-red-500/10 text-red-400"
-              : severity === "medium"
-              ? "bg-yellow-500/10 text-yellow-400"
-              : "bg-emerald-500/10 text-emerald-400"
-          }`}
-        >
-          {severity}
-        </span>
+function Empty({ title, text }: { title: string; text: string }) {
+  return (
+    <div className="rounded-2xl bg-black/40 border border-white/5 p-5">
+      <p className="font-bold">{title}</p>
+      <p className="text-sm text-zinc-500 mt-1">{text}</p>
+    </div>
+  );
+}
+
+function AiCard({ title, text }: { title: string; text: string }) {
+  return (
+    <div className="rounded-3xl bg-gradient-to-br from-[#111118] to-[#0b0b11] border border-white/8 p-6">
+      <div className="flex items-center gap-2 text-indigo-400 mb-3">
+        <Sparkles size={18} />
+        <h3 className="font-black">{title}</h3>
       </div>
-    </div>
-  );
-}
-
-function ActionItem({
-  title,
-  description,
-}: {
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="bg-black border border-zinc-800 rounded-xl p-4">
-      <h4 className="font-semibold mb-1">{title}</h4>
-      <p className="text-zinc-500 text-sm">{description}</p>
-    </div>
-  );
-}
-
-function ModuleCard({
-  title,
-  description,
-}: {
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="bg-zinc-900 rounded-2xl p-6 border border-zinc-800">
-      <h3 className="text-xl font-bold mb-3">{title}</h3>
-      <p className="text-zinc-400 mb-5">{description}</p>
-      <button className="bg-indigo-600 px-4 py-2 rounded-xl">Open Module</button>
+      <p className="text-zinc-500">{text}</p>
     </div>
   );
 }
