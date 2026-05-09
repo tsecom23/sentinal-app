@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sentinel-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-01-01",
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "sentinel_db",
+      "database_id": "8da23965-cce4-4e65-aad3-a414987a88c0"
+    }
+  ]
+}
