@@ -1,15 +1,16 @@
-"use client";
-
-import { useSearchParams } from "next/navigation";
-import Dashboard from "./components/Dashboard";
+import { Suspense } from "react";
+import HomeClient from "./HomeClient";
 
 export default function Home() {
-  const searchParams = useSearchParams();
-  const storeId = searchParams.get("store_id");
-
   return (
-    <div>
-      <Dashboard activeStoreId={storeId || undefined} />
-    </div>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-black text-white p-10">
+          Loading...
+        </div>
+      }
+    >
+      <HomeClient />
+    </Suspense>
   );
 }
