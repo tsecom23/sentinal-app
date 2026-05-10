@@ -36,48 +36,42 @@ function json(data: unknown, status = 200): Response {
 
 // ─── Migrations ───────────────────────────────────────────────────────────────
 
+const MIGRATIONS = [
+  `CREATE TABLE IF NOT EXISTS product_costs (
+    id TEXT PRIMARY KEY, store_id TEXT NOT NULL,
+    product_title TEXT NOT NULL, cost REAL DEFAULT 0, updated_at TEXT)`,
+  `CREATE TABLE IF NOT EXISTS returns (
+    id TEXT PRIMARY KEY, order_id TEXT, store_id TEXT,
+    product_title TEXT, variant_title TEXT, reason TEXT,
+    amount REAL DEFAULT 0, status TEXT DEFAULT 'pending',
+    created_at TEXT, resolved_at TEXT)`,
+  `CREATE TABLE IF NOT EXISTS disputes (
+    id TEXT PRIMARY KEY, order_id TEXT, store_id TEXT,
+    customer_email TEXT, amount REAL DEFAULT 0, reason TEXT,
+    status TEXT DEFAULT 'open', created_at TEXT, resolved_at TEXT)`,
+  `CREATE TABLE IF NOT EXISTS quality_checks (
+    id TEXT PRIMARY KEY, order_id TEXT, store_id TEXT,
+    product_title TEXT, supplier TEXT,
+    status TEXT DEFAULT 'pending', notes TEXT, created_at TEXT)`,
+  `CREATE TABLE IF NOT EXISTS supplier_negotiations (
+    id TEXT PRIMARY KEY, store_id TEXT, supplier_name TEXT,
+    product_title TEXT, current_price REAL DEFAULT 0,
+    target_price REAL DEFAULT 0, status TEXT DEFAULT 'pending',
+    notes TEXT, created_at TEXT, updated_at TEXT)`,
+  `CREATE TABLE IF NOT EXISTS order_milestones (
+    id TEXT PRIMARY KEY, store_id TEXT,
+    milestone INTEGER, reached_at TEXT, notified INTEGER DEFAULT 0)`,
+  `CREATE TABLE IF NOT EXISTS google_ads_daily (
+    id TEXT PRIMARY KEY, store_id TEXT, date TEXT NOT NULL,
+    spend REAL DEFAULT 0, clicks INTEGER DEFAULT 0,
+    impressions INTEGER DEFAULT 0, conversions REAL DEFAULT 0,
+    cpc REAL DEFAULT 0, ctr REAL DEFAULT 0, roas REAL DEFAULT 0)`,
+];
+
 async function runMigrations(db: D1Database) {
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS product_costs (
-      id TEXT PRIMARY KEY,
-      store_id TEXT NOT NULL,
-      product_title TEXT NOT NULL,
-      cost REAL DEFAULT 0,
-      updated_at TEXT
-    );
-    CREATE TABLE IF NOT EXISTS returns (
-      id TEXT PRIMARY KEY, order_id TEXT, store_id TEXT,
-      product_title TEXT, variant_title TEXT, reason TEXT,
-      amount REAL DEFAULT 0, status TEXT DEFAULT 'pending',
-      created_at TEXT, resolved_at TEXT
-    );
-    CREATE TABLE IF NOT EXISTS disputes (
-      id TEXT PRIMARY KEY, order_id TEXT, store_id TEXT,
-      customer_email TEXT, amount REAL DEFAULT 0, reason TEXT,
-      status TEXT DEFAULT 'open', created_at TEXT, resolved_at TEXT
-    );
-    CREATE TABLE IF NOT EXISTS quality_checks (
-      id TEXT PRIMARY KEY, order_id TEXT, store_id TEXT,
-      product_title TEXT, supplier TEXT,
-      status TEXT DEFAULT 'pending', notes TEXT, created_at TEXT
-    );
-    CREATE TABLE IF NOT EXISTS supplier_negotiations (
-      id TEXT PRIMARY KEY, store_id TEXT, supplier_name TEXT,
-      product_title TEXT, current_price REAL DEFAULT 0,
-      target_price REAL DEFAULT 0, status TEXT DEFAULT 'pending',
-      notes TEXT, created_at TEXT, updated_at TEXT
-    );
-    CREATE TABLE IF NOT EXISTS order_milestones (
-      id TEXT PRIMARY KEY, store_id TEXT,
-      milestone INTEGER, reached_at TEXT, notified INTEGER DEFAULT 0
-    );
-    CREATE TABLE IF NOT EXISTS google_ads_daily (
-      id TEXT PRIMARY KEY, store_id TEXT, date TEXT NOT NULL,
-      spend REAL DEFAULT 0, clicks INTEGER DEFAULT 0,
-      impressions INTEGER DEFAULT 0, conversions REAL DEFAULT 0,
-      cpc REAL DEFAULT 0, ctr REAL DEFAULT 0, roas REAL DEFAULT 0
-    );
-  `);
+  for (const sql of MIGRATIONS) {
+    try { await db.prepare(sql).run(); } catch { /* table already exists */ }
+  }
 }
 
 let migrated = false;
@@ -86,7 +80,10 @@ let migrated = false;
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    if (!migrated) { await runMigrations(env.DB); migrated = true; }
+    if (!migrated) {
+      try { await runMigrations(env.DB); } catch { /* ignore */ }
+      migrated = true;
+    }
 
     const url = new URL(request.url);
     const path = url.pathname;
@@ -214,28 +211,98 @@ export default {
       const storeId = url.searchParams.get("store_id");
       if (!storeId) return json({ error: "Missing store_id" }, 400);
 
-      const productsResult = await env.DB.prepare(
-        `SELECT id, title FROM shopify_products WHERE store_id=? AND status='active'`
-      ).bind(storeId).all();
+      // Clear old auto-generated product alerts before re-scanning
+      await env.DB.prepare(
+        `DELETE FROM product_alerts WHERE store_id=? AND alert_type='WATCH_PRODUCT'`
+      ).bind(storeId).run();
 
-      const products = productsResult.results as { id: string; title: string }[];
+      // Only alert products with HIGH return rates (>15% of sales)
+      const highReturnProducts = await env.DB.prepare(`
+        SELECT oi.product_title, SUM(oi.quantity) as sold,
+               COUNT(DISTINCT r.id) as return_count
+        FROM order_items oi
+        JOIN orders o ON oi.order_id = o.id
+        LEFT JOIN returns r ON r.order_id = o.id AND r.product_title = oi.product_title
+          AND r.store_id = o.store_id
+        WHERE o.store_id = ?
+        GROUP BY oi.product_title
+        HAVING sold >= 5 AND (CAST(return_count AS REAL) / sold) > 0.15
+        ORDER BY (CAST(return_count AS REAL) / sold) DESC
+        LIMIT 20
+      `).bind(storeId).all();
+
       let count = 0;
-
-      for (const product of products) {
-        const salesRow = await env.DB.prepare(
-          `SELECT COALESCE(SUM(quantity),0) as sold FROM order_items WHERE product_id=? AND store_id=?`
-        ).bind(product.id, storeId).first();
-        const sold = (salesRow?.sold as number) ?? 0;
-        if (sold === 0) {
-          await env.DB.prepare(`
-            INSERT OR REPLACE INTO product_alerts
-              (id,product_title,alert_type,message,severity,created_at,store_id)
-            VALUES (?,?,'WATCH_PRODUCT',?,'medium',?,?)
-          `).bind(`watch_${product.id}`, product.title, `${product.title} has 0 sales.`, new Date().toISOString(), storeId).run();
-          count++;
-        }
+      const now = new Date().toISOString();
+      for (const p of (highReturnProducts.results as { product_title: string; sold: number; return_count: number }[]) ?? []) {
+        const rate = Math.round((p.return_count / p.sold) * 100);
+        const id = `return_rate_${storeId}_${p.product_title.slice(0, 30)}`;
+        await env.DB.prepare(`
+          INSERT OR REPLACE INTO product_alerts
+            (id,product_title,alert_type,message,severity,created_at,store_id)
+          VALUES (?,?,'HIGH_RETURNS',?,'high',?,?)
+        `).bind(id, p.product_title, `${rate}% return rate (${p.return_count}/${p.sold} orders)`, now, storeId).run();
+        count++;
       }
-      return json({ scanned: products.length, alerts_created: count });
+
+      // Alert products with no cost set but high revenue (margin blind)
+      const noCostProducts = await env.DB.prepare(`
+        SELECT oi.product_title, SUM(oi.revenue) as revenue
+        FROM order_items oi
+        JOIN orders o ON oi.order_id = o.id
+        LEFT JOIN product_costs pc ON pc.product_title = oi.product_title AND pc.store_id = o.store_id
+        WHERE o.store_id = ? AND (pc.cost IS NULL OR pc.cost = 0)
+        GROUP BY oi.product_title
+        HAVING revenue > 500
+        ORDER BY revenue DESC
+        LIMIT 10
+      `).bind(storeId).all();
+
+      for (const p of (noCostProducts.results as { product_title: string; revenue: number }[]) ?? []) {
+        const id = `no_cost_${storeId}_${p.product_title.slice(0, 30)}`;
+        await env.DB.prepare(`
+          INSERT OR REPLACE INTO product_alerts
+            (id,product_title,alert_type,message,severity,created_at,store_id)
+          VALUES (?,?,'NO_COST',?,'medium',?,?)
+        `).bind(id, p.product_title, `€${p.revenue.toFixed(0)} revenue but no purchase cost set — margin unknown`, now, storeId).run();
+        count++;
+      }
+
+      return json({ scanned: true, alerts_created: count });
+    }
+
+    // ── GET /api/products/dead ────────────────────────────────────────────────
+    if (path === "/api/products/dead" && method === "GET") {
+      const storeId = url.searchParams.get("store_id");
+      if (!storeId) return json({ error: "Missing store_id" }, 400);
+
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - 90);
+      const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+      const products = await env.DB.prepare(`
+        SELECT p.id, p.title, p.handle, p.vendor, p.created_at, p.image_url,
+               CAST(julianday('now') - julianday(p.created_at) AS INTEGER) as days_online,
+               COALESCE(SUM(oi.quantity), 0) as total_sold
+        FROM shopify_products p
+        LEFT JOIN order_items oi ON oi.product_title = p.title AND oi.store_id = p.store_id
+        WHERE p.store_id = ? AND p.status = 'active' AND substr(p.created_at, 1, 10) <= ?
+        GROUP BY p.id
+        HAVING total_sold = 0
+        ORDER BY days_online DESC
+        LIMIT 100
+      `).bind(storeId, cutoffStr).all();
+
+      return json({ products: products.results ?? [] });
+    }
+
+    // ── POST /api/products/archive ─────────────────────────────────────────────
+    if (path === "/api/products/archive" && method === "POST") {
+      const body = await request.json() as { id: string; store_id: string };
+      if (!body.id || !body.store_id) return json({ error: "Missing fields" }, 400);
+      await env.DB.prepare(
+        `UPDATE shopify_products SET status='archived', updated_at=? WHERE id=? AND store_id=?`
+      ).bind(new Date().toISOString(), body.id, body.store_id).run();
+      return json({ ok: true });
     }
 
     // ── GET /api/milestones ───────────────────────────────────────────────────
