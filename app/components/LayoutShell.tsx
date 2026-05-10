@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import Sidebar from "./Sidebar";
 
 // Pages that get the sidebar layout
-const WITH_SIDEBAR = ["/", "/product-insights", "/returns", "/stores", "/ai-chat", "/ai-recommendations", "/google-ads"];
+const WITH_SIDEBAR = ["/", "/product-insights", "/returns", "/dead-stock", "/stores", "/ai-chat", "/ai-recommendations", "/google-ads"];
 
 export default function LayoutShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

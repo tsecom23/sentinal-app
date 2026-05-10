@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import {
   Activity, BarChart3, Bot, Box, MessageCircle,
-  RotateCcw, Sparkles, Store, Target, Zap,
+  RotateCcw, Skull, Sparkles, Store, Target, Zap,
 } from "lucide-react";
 
 const NAV = [
@@ -11,6 +11,7 @@ const NAV = [
   { label: "Stores",             href: "/stores",              icon: Store },
   { label: "Product Insights",   href: "/product-insights",    icon: Box },
   { label: "Returns & Disputes", href: "/returns",             icon: RotateCcw },
+  { label: "Dead Stock",         href: "/dead-stock",          icon: Skull },
   { label: "AI Recommendations", href: "/ai-recommendations",  icon: Bot },
   { label: "AI Chat",            href: "/ai-chat",             icon: MessageCircle },
   { label: "Google Ads",         href: "/google-ads",          icon: BarChart3 },

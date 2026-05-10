@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import {
   AlertTriangle, Bell, Box, CheckCircle,
   RefreshCw, RotateCcw, ShieldAlert, TrendingUp,
-  ArrowUpRight, ArrowDownRight,
+  ArrowUpRight, ArrowDownRight, Lightbulb, Skull,
 } from "lucide-react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { createClient } from "../../utils/supabase/client";
@@ -23,7 +23,7 @@ type Overview = {
   revenueTrend: { day: string; revenue: number }[];
 };
 
-type ProductAlert = { id: string; product_title: string; message: string; severity: string };
+type ProductAlert = { id: string; product_title: string; message: string; severity: string; alert_type?: string };
 type TopProduct = { product_title: string; variant_title?: string; sold: number; revenue: number; profit: number };
 type MilestoneData = { totalThisMonth: number; next: number | null; reached: number[] };
 
@@ -211,7 +211,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
       </div>
 
       {/* Bottom grid */}
-      <div className="grid grid-cols-5 gap-5">
+      <div className="grid grid-cols-5 gap-5 mb-5">
         {/* Top Products */}
         <div className="col-span-3 rounded-3xl bg-[#111118] border border-white/8 p-5">
           <div className="flex items-center gap-2 mb-4">
@@ -254,15 +254,19 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
           <div className="flex items-center gap-2 mb-4">
             <ShieldAlert size={14} className="text-blue-400" />
             <h3 className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Alerts</h3>
-            {alerts.length > 0 && <span className="ml-auto text-[10px] bg-amber-500/15 text-amber-400 px-2 py-0.5 rounded-full font-semibold">{alerts.length}</span>}
+            {alerts.filter(a => a.alert_type !== "WATCH_PRODUCT").length > 0 && (
+              <span className="ml-auto text-[10px] bg-amber-500/15 text-amber-400 px-2 py-0.5 rounded-full font-semibold">
+                {alerts.filter(a => a.alert_type !== "WATCH_PRODUCT").length}
+              </span>
+            )}
           </div>
           {loading ? (
             <div className="space-y-2">{[...Array(5)].map((_, i) => <div key={i} className="h-12 rounded-xl bg-white/4 animate-pulse" />)}</div>
-          ) : alerts.length === 0 ? (
+          ) : alerts.filter(a => a.alert_type !== "WATCH_PRODUCT").length === 0 ? (
             <Empty icon={<CheckCircle size={24} className="text-emerald-600" />} label="All clear" />
           ) : (
             <div className="space-y-1.5 overflow-y-auto flex-1">
-              {alerts.slice(0, 15).map(a => (
+              {alerts.filter(a => a.alert_type !== "WATCH_PRODUCT").slice(0, 15).map(a => (
                 <div key={a.id} className="rounded-xl bg-white/4 px-3 py-2.5">
                   <div className="flex items-start gap-2">
                     <AlertTriangle size={11} className={`mt-0.5 shrink-0 ${a.severity === "high" ? "text-red-400" : "text-amber-400"}`} />
@@ -279,12 +283,15 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
             <a href="/returns" className="flex-1 h-8 rounded-xl bg-white/4 hover:bg-white/8 transition flex items-center justify-center gap-1.5 text-[11px] text-zinc-400 hover:text-white">
               <RotateCcw size={12} /> Returns
             </a>
-            <a href="/product-insights" className="flex-1 h-8 rounded-xl bg-white/4 hover:bg-white/8 transition flex items-center justify-center gap-1.5 text-[11px] text-zinc-400 hover:text-white">
-              <Box size={12} /> Products
+            <a href="/dead-stock" className="flex-1 h-8 rounded-xl bg-white/4 hover:bg-white/8 transition flex items-center justify-center gap-1.5 text-[11px] text-zinc-400 hover:text-white">
+              <Skull size={12} /> Dead Stock
             </a>
           </div>
         </div>
       </div>
+
+      {/* AI Optimization Tips */}
+      <AiTips ov={ov} products={products} />
     </div>
   );
 }
@@ -316,4 +323,83 @@ function Empty({ icon, label }: { icon: React.ReactNode; label: string }) {
 
 function fmt(n: number) {
   return n.toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function AiTips({ ov, products }: { ov: Overview | null; products: TopProduct[] }) {
+  if (!ov) return null;
+
+  const revenue = ov.revenue ?? 0;
+  const adSpend = ov.adSpend ?? 0;
+  const roas = ov.roas ?? 0;
+  const profit = ov.profit ?? 0;
+  const returnRate = ov.returnRate ?? 0;
+  const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
+
+  const tips: { level: "green" | "amber" | "red"; text: string }[] = [];
+
+  if (profit < 0) {
+    tips.push({ level: "red", text: `Verlies van €${Math.abs(profit).toFixed(0)} — controleer kosten, inkoop en ad spend direct.` });
+  }
+  if (adSpend > 0 && roas < 2) {
+    tips.push({ level: "red", text: `ROAS ${roas.toFixed(2)}x is te laag. Pauzeer slechte campagnes of verhoog biedingen op best-sellers.` });
+  }
+  if (adSpend > 0 && roas >= 2 && roas < 3.5) {
+    tips.push({ level: "amber", text: `ROAS ${roas.toFixed(2)}x — ruimte voor verbetering. Test nieuwe ad sets of optimaliseer landingspagina's.` });
+  }
+  if (adSpend > 0 && roas >= 3.5) {
+    tips.push({ level: "green", text: `ROAS ${roas.toFixed(2)}x is sterk. Overweeg budget te verhogen op best presterende campagnes.` });
+  }
+  if (revenue > 0 && margin > 0 && margin < 20) {
+    tips.push({ level: "red", text: `Marge van ${margin.toFixed(1)}% is te laag. Onderhandel lagere inkoop of verhoog verkoopprijs.` });
+  }
+  if (revenue > 0 && margin >= 20 && margin < 40) {
+    tips.push({ level: "amber", text: `Marge van ${margin.toFixed(1)}% is redelijk. Stel inkooprijs in bij Product Insights om dit nauwkeuriger bij te houden.` });
+  }
+  if (revenue > 0 && margin >= 40) {
+    tips.push({ level: "green", text: `Marge van ${margin.toFixed(1)}% is gezond. Schaal succesvol volume op met gerichte ads.` });
+  }
+  if (returnRate > 10) {
+    tips.push({ level: "red", text: `Retourpercentage ${returnRate.toFixed(1)}% is hoog. Bekijk welke producten het meest worden teruggestuurd.` });
+  }
+  if (adSpend === 0) {
+    tips.push({ level: "amber", text: "Geen advertentiedata — koppel Google Ads via Google Ads-pagina voor ROAS-inzicht." });
+  }
+  if (products.length > 0) {
+    const top = products[0];
+    const topMargin = top.revenue > 0 ? (top.profit / top.revenue) * 100 : 0;
+    if (topMargin > 40) {
+      tips.push({ level: "green", text: `"${top.product_title}" heeft ${topMargin.toFixed(0)}% marge — ideaal product om meer op te adverteren.` });
+    }
+  }
+
+  if (tips.length === 0) return null;
+
+  const colorMap = {
+    green: { bg: "bg-emerald-500/10 border-emerald-500/20", dot: "bg-emerald-400", text: "text-emerald-300" },
+    amber: { bg: "bg-amber-500/10 border-amber-500/20", dot: "bg-amber-400", text: "text-amber-300" },
+    red: { bg: "bg-red-500/10 border-red-500/20", dot: "bg-red-400", text: "text-red-300" },
+  };
+
+  return (
+    <div className="rounded-3xl bg-[#111118] border border-white/8 p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <Lightbulb size={14} className="text-blue-400" />
+        <h3 className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">AI Optimalisatie Tips</h3>
+        <span className="ml-auto text-[10px] text-zinc-700">{tips.length} inzichten</span>
+      </div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {tips.map((tip, i) => {
+          const c = colorMap[tip.level];
+          return (
+            <div key={i} className={`rounded-xl border px-3.5 py-3 ${c.bg}`}>
+              <div className="flex items-start gap-2">
+                <div className={`mt-1.5 h-1.5 w-1.5 rounded-full shrink-0 ${c.dot}`} />
+                <p className={`text-[11px] leading-relaxed ${c.text}`}>{tip.text}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
