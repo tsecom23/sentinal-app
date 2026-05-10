@@ -1,250 +1,264 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  BarChart3,
-  Box,
-  Camera,
-  LogOut,
-  Moon,
-  RotateCcw,
-  Settings,
-  Tag,
-} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Box, Check, ChevronLeft, Search, TrendingUp, X } from "lucide-react";
 
-const API_URL = "https://sentinel-api.tssheets1.workers.dev";
+const API = "https://sentinel-api.tssheets1.workers.dev";
 
 type Product = {
   product_title: string;
-  variant_title: string;
-  sold: number;
-  revenue: number;
-  unit_cost: number;
-  total_cost: number;
-  profit: number;
+  total_sold: number;
+  total_revenue: number;
+  cost: number;
+  updated_at: string | null;
 };
 
-function slugify(value: string) {
-  return value
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)+/g, "");
-}
+const STORES = [
+  { key: "ceofo", name: "CEOFO" },
+  { key: "martaline", name: "Martaline" },
+];
 
 export default function ProductInsightsPage() {
+  const [storeId, setStoreId] = useState("martaline");
   const [products, setProducts] = useState<Product[]>([]);
+  const [filtered, setFiltered] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const [saving, setSaving] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
+  const [editingCosts, setEditingCosts] = useState<Record<string, string>>({});
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [sortBy, setSortBy] = useState<"revenue" | "margin" | "sold">("revenue");
+  // suppress unused ref warning
+  const _ref = useRef(null);
+  void _ref;
 
-  async function loadProducts() {
-    const res = await fetch(`${API_URL}/api/products/top`, {
-      cache: "no-store",
-    });
-
-    const json = (await res.json()) as { products: Product[] };
-    setProducts(json.products || []);
+  async function load() {
+    setLoading(true);
+    const res = await fetch(`${API}/api/product-costs?store_id=${storeId}`, { cache: "no-store" });
+    const data = await res.json();
+    setProducts(data.products || []);
+    setLoading(false);
   }
 
+  useEffect(() => { load(); }, [storeId]);
+
   useEffect(() => {
-    loadProducts();
-  }, []);
+    let list = [...products];
+    if (search) list = list.filter(p => p.product_title.toLowerCase().includes(search.toLowerCase()));
+    list.sort((a, b) => {
+      if (sortBy === "revenue") return b.total_revenue - a.total_revenue;
+      if (sortBy === "sold") return b.total_sold - a.total_sold;
+      const costA = editingCosts[a.product_title] !== undefined ? parseFloat(editingCosts[a.product_title].replace(",", ".")) || 0 : a.cost;
+      const costB = editingCosts[b.product_title] !== undefined ? parseFloat(editingCosts[b.product_title].replace(",", ".")) || 0 : b.cost;
+      const mA = a.total_revenue > 0 && costA > 0 ? ((a.total_revenue - costA * a.total_sold) / a.total_revenue) * 100 : 999;
+      const mB = b.total_revenue > 0 && costB > 0 ? ((b.total_revenue - costB * b.total_sold) / b.total_revenue) * 100 : 999;
+      return mA - mB;
+    });
+    setFiltered(list);
+  }, [products, search, sortBy, editingCosts]);
 
-  const highestProfit = [...products]
-    .sort((a, b) => b.profit - a.profit)
-    .slice(0, 5);
+  function setCostInput(title: string, val: string) {
+    setEditingCosts(prev => ({ ...prev, [title]: val }));
+  }
 
-  const lowestProfit = [...products]
-    .sort((a, b) => a.profit - b.profit)
-    .slice(0, 5);
+  async function saveCost(product_title: string) {
+    const raw = editingCosts[product_title];
+    if (raw === undefined) return;
+    const cost = parseFloat(raw.replace(",", ".")) || 0;
+    setSaving(product_title);
+    await fetch(`${API}/api/product-costs`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ store_id: storeId, product_title, cost }),
+    });
+    setProducts(prev => prev.map(p => p.product_title === product_title ? { ...p, cost, updated_at: new Date().toISOString() } : p));
+    setEditingCosts(prev => { const n = { ...prev }; delete n[product_title]; return n; });
+    setSaving(null);
+    setSaved(product_title);
+    setTimeout(() => setSaved(null), 2000);
+  }
 
-  const missingCosts = products.filter((p) => !p.unit_cost);
+  async function saveAll() {
+    const changed = Object.entries(editingCosts).filter(([, v]) => v !== "");
+    if (changed.length === 0) return;
+    setBulkSaving(true);
+    const items = changed.map(([product_title, raw]) => ({
+      store_id: storeId,
+      product_title,
+      cost: parseFloat(raw.replace(",", ".")) || 0,
+    }));
+    await fetch(`${API}/api/product-costs/bulk`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items }),
+    });
+    await load();
+    setEditingCosts({});
+    setBulkSaving(false);
+  }
 
-  const totalRevenue = products.reduce(
-    (acc, p) => acc + Number(p.revenue || 0),
-    0
-  );
-
-  const totalProfit = products.reduce(
-    (acc, p) => acc + Number(p.profit || 0),
-    0
-  );
+  const totalRevenue = filtered.reduce((s, p) => s + p.total_revenue, 0);
+  const totalCost = filtered.reduce((s, p) => s + p.cost * p.total_sold, 0);
+  const totalProfit = totalRevenue - totalCost;
+  const avgMargin = totalRevenue > 0 && totalCost > 0 ? (totalProfit / totalRevenue) * 100 : 0;
+  const pendingChanges = Object.keys(editingCosts).length;
 
   return (
-    <div className="flex min-h-screen bg-[#0b0b0f] text-white">
-      <aside className="w-[280px] bg-[#111114] p-6 flex flex-col justify-between">
-        <div>
-          <h1 className="text-2xl font-bold mb-10">Sentinel</h1>
-
-          <nav className="space-y-3 text-zinc-400">
-            <a href="/">
-              <Nav label="Overview" icon={<Box size={18} />} />
-            </a>
-
-            <Nav label="Data Insights" icon={<BarChart3 size={18} />} />
-            <Nav active label="Product Insights" icon={<Box size={18} />} />
-
-            <div className="ml-4 border-l border-zinc-800 pl-4 mt-4 space-y-2">
-              <Nav small label="Price Negotiation" icon={<Tag size={16} />} />
-              <Nav small label="Quality Control" icon={<Camera size={16} />} />
-            </div>
-
-            <Nav label="Returns & Disputes" icon={<RotateCcw size={18} />} />
-          </nav>
-        </div>
-
-        <div className="space-y-4 text-zinc-400">
-          <Nav label="Dark Mode" icon={<Moon size={18} />} />
-          <Nav label="Settings" icon={<Settings size={18} />} />
-          <Nav label="Log out" icon={<LogOut size={18} />} />
-        </div>
-      </aside>
-
-      <main className="flex-1 p-10">
-        <div className="mb-10">
-          <p className="text-zinc-500">Sentinel</p>
-          <h1 className="text-4xl font-bold">Product Insights</h1>
-        </div>
-
-        <div className="grid grid-cols-4 gap-6 mb-8">
-          <Card title="Products" value={products.length.toString()} />
-          <Card title="Revenue" value={`€${totalRevenue.toLocaleString("nl-NL")}`} />
-          <Card title="Profit" value={`€${totalProfit.toLocaleString("nl-NL")}`} />
-          <Card title="Missing Costs" value={missingCosts.length.toString()} />
-        </div>
-
-        <div className="grid grid-cols-2 gap-6">
-          <Panel title="Highest Profit Products">
-            {highestProfit.map((product) => (
-              <ProductRow
-                key={`${product.product_title}-${product.variant_title}-high`}
-                product={product}
-              />
-            ))}
-          </Panel>
-
-          <Panel title="Lowest Profit Products">
-            {lowestProfit.map((product) => (
-              <ProductRow
-                key={`${product.product_title}-${product.variant_title}-low`}
-                product={product}
-              />
-            ))}
-          </Panel>
-        </div>
-
-        <div className="mt-6">
-          <Panel title="Missing Product Costs">
-            {missingCosts.length === 0 ? (
-              <p className="text-emerald-500">
-                All product costs are configured ✅
-              </p>
-            ) : (
-              missingCosts.map((product) => (
-                <div
-                  key={`${product.product_title}-${product.variant_title}-missing`}
-                  className="border-b border-zinc-800 py-4"
-                >
-                  <p className="font-semibold">{product.product_title}</p>
-                  <p className="text-zinc-500 text-sm">
-                    {product.variant_title || "Default"} · No cost configured
-                  </p>
-                </div>
-              ))
+    <div className="min-h-screen bg-[#07070b] text-white p-8">
+      <div className="max-w-6xl mx-auto">
+        <div className="flex items-center gap-3 mb-8">
+          <a href="/" className="h-9 w-9 rounded-xl bg-[#111118] border border-white/8 flex items-center justify-center text-zinc-500 hover:text-white transition">
+            <ChevronLeft size={16} />
+          </a>
+          <div>
+            <h1 className="text-2xl font-black">Product Insights</h1>
+            <p className="text-sm text-zinc-500">Vul inkooprijs in — marge & winst updaten automatisch</p>
+          </div>
+          <div className="ml-auto flex items-center gap-3">
+            <select
+              value={storeId}
+              onChange={e => { setStoreId(e.target.value); setEditingCosts({}); }}
+              className="bg-[#111118] border border-white/8 rounded-xl px-3 py-2 text-sm text-white"
+            >
+              {STORES.map(s => <option key={s.key} value={s.key}>{s.name}</option>)}
+            </select>
+            {pendingChanges > 0 && (
+              <button onClick={saveAll} disabled={bulkSaving} className="h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold flex items-center gap-2 transition">
+                {bulkSaving ? "Opslaan..." : `Sla alles op (${pendingChanges})`}
+              </button>
             )}
-          </Panel>
-        </div>
-      </main>
-    </div>
-  );
-}
-
-function ProductRow({ product }: { product: Product }) {
-  const slug = slugify(product.product_title);
-  const profit = Number(product.profit || 0);
-  const revenue = Number(product.revenue || 0);
-  const cost = Number(product.total_cost || 0);
-
-  return (
-    <a
-      href={`/product/${slug}`}
-      className="block border-b border-zinc-800 pb-4 hover:bg-zinc-800/30 rounded-lg p-3 transition"
-    >
-      <div className="flex justify-between items-start gap-4">
-        <div>
-          <p className="font-semibold text-lg">{product.product_title}</p>
-          <p className="text-sm text-zinc-500">
-            {product.variant_title || "Default"}
-          </p>
-          <p className="text-sm text-zinc-500 mt-1">{product.sold} sold</p>
+          </div>
         </div>
 
-        <div className="text-right">
-          <p
-            className={
-              profit >= 0
-                ? "text-emerald-500 font-bold text-lg"
-                : "text-red-500 font-bold text-lg"
-            }
-          >
-            €{profit.toLocaleString("nl-NL")}
-          </p>
-
-          <p className="text-sm text-zinc-500">
-            Revenue €{revenue.toLocaleString("nl-NL")}
-          </p>
-
-          <p className="text-sm text-zinc-500">
-            Cost €{cost.toLocaleString("nl-NL")}
-          </p>
+        {/* Stats */}
+        <div className="grid grid-cols-4 gap-4 mb-7">
+          {[
+            { label: "Totale omzet", value: `€${totalRevenue.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}` },
+            { label: "Totale inkoopkosten", value: totalCost > 0 ? `€${totalCost.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}` : "—", dim: totalCost === 0 },
+            { label: "Netto winst", value: totalCost > 0 ? `€${totalProfit.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}` : "—", color: totalProfit > 0 ? "text-emerald-400" : totalProfit < 0 ? "text-red-400" : "", dim: totalCost === 0 },
+            { label: "Gem. marge", value: avgMargin > 0 ? `${avgMargin.toFixed(1)}%` : "—", dim: totalCost === 0 },
+          ].map(s => (
+            <div key={s.label} className="rounded-2xl bg-[#111118] border border-white/8 p-4">
+              <p className="text-[10px] text-zinc-600 uppercase tracking-widest mb-2">{s.label}</p>
+              <p className={`text-xl font-black ${s.color ?? ""} ${s.dim ? "opacity-30" : ""}`}>{s.value}</p>
+              {s.dim && <p className="text-[10px] text-zinc-700 mt-1">Vul inkooprijs in</p>}
+            </div>
+          ))}
         </div>
+
+        {/* Filter */}
+        <div className="flex items-center gap-3 mb-5">
+          <div className="relative flex-1 max-w-sm">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Zoek product..."
+              className="w-full bg-[#111118] border border-white/8 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-zinc-700 outline-none focus:border-indigo-500/50"
+            />
+            {search && <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-white"><X size={13} /></button>}
+          </div>
+          <div className="flex gap-1 bg-[#111118] border border-white/8 rounded-xl p-1">
+            {([["revenue", "Omzet"], ["sold", "Verkopen"], ["margin", "Laagste marge"]] as const).map(([s, l]) => (
+              <button key={s} onClick={() => setSortBy(s)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${sortBy === s ? "bg-indigo-600 text-white" : "text-zinc-500 hover:text-white"}`}>{l}</button>
+            ))}
+          </div>
+          <p className="text-xs text-zinc-600">{filtered.length} producten</p>
+        </div>
+
+        {/* Table */}
+        <div className="rounded-3xl bg-[#111118] border border-white/8 overflow-hidden">
+          <div className="grid grid-cols-[1fr_70px_90px_110px_100px_140px_44px] border-b border-white/5">
+            {["Product", "Verkopen", "Omzet", "Inkoop/stuk", "Tot. inkoop", "Marge & winst", ""].map(h => (
+              <div key={h} className="px-4 py-3 text-[10px] text-zinc-600 uppercase tracking-widest font-semibold">{h}</div>
+            ))}
+          </div>
+
+          {loading ? (
+            <div className="p-8 space-y-3">{[...Array(8)].map((_, i) => <div key={i} className="h-12 rounded-xl bg-white/4 animate-pulse" />)}</div>
+          ) : filtered.length === 0 ? (
+            <div className="p-12 flex flex-col items-center text-zinc-700">
+              <Box size={28} className="mb-2 opacity-40" />
+              <p className="text-sm">{search ? "Geen producten gevonden" : "Nog geen verkopen"}</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-white/5">
+              {filtered.map(p => {
+                const inputVal = editingCosts[p.product_title];
+                const currentCost = inputVal !== undefined
+                  ? (parseFloat(inputVal.replace(",", ".")) || 0)
+                  : p.cost;
+                const totalCostItem = currentCost * p.total_sold;
+                const profit = p.total_revenue - totalCostItem;
+                const margin = p.total_revenue > 0 && currentCost > 0 ? (profit / p.total_revenue) * 100 : null;
+                const isEditing = inputVal !== undefined;
+                const isSaved = saved === p.product_title;
+                const isSaving = saving === p.product_title;
+                const marginColor = margin === null ? "" : margin >= 60 ? "text-emerald-400" : margin >= 40 ? "text-yellow-400" : margin > 0 ? "text-orange-400" : "text-red-400";
+
+                return (
+                  <div key={p.product_title} className={`grid grid-cols-[1fr_70px_90px_110px_100px_140px_44px] items-center hover:bg-white/2 transition ${isEditing ? "bg-indigo-600/4" : ""}`}>
+                    <div className="px-4 py-3 min-w-0">
+                      <p className="text-sm font-medium truncate">{p.product_title}</p>
+                      {p.cost > 0 && !isEditing && <p className="text-[10px] text-zinc-600 mt-0.5">inkoop €{p.cost.toFixed(2)}</p>}
+                    </div>
+                    <div className="px-4 py-3 text-sm text-zinc-400">{p.total_sold}x</div>
+                    <div className="px-4 py-3 text-sm font-semibold">€{p.total_revenue.toFixed(2)}</div>
+
+                    <div className="px-3 py-3">
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-zinc-600">€</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={inputVal ?? (p.cost > 0 ? p.cost.toFixed(2) : "")}
+                          onChange={e => setCostInput(p.product_title, e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") saveCost(p.product_title); }}
+                          placeholder="0.00"
+                          className="w-full bg-white/6 border border-white/8 rounded-lg pl-6 pr-2 py-1.5 text-xs text-white placeholder-zinc-700 outline-none focus:border-indigo-500/50 focus:bg-indigo-600/8"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="px-4 py-3 text-sm text-zinc-500">
+                      {currentCost > 0 ? `€${totalCostItem.toFixed(2)}` : <span className="text-zinc-700">—</span>}
+                    </div>
+
+                    <div className="px-4 py-3">
+                      {margin !== null ? (
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <TrendingUp size={11} className={marginColor} />
+                            <span className={`text-sm font-bold ${marginColor}`}>{margin.toFixed(1)}%</span>
+                          </div>
+                          <p className="text-[10px] text-zinc-600 mt-0.5">€{profit.toFixed(2)} winst</p>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-zinc-700">Vul inkoop in →</span>
+                      )}
+                    </div>
+
+                    <div className="px-2 py-3 flex justify-center">
+                      {isSaved ? (
+                        <div className="w-7 h-7 rounded-lg bg-emerald-600/20 flex items-center justify-center">
+                          <Check size={12} className="text-emerald-400" />
+                        </div>
+                      ) : isEditing ? (
+                        <button onClick={() => saveCost(p.product_title)} disabled={isSaving} className="w-7 h-7 rounded-lg bg-indigo-600 hover:bg-indigo-500 flex items-center justify-center transition">
+                          {isSaving ? <span className="text-[9px]">...</span> : <Check size={12} />}
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <p className="text-[11px] text-zinc-700 mt-4 text-center">Druk op Enter of ✓ om per product op te slaan · "Sla alles op" voor bulk · Marge update live</p>
       </div>
-    </a>
-  );
-}
-
-function Card({ title, value }: { title: string; value: string }) {
-  return (
-    <div className="bg-[#15151c] p-6 rounded-2xl">
-      <p className="text-zinc-500">{title}</p>
-      <h2 className="text-3xl font-bold mt-2">{value}</h2>
-    </div>
-  );
-}
-
-function Panel({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="bg-[#15151c] rounded-2xl p-6">
-      <h3 className="text-xl font-bold mb-6">{title}</h3>
-      <div className="space-y-4">{children}</div>
-    </div>
-  );
-}
-
-function Nav({
-  label,
-  icon,
-  active,
-  small,
-}: {
-  label: string;
-  icon: React.ReactNode;
-  active?: boolean;
-  small?: boolean;
-}) {
-  return (
-    <div
-      className={`flex items-center gap-3 px-4 py-2 rounded-lg cursor-pointer ${
-        active ? "bg-indigo-600 text-white" : "hover:bg-zinc-800"
-      } ${small ? "text-sm" : ""}`}
-    >
-      {icon}
-      {label}
     </div>
   );
 }

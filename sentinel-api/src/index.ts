@@ -38,6 +38,13 @@ function json(data: unknown, status = 200): Response {
 
 async function runMigrations(db: D1Database) {
   await db.exec(`
+    CREATE TABLE IF NOT EXISTS product_costs (
+      id TEXT PRIMARY KEY,
+      store_id TEXT NOT NULL,
+      product_title TEXT NOT NULL,
+      cost REAL DEFAULT 0,
+      updated_at TEXT
+    );
     CREATE TABLE IF NOT EXISTS returns (
       id TEXT PRIMARY KEY, order_id TEXT, store_id TEXT,
       product_title TEXT, variant_title TEXT, reason TEXT,
@@ -103,8 +110,13 @@ export default {
         `).bind(storeId, start, end).first(),
 
         env.DB.prepare(`
-          SELECT COALESCE(SUM(oi.cost*oi.quantity),0) as productCost
-          FROM order_items oi JOIN orders o ON oi.order_id=o.id
+          SELECT COALESCE(SUM(
+            oi.quantity * COALESCE(pc.cost, oi.cost, 0)
+          ), 0) as productCost
+          FROM order_items oi
+          JOIN orders o ON oi.order_id = o.id
+          LEFT JOIN product_costs pc
+            ON pc.product_title = oi.product_title AND pc.store_id = o.store_id
           WHERE o.store_id=? AND substr(o.created_at,1,10)>=? AND substr(o.created_at,1,10)<=?
         `).bind(storeId, start, end).first(),
 
@@ -542,6 +554,64 @@ export default {
               body.created_at ?? new Date().toISOString()).run();
 
       return json({ ok: true, id });
+    }
+
+    // ── GET /api/product-costs ────────────────────────────────────────────────
+    if (path === "/api/product-costs" && method === "GET") {
+      const storeId = url.searchParams.get("store_id");
+      if (!storeId) return json({ error: "Missing store_id" }, 400);
+
+      // Return all unique product titles sold + their saved cost
+      const products = await env.DB.prepare(`
+        SELECT
+          oi.product_title,
+          SUM(oi.quantity) as total_sold,
+          SUM(oi.revenue) as total_revenue,
+          COALESCE(pc.cost, 0) as cost,
+          pc.updated_at
+        FROM order_items oi
+        JOIN orders o ON oi.order_id = o.id
+        LEFT JOIN product_costs pc
+          ON pc.product_title = oi.product_title AND pc.store_id = o.store_id
+        WHERE o.store_id = ?
+        GROUP BY oi.product_title
+        ORDER BY total_revenue DESC
+      `).bind(storeId).all();
+
+      return json({ products: products.results ?? [] });
+    }
+
+    // ── POST /api/product-costs ───────────────────────────────────────────────
+    if (path === "/api/product-costs" && method === "POST") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const body = await request.json() as any;
+      const { store_id, product_title, cost } = body;
+      if (!store_id || !product_title) return json({ error: "Missing fields" }, 400);
+
+      const id = `${store_id}::${product_title}`;
+      await env.DB.prepare(`
+        INSERT OR REPLACE INTO product_costs (id, store_id, product_title, cost, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+      `).bind(id, store_id, product_title, parseFloat(cost) || 0, new Date().toISOString()).run();
+
+      return json({ ok: true });
+    }
+
+    // ── POST /api/product-costs/bulk ──────────────────────────────────────────
+    if (path === "/api/product-costs/bulk" && method === "POST") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const body = await request.json() as any;
+      const items = body.items as Array<{ store_id: string; product_title: string; cost: number }>;
+      let count = 0;
+      for (const item of items ?? []) {
+        const id = `${item.store_id}::${item.product_title}`;
+        await env.DB.prepare(`
+          INSERT OR REPLACE INTO product_costs (id, store_id, product_title, cost, updated_at)
+          VALUES (?, ?, ?, ?, ?)
+        `).bind(id, item.store_id, item.product_title, parseFloat(String(item.cost)) || 0, new Date().toISOString()).run();
+        count++;
+      }
+      return json({ ok: true, updated: count });
     }
 
     return json({ error: "Not found", path }, 404);
