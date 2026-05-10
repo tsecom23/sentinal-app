@@ -107,7 +107,7 @@ export default function StoresPage() {
 
         <button
           onClick={() => setShowAddStore(true)}
-          className="bg-indigo-600 px-5 py-3 rounded-xl font-semibold"
+          className="bg-blue-600 px-5 py-3 rounded-xl font-semibold"
         >
           + Add Store
         </button>
@@ -137,7 +137,7 @@ export default function StoresPage() {
               <div className="flex gap-3">
                 <a
                   href={`/?store_id=${store.id}`}
-                  className="bg-indigo-600 px-4 py-2 rounded-lg"
+                  className="bg-blue-600 px-4 py-2 rounded-lg"
                 >
                   Open Dashboard
                 </a>
@@ -194,7 +194,7 @@ export default function StoresPage() {
             <button
               onClick={addStore}
               disabled={saving}
-              className="w-full bg-indigo-600 rounded-xl py-3 font-bold"
+              className="w-full bg-blue-600 rounded-xl py-3 font-bold"
             >
               {saving ? "Saving..." : "Save Store"}
             </button>

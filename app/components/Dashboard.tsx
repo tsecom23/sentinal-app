@@ -127,14 +127,14 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
 
         <div className="flex items-center gap-2">
           {(["today", "yesterday", "30d"] as Range[]).map(r => (
-            <button key={r} onClick={() => setRange(r)} className={`h-9 px-4 rounded-xl text-xs font-semibold transition ${range === r ? "bg-indigo-600 text-white" : "bg-[#111118] border border-white/8 text-zinc-500 hover:text-white"}`}>
+            <button key={r} onClick={() => setRange(r)} className={`h-9 px-4 rounded-xl text-xs font-semibold transition ${range === r ? "bg-blue-600 text-white" : "bg-[#111118] border border-white/8 text-zinc-500 hover:text-white"}`}>
               {r === "30d" ? "30 Days" : r === "today" ? "Today" : "Yesterday"}
             </button>
           ))}
           <button onClick={loadData} className="h-9 w-9 rounded-xl bg-[#111118] border border-white/8 flex items-center justify-center text-zinc-500 hover:text-white transition">
             <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
           </button>
-          <button onClick={scanAlerts} className="h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold flex items-center gap-1.5 transition">
+          <button onClick={scanAlerts} className="h-9 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-semibold flex items-center gap-1.5 transition">
             <Bell size={13} />{scanning ? "Scanning..." : "Scan Alerts"}
           </button>
         </div>
@@ -155,12 +155,12 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
               <span>Next: {nextMilestone}</span>
             </div>
             <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
-              <div className="h-full bg-indigo-500 rounded-full transition-all duration-700" style={{ width: `${milestoneProgress}%` }} />
+              <div className="h-full bg-blue-500 rounded-full transition-all duration-700" style={{ width: `${milestoneProgress}%` }} />
             </div>
           </div>
           <div className="shrink-0 flex gap-1.5">
             {MILESTONES_LIST.slice(0, 6).map(m => (
-              <div key={m} className={`text-[10px] px-2 py-1 rounded-lg font-semibold ${thisMonth >= m ? "bg-indigo-600/20 text-indigo-400" : "bg-white/4 text-zinc-700"}`}>{m}</div>
+              <div key={m} className={`text-[10px] px-2 py-1 rounded-lg font-semibold ${thisMonth >= m ? "bg-blue-600/20 text-blue-400" : "bg-white/4 text-zinc-700"}`}>{m}</div>
             ))}
           </div>
         </div>
@@ -185,7 +185,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
       {/* Chart */}
       <div className="rounded-3xl bg-[#111118] border border-white/8 p-6 mb-5">
         <div className="flex items-center gap-2 mb-5">
-          <TrendingUp size={15} className="text-indigo-400" />
+          <TrendingUp size={15} className="text-blue-400" />
           <h3 className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Revenue Trend</h3>
         </div>
         <div className="h-52">
@@ -215,7 +215,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
         {/* Top Products */}
         <div className="col-span-3 rounded-3xl bg-[#111118] border border-white/8 p-5">
           <div className="flex items-center gap-2 mb-4">
-            <Box size={14} className="text-indigo-400" />
+            <Box size={14} className="text-blue-400" />
             <h3 className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Top Products</h3>
             <span className="ml-auto text-[10px] text-zinc-700">{range === "30d" ? "30 days" : range}</span>
           </div>
@@ -230,7 +230,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
                 const m = p.revenue > 0 ? (p.profit / p.revenue) * 100 : 0;
                 return (
                   <div key={i} className="relative group rounded-xl px-3 py-2.5 hover:bg-white/4 transition">
-                    <div className="absolute inset-y-0 left-0 rounded-xl bg-indigo-600/8" style={{ width: `${pct}%` }} />
+                    <div className="absolute inset-y-0 left-0 rounded-xl bg-blue-600/8" style={{ width: `${pct}%` }} />
                     <div className="relative flex items-center gap-3">
                       <span className="text-[10px] text-zinc-700 w-4 text-right shrink-0 font-mono">{i + 1}</span>
                       <div className="flex-1 min-w-0">
@@ -252,7 +252,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
         {/* Alerts */}
         <div className="col-span-2 rounded-3xl bg-[#111118] border border-white/8 p-5 flex flex-col">
           <div className="flex items-center gap-2 mb-4">
-            <ShieldAlert size={14} className="text-indigo-400" />
+            <ShieldAlert size={14} className="text-blue-400" />
             <h3 className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Alerts</h3>
             {alerts.length > 0 && <span className="ml-auto text-[10px] bg-amber-500/15 text-amber-400 px-2 py-0.5 rounded-full font-semibold">{alerts.length}</span>}
           </div>

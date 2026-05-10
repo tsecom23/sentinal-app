@@ -124,7 +124,7 @@ export default function ProductInsightsPage() {
               {STORES.map(s => <option key={s.key} value={s.key}>{s.name}</option>)}
             </select>
             {pendingChanges > 0 && (
-              <button onClick={saveAll} disabled={bulkSaving} className="h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold flex items-center gap-2 transition">
+              <button onClick={saveAll} disabled={bulkSaving} className="h-9 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-sm font-semibold flex items-center gap-2 transition">
                 {bulkSaving ? "Opslaan..." : `Sla alles op (${pendingChanges})`}
               </button>
             )}
@@ -155,13 +155,13 @@ export default function ProductInsightsPage() {
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Zoek product..."
-              className="w-full bg-[#111118] border border-white/8 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-zinc-700 outline-none focus:border-indigo-500/50"
+              className="w-full bg-[#111118] border border-white/8 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-zinc-700 outline-none focus:border-blue-500/50"
             />
             {search && <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-white"><X size={13} /></button>}
           </div>
           <div className="flex gap-1 bg-[#111118] border border-white/8 rounded-xl p-1">
             {([["revenue", "Omzet"], ["sold", "Verkopen"], ["margin", "Laagste marge"]] as const).map(([s, l]) => (
-              <button key={s} onClick={() => setSortBy(s)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${sortBy === s ? "bg-indigo-600 text-white" : "text-zinc-500 hover:text-white"}`}>{l}</button>
+              <button key={s} onClick={() => setSortBy(s)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${sortBy === s ? "bg-blue-600 text-white" : "text-zinc-500 hover:text-white"}`}>{l}</button>
             ))}
           </div>
           <p className="text-xs text-zinc-600">{filtered.length} producten</p>
@@ -198,7 +198,7 @@ export default function ProductInsightsPage() {
                 const marginColor = margin === null ? "" : margin >= 60 ? "text-emerald-400" : margin >= 40 ? "text-yellow-400" : margin > 0 ? "text-orange-400" : "text-red-400";
 
                 return (
-                  <div key={p.product_title} className={`grid grid-cols-[1fr_70px_90px_110px_100px_140px_44px] items-center hover:bg-white/2 transition ${isEditing ? "bg-indigo-600/4" : ""}`}>
+                  <div key={p.product_title} className={`grid grid-cols-[1fr_70px_90px_110px_100px_140px_44px] items-center hover:bg-white/2 transition ${isEditing ? "bg-blue-600/4" : ""}`}>
                     <div className="px-4 py-3 min-w-0">
                       <p className="text-sm font-medium truncate">{p.product_title}</p>
                       {p.cost > 0 && !isEditing && <p className="text-[10px] text-zinc-600 mt-0.5">inkoop €{p.cost.toFixed(2)}</p>}
@@ -217,7 +217,7 @@ export default function ProductInsightsPage() {
                           onChange={e => setCostInput(p.product_title, e.target.value)}
                           onKeyDown={e => { if (e.key === "Enter") saveCost(p.product_title); }}
                           placeholder="0.00"
-                          className="w-full bg-white/6 border border-white/8 rounded-lg pl-6 pr-2 py-1.5 text-xs text-white placeholder-zinc-700 outline-none focus:border-indigo-500/50 focus:bg-indigo-600/8"
+                          className="w-full bg-white/6 border border-white/8 rounded-lg pl-6 pr-2 py-1.5 text-xs text-white placeholder-zinc-700 outline-none focus:border-blue-500/50 focus:bg-blue-600/8"
                         />
                       </div>
                     </div>
@@ -246,7 +246,7 @@ export default function ProductInsightsPage() {
                           <Check size={12} className="text-emerald-400" />
                         </div>
                       ) : isEditing ? (
-                        <button onClick={() => saveCost(p.product_title)} disabled={isSaving} className="w-7 h-7 rounded-lg bg-indigo-600 hover:bg-indigo-500 flex items-center justify-center transition">
+                        <button onClick={() => saveCost(p.product_title)} disabled={isSaving} className="w-7 h-7 rounded-lg bg-blue-600 hover:bg-blue-500 flex items-center justify-center transition">
                           {isSaving ? <span className="text-[9px]">...</span> : <Check size={12} />}
                         </button>
                       ) : null}

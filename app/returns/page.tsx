@@ -77,7 +77,7 @@ export default function ReturnsPage() {
             <h1 className="text-2xl font-black">Returns & Disputes</h1>
             <p className="text-sm text-zinc-500">Manage refunds, returns and customer disputes</p>
           </div>
-          <button onClick={() => setShowAdd(true)} className="ml-auto h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-sm font-semibold flex items-center gap-2 transition">
+          <button onClick={() => setShowAdd(true)} className="ml-auto h-9 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-sm font-semibold flex items-center gap-2 transition">
             <Plus size={14} /> Add Return
           </button>
         </div>
@@ -105,7 +105,7 @@ export default function ReturnsPage() {
         <div className="flex gap-1 mb-5 bg-[#111118] border border-white/8 p-1 rounded-2xl w-fit">
           {(["returns", "disputes"] as const).map(t => (
             <button key={t} onClick={() => setTab(t)} className={`px-5 py-2 rounded-xl text-sm font-semibold transition capitalize ${
-              tab === t ? "bg-indigo-600 text-white" : "text-zinc-500 hover:text-white"
+              tab === t ? "bg-blue-600 text-white" : "text-zinc-500 hover:text-white"
             }`}>{t}</button>
           ))}
         </div>
@@ -232,7 +232,7 @@ function AddReturnModal({ storeId, onClose }: { storeId: string; onClose: () => 
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
       <div className="bg-[#0d0d13] border border-white/10 rounded-3xl p-6 w-full max-w-md">
         <div className="flex items-center justify-between mb-5">
-          <h2 className="font-black text-lg flex items-center gap-2"><RotateCcw size={18} className="text-indigo-400" /> New Return</h2>
+          <h2 className="font-black text-lg flex items-center gap-2"><RotateCcw size={18} className="text-blue-400" /> New Return</h2>
           <button onClick={onClose} className="text-zinc-600 hover:text-white"><X size={18} /></button>
         </div>
         <div className="space-y-3">
@@ -249,12 +249,12 @@ function AddReturnModal({ storeId, onClose }: { storeId: string; onClose: () => 
                 value={form[f.key as keyof typeof form]}
                 onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
                 placeholder={f.placeholder}
-                className="w-full bg-[#111118] border border-white/8 rounded-xl px-3 py-2.5 text-sm text-white placeholder-zinc-700 outline-none focus:border-indigo-500/50"
+                className="w-full bg-[#111118] border border-white/8 rounded-xl px-3 py-2.5 text-sm text-white placeholder-zinc-700 outline-none focus:border-blue-500/50"
               />
             </div>
           ))}
         </div>
-        <button onClick={save} disabled={saving} className="mt-5 w-full h-10 rounded-xl bg-indigo-600 hover:bg-indigo-500 font-semibold text-sm transition">
+        <button onClick={save} disabled={saving} className="mt-5 w-full h-10 rounded-xl bg-blue-600 hover:bg-blue-500 font-semibold text-sm transition">
           {saving ? "Saving..." : "Add Return"}
         </button>
       </div>

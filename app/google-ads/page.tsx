@@ -132,7 +132,7 @@ export default function GoogleAdsPage() {
 
           <button
             onClick={syncGoogleAds}
-            className="bg-indigo-600 px-5 py-3 rounded-xl font-semibold hover:bg-indigo-500 transition"
+            className="bg-blue-600 px-5 py-3 rounded-xl font-semibold hover:bg-blue-500 transition"
           >
             {syncing ? "Syncing..." : "Sync Google Ads"}
           </button>
@@ -330,7 +330,7 @@ function Nav({
     <div
       className={`flex items-center gap-3 px-4 py-2 rounded-lg cursor-pointer ${
         active
-          ? "bg-indigo-600 text-white"
+          ? "bg-blue-600 text-white"
           : "hover:bg-zinc-800"
       } ${small ? "text-sm" : ""}`}
     >

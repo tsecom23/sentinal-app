@@ -79,7 +79,7 @@ export default function LoginPage() {
         <button
           onClick={signIn}
           disabled={loading}
-          className="w-full bg-indigo-600 py-3 rounded-xl font-semibold mb-3"
+          className="w-full bg-blue-600 py-3 rounded-xl font-semibold mb-3"
         >
           {loading ? "Loading..." : "Sign In"}
         </button>

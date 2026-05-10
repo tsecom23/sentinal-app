@@ -24,7 +24,7 @@ export default function Sidebar() {
     <aside className="w-[260px] min-h-screen bg-[#0d0d13] border-r border-white/5 p-5 flex flex-col shrink-0 fixed left-0 top-0 bottom-0 z-40">
       {/* Logo */}
       <a href="/" className="flex items-center gap-3 mb-10">
-        <div className="h-10 w-10 rounded-2xl bg-indigo-600 flex items-center justify-center shrink-0">
+        <div className="h-10 w-10 rounded-2xl bg-blue-600 flex items-center justify-center shrink-0">
           <Sparkles size={18} />
         </div>
         <div>
@@ -43,7 +43,7 @@ export default function Sidebar() {
           const inner = (
             <div className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all text-[13px] font-medium ${
               active
-                ? "bg-indigo-600 text-white"
+                ? "bg-blue-600 text-white"
                 : "text-zinc-500 hover:bg-white/5 hover:text-white"
             }`}>
               <Icon size={15} className="shrink-0" />
@@ -58,8 +58,8 @@ export default function Sidebar() {
       </nav>
 
       {/* AI Status */}
-      <div className="mt-4 rounded-2xl bg-gradient-to-br from-indigo-600/20 to-purple-600/10 border border-indigo-500/20 p-4">
-        <div className="flex items-center gap-2 text-indigo-300 font-semibold text-xs mb-1.5">
+      <div className="mt-4 rounded-2xl bg-gradient-to-br from-blue-600/20 to-purple-600/10 border border-blue-500/20 p-4">
+        <div className="flex items-center gap-2 text-blue-300 font-semibold text-xs mb-1.5">
           <Zap size={13} /> AI Status
         </div>
         <p className="text-[11px] text-zinc-500 leading-relaxed">

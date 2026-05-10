@@ -199,7 +199,7 @@ function Nav({
   return (
     <div
       className={`flex items-center gap-3 px-4 py-2 rounded-lg cursor-pointer ${
-        active ? "bg-indigo-600 text-white" : "hover:bg-zinc-800"
+        active ? "bg-blue-600 text-white" : "hover:bg-zinc-800"
       } ${small ? "text-sm" : ""}`}
     >
       {icon}
