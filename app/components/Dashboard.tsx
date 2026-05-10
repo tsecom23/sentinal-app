@@ -7,13 +7,15 @@ import {
   ArrowUpRight, ArrowDownRight, Lightbulb, Skull,
 } from "lucide-react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { createClient } from "../../utils/supabase/client";
 
 const API = "https://sentinel-api.tssheets1.workers.dev";
 
-type Range = "today" | "yesterday" | "30d";
-type StoreType = { id: string; store_name: string; shopify_domain: string; store_key: string };
+const STORES = [
+  { key: "ceofo",     name: "CEOFO",     domain: "ceofo.myshopify.com" },
+  { key: "martaline", name: "Martaline", domain: "cqb72v-if.myshopify.com" },
+];
 
+type Range = "today" | "yesterday" | "30d";
 type Overview = {
   revenue: number; netRevenue: number; orders: number;
   adSpend: number; productCost: number; profit: number;
@@ -28,8 +30,6 @@ type TopProduct = { product_title: string; variant_title?: string; sold: number;
 type MilestoneData = { totalThisMonth: number; next: number | null; reached: number[] };
 
 export default function Dashboard({ activeStoreId }: { activeStoreId?: string }) {
-  const supabase = createClient();
-  const [stores, setStores] = useState<StoreType[]>([]);
   const [storeId, setStoreId] = useState(activeStoreId || "ceofo");
   const [range, setRange] = useState<Range>("30d");
   const [loading, setLoading] = useState(false);
@@ -39,13 +39,6 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
   const [products, setProducts] = useState<TopProduct[]>([]);
   const [milestones, setMilestones] = useState<MilestoneData | null>(null);
   const [error, setError] = useState("");
-
-  async function loadStores() {
-    const { data } = await supabase.from("stores")
-      .select("id, store_name, shopify_domain, store_key")
-      .order("created_at", { ascending: false });
-    setStores(data || []);
-  }
 
   async function loadData() {
     try {
@@ -73,11 +66,10 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
     setScanning(false);
   }
 
-  useEffect(() => { loadStores(); }, []);
   useEffect(() => { if (activeStoreId) setStoreId(activeStoreId); }, [activeStoreId]);
   useEffect(() => { loadData(); }, [storeId, range]);
 
-  const activeStore = stores.find(s => s.store_key === storeId);
+  const activeStore = STORES.find(s => s.key === storeId);
   const ov = overview;
   const revenue = ov?.revenue ?? 0;
   const orders = ov?.orders ?? 0;
@@ -117,12 +109,10 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
               onChange={e => changeStore(e.target.value)}
               className="bg-[#111118] border border-white/8 rounded-xl px-3 py-2 text-sm text-white min-w-[200px] cursor-pointer"
             >
-              {stores.length === 0 && <option value={storeId}>{storeId}</option>}
-              {stores.map(s => <option key={s.id} value={s.store_key}>{s.store_name}</option>)}
+              {STORES.map(s => <option key={s.key} value={s.key}>{s.name}</option>)}
             </select>
-            <a href="/stores" className="h-9 px-3 rounded-xl bg-[#111118] border border-white/8 text-xs text-zinc-500 hover:text-white transition flex items-center">Manage</a>
           </div>
-          <p className="text-[11px] text-zinc-700 mt-1.5">{activeStore?.shopify_domain || "—"}</p>
+          <p className="text-[11px] text-zinc-700 mt-1.5">{activeStore?.domain || "—"}</p>
         </div>
 
         <div className="flex items-center gap-2">
