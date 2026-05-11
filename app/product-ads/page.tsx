@@ -6,12 +6,9 @@ import {
   Package, Search, TrendingDown, TrendingUp, XCircle, Zap,
 } from "lucide-react";
 import { DateRangePicker, DateRange, initRange, toQueryString } from "../components/DateRangePicker";
+import { useStores } from "../hooks/useStores";
 
 const API = "https://sentinel-api.tssheets1.workers.dev";
-const STORES = [
-  { key: "ceofo",     name: "CEOFO" },
-  { key: "martaline", name: "Martaline" },
-];
 
 interface ProductAd {
   product_title: string;
@@ -78,7 +75,14 @@ function ctrColor(ctr: number) {
 }
 
 export default function ProductAdsPage() {
+  const { stores } = useStores();
   const [store, setStore]         = useState("martaline");
+
+  useEffect(() => {
+    if (stores.length > 0 && !stores.find(s => s.id === store)) {
+      setStore(stores[0].id);
+    }
+  }, [stores]);
   const [dateRange, setDateRange] = useState<DateRange>(initRange("30d"));
   const [products, setProducts]   = useState<ProductAd[]>([]);
   const [loading, setLoading]     = useState(true);
@@ -149,9 +153,9 @@ export default function ProductAdsPage() {
         <div className="flex items-center gap-2 flex-wrap">
           <DateRangePicker value={dateRange} onChange={setDateRange} />
           <div className="flex gap-1 bg-white/5 rounded-xl p-1">
-            {STORES.map(s => (
-              <button key={s.key} onClick={() => setStore(s.key)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${store === s.key ? "bg-blue-600 text-white" : "text-zinc-400 hover:text-white"}`}>
+            {stores.map(s => (
+              <button key={s.id} onClick={() => setStore(s.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${store === s.id ? "bg-blue-600 text-white" : "text-zinc-400 hover:text-white"}`}>
                 {s.name}
               </button>
             ))}

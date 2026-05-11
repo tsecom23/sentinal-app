@@ -5,12 +5,9 @@ import { TrendingUp, Plus, Pencil, Trash2, X, Check, ChevronDown } from "lucide-
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
+import { useStores } from "../hooks/useStores";
 
 const API = "https://sentinel-api.tssheets1.workers.dev";
-const STORES = [
-  { key: "ceofo",     name: "CEOFO" },
-  { key: "martaline", name: "Martaline" },
-];
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -81,8 +78,16 @@ const currentMonth = new Date().getMonth() + 1;
 const currentYear  = new Date().getFullYear();
 
 export default function PnLPage() {
+  const { stores } = useStores();
   const [store, setStore]   = useState("ceofo");
   const [year, setYear]     = useState(2026);
+
+  // Set default store to first one once loaded
+  useEffect(() => {
+    if (stores.length > 0 && !stores.find(s => s.id === store)) {
+      setStore(stores[0].id);
+    }
+  }, [stores]);
   const [data, setData]     = useState<PnLResponse | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -236,12 +241,12 @@ export default function PnLPage() {
           </div>
 
           <div className="flex gap-1 bg-white/5 rounded-xl p-1">
-            {STORES.map(s => (
+            {stores.map(s => (
               <button
-                key={s.key}
-                onClick={() => setStore(s.key)}
+                key={s.id}
+                onClick={() => setStore(s.id)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  store === s.key ? "bg-blue-600 text-white" : "text-zinc-400 hover:text-white"
+                  store === s.id ? "bg-blue-600 text-white" : "text-zinc-400 hover:text-white"
                 }`}
               >
                 {s.name}

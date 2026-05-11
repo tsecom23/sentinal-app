@@ -2,203 +2,262 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "../../utils/supabase/client";
+import { Store, useStores } from "../hooks/useStores";
+import { Plus, Pencil, Check, X, ExternalLink, Link2 } from "lucide-react";
 
-type Store = {
-  id: string;
-  user_id?: string;
-  store_name: string;
+const API = "https://sentinel-api.tssheets1.workers.dev";
+
+interface EditDraft {
+  name: string;
   shopify_domain: string;
   shopify_access_token: string;
-  created_at: string;
+  google_ads_customer_id: string;
+  currency: string;
+}
+
+const EMPTY_DRAFT: EditDraft = {
+  name: "", shopify_domain: "", shopify_access_token: "",
+  google_ads_customer_id: "", currency: "EUR",
 };
 
 export default function StoresPage() {
   const supabase = createClient();
+  const { stores, loading, invalidate } = useStores();
 
-  const [stores, setStores] = useState<Store[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showAddStore, setShowAddStore] = useState(false);
-
-  const [storeName, setStoreName] = useState("");
-  const [shopifyDomain, setShopifyDomain] = useState("");
-  const [shopifyToken, setShopifyToken] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
-
-  useEffect(() => {
-    fetchStores();
-  }, []);
-
-  async function fetchStores() {
-    setLoading(true);
-
-    const { data, error } = await supabase
-      .from("stores")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (!error && data) {
-      setStores(data);
-    }
-
-    setLoading(false);
-  }
+  const [showAdd, setShowAdd]     = useState(false);
+  const [draft, setDraft]         = useState<EditDraft>(EMPTY_DRAFT);
+  const [saving, setSaving]       = useState(false);
+  const [message, setMessage]     = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<EditDraft>(EMPTY_DRAFT);
 
   async function addStore() {
+    if (!draft.name) { setMessage("Store naam is verplicht."); return; }
+    setSaving(true); setMessage("");
+    try {
+      // Save to Worker D1
+      const r = await fetch(`${API}/api/stores`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(draft),
+      });
+      const d = await r.json();
+      if (!d.ok) { setMessage("Fout bij opslaan."); return; }
+
+      // Also save to Supabase for auth-linked data
+      const { data: userData } = await supabase.auth.getUser();
+      if (userData.user) {
+        await supabase.from("stores").upsert({
+          user_id: userData.user.id,
+          store_name: draft.name,
+          shopify_domain: draft.shopify_domain,
+          shopify_access_token: draft.shopify_access_token,
+        });
+      }
+
+      invalidate();
+      setDraft(EMPTY_DRAFT);
+      setShowAdd(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveEdit(id: string) {
     setSaving(true);
-    setMessage("");
-
-    const { data: userData } = await supabase.auth.getUser();
-
-    if (!userData.user) {
-      setMessage("You are not logged in.");
+    try {
+      await fetch(`${API}/api/stores/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editDraft),
+      });
+      invalidate();
+      setEditingId(null);
+    } finally {
       setSaving(false);
-      return;
     }
+  }
 
-    const cleanDomain = shopifyDomain
-      .replace("https://", "")
-      .replace("http://", "")
-      .replace("/", "")
-      .trim();
+  async function deleteStore(id: string) {
+    if (!confirm(`Store "${id}" verwijderen?`)) return;
+    await fetch(`${API}/api/stores/${id}`, { method: "DELETE" });
+    invalidate();
+  }
 
-    if (!storeName || !cleanDomain || !shopifyToken) {
-      setMessage("Please fill in all fields.");
-      setSaving(false);
-      return;
-    }
-
-    const { error } = await supabase.from("stores").insert({
-      user_id: userData.user.id,
-      store_name: storeName.trim(),
-      shopify_domain: cleanDomain,
-      shopify_access_token: shopifyToken.trim(),
+  function startEdit(s: Store) {
+    setEditingId(s.id);
+    setEditDraft({
+      name: s.name,
+      shopify_domain: s.shopify_domain ?? "",
+      shopify_access_token: "",
+      google_ads_customer_id: s.google_ads_customer_id ?? "",
+      currency: s.currency ?? "EUR",
     });
-
-    if (error) {
-      setMessage(error.message);
-      setSaving(false);
-      return;
-    }
-
-    setStoreName("");
-    setShopifyDomain("");
-    setShopifyToken("");
-    setShowAddStore(false);
-    setSaving(false);
-
-    await fetchStores();
   }
 
   return (
-    <div className="min-h-screen bg-black text-white p-10">
-      <div className="flex items-center justify-between mb-8">
+    <div className="p-6 space-y-6 min-h-screen">
+      {/* Header */}
+      <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <a href="/" className="text-zinc-400 hover:text-white text-sm">
-            ← Back to Dashboard
-          </a>
-
-          <h1 className="text-4xl font-bold mt-4">Store Manager</h1>
-
-          <p className="text-zinc-400 mt-2">
-            Add Shopify stores and manage your multi-store setup.
-          </p>
+          <h1 className="text-2xl font-black tracking-tight">Store Manager</h1>
+          <p className="text-zinc-500 text-sm mt-0.5">Beheer je Shopify stores en advertentie-koppelingen</p>
         </div>
-
         <button
-          onClick={() => setShowAddStore(true)}
-          className="bg-blue-600 px-5 py-3 rounded-xl font-semibold"
+          onClick={() => { setShowAdd(true); setMessage(""); }}
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-all"
         >
-          + Add Store
+          <Plus size={15} /> Store toevoegen
         </button>
       </div>
 
-      {loading ? (
-        <p className="text-zinc-400">Loading stores...</p>
-      ) : stores.length === 0 ? (
-        <div className="bg-zinc-900 rounded-2xl p-6">
-          <p>No stores connected yet.</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {stores.map((store) => (
-            <div
-              key={store.id}
-              className="bg-zinc-900 rounded-2xl p-6 border border-zinc-800"
+      {/* Add form */}
+      {showAdd && (
+        <div className="bg-white/3 border border-blue-500/20 rounded-2xl p-5 space-y-3">
+          <p className="text-sm font-semibold text-blue-300 mb-1">Nieuwe store</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <input
+              className="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500/50"
+              placeholder="Store naam (bijv. CEOFO)"
+              value={draft.name}
+              onChange={e => setDraft(p => ({ ...p, name: e.target.value }))}
+            />
+            <input
+              className="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500/50"
+              placeholder="Shopify domain (bijv. ceofo.myshopify.com)"
+              value={draft.shopify_domain}
+              onChange={e => setDraft(p => ({ ...p, shopify_domain: e.target.value }))}
+            />
+            <input
+              type="password"
+              className="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500/50"
+              placeholder="Shopify Admin Access Token"
+              value={draft.shopify_access_token}
+              onChange={e => setDraft(p => ({ ...p, shopify_access_token: e.target.value }))}
+            />
+            <input
+              className="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500/50"
+              placeholder="Google Ads Customer ID (bijv. 123-456-7890)"
+              value={draft.google_ads_customer_id}
+              onChange={e => setDraft(p => ({ ...p, google_ads_customer_id: e.target.value }))}
+            />
+          </div>
+          {message && <p className="text-yellow-400 text-xs">{message}</p>}
+          <div className="flex gap-2">
+            <button
+              onClick={addStore} disabled={saving || !draft.name}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-all"
             >
-              <h2 className="text-2xl font-bold mb-2">{store.store_name}</h2>
-
-              <p className="text-zinc-400 mb-4">{store.shopify_domain}</p>
-
-              <p className="text-xs text-zinc-600 mb-5">
-                Added: {new Date(store.created_at).toLocaleString("en-GB")}
-              </p>
-
-              <div className="flex gap-3">
-                <a
-                  href={`/?store_id=${store.id}`}
-                  className="bg-blue-600 px-4 py-2 rounded-lg"
-                >
-                  Open Dashboard
-                </a>
-
-                <button className="bg-zinc-800 px-4 py-2 rounded-lg">
-                  Settings
-                </button>
-              </div>
-            </div>
-          ))}
+              {saving ? "Opslaan…" : "Opslaan"}
+            </button>
+            <button
+              onClick={() => { setShowAdd(false); setDraft(EMPTY_DRAFT); setMessage(""); }}
+              className="px-4 py-2 text-zinc-500 hover:text-zinc-300 text-sm rounded-xl transition-all"
+            >
+              Annuleren
+            </button>
+          </div>
         </div>
       )}
 
-      {showAddStore && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 w-full max-w-lg">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold">Add Shopify Store</h2>
+      {/* Store cards */}
+      {loading ? (
+        <div className="text-zinc-600 text-sm">Laden…</div>
+      ) : stores.length === 0 ? (
+        <div className="bg-white/3 border border-white/5 rounded-2xl p-8 text-center text-zinc-600 text-sm">
+          Nog geen stores — klik op &quot;Store toevoegen&quot; om te beginnen.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {stores.map(s => (
+            <div key={s.id} className="bg-white/3 border border-white/5 rounded-2xl p-5 space-y-3">
+              {editingId === s.id ? (
+                /* Edit mode */
+                <div className="space-y-2">
+                  <input
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
+                    value={editDraft.name}
+                    placeholder="Store naam"
+                    onChange={e => setEditDraft(p => ({ ...p, name: e.target.value }))}
+                  />
+                  <input
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
+                    value={editDraft.shopify_domain}
+                    placeholder="Shopify domain"
+                    onChange={e => setEditDraft(p => ({ ...p, shopify_domain: e.target.value }))}
+                  />
+                  <input
+                    type="password"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
+                    value={editDraft.shopify_access_token}
+                    placeholder="Access token (leeg = niet wijzigen)"
+                    onChange={e => setEditDraft(p => ({ ...p, shopify_access_token: e.target.value }))}
+                  />
+                  <input
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
+                    value={editDraft.google_ads_customer_id}
+                    placeholder="Google Ads Customer ID (bijv. 123-456-7890)"
+                    onChange={e => setEditDraft(p => ({ ...p, google_ads_customer_id: e.target.value }))}
+                  />
+                  <div className="flex gap-2 pt-1">
+                    <button onClick={() => saveEdit(s.id)} disabled={saving}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg transition-all">
+                      <Check size={12} /> {saving ? "Opslaan…" : "Opslaan"}
+                    </button>
+                    <button onClick={() => setEditingId(null)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-zinc-500 hover:text-zinc-300 text-xs rounded-lg transition-all">
+                      <X size={12} /> Annuleren
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* View mode */
+                <>
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h2 className="text-lg font-black text-white">{s.name}</h2>
+                      <p className="text-xs text-zinc-500 mt-0.5">{s.shopify_domain || "Geen Shopify domain"}</p>
+                    </div>
+                    <div className="flex gap-1">
+                      <button onClick={() => startEdit(s)}
+                        className="p-2 rounded-lg text-zinc-600 hover:text-zinc-300 hover:bg-white/5 transition-all">
+                        <Pencil size={14} />
+                      </button>
+                    </div>
+                  </div>
 
-              <button
-                onClick={() => setShowAddStore(false)}
-                className="text-zinc-400 hover:text-white"
-              >
-                ✕
-              </button>
+                  {/* Connections */}
+                  <div className="space-y-1.5">
+                    <div className={`flex items-center gap-2 text-xs rounded-lg px-3 py-2 ${
+                      s.shopify_domain ? "bg-emerald-500/10 text-emerald-400" : "bg-white/5 text-zinc-600"
+                    }`}>
+                      <div className={`w-1.5 h-1.5 rounded-full ${s.shopify_domain ? "bg-emerald-400" : "bg-zinc-700"}`} />
+                      Shopify {s.shopify_domain ? `— ${s.shopify_domain}` : "— niet gekoppeld"}
+                    </div>
+                    <div className={`flex items-center gap-2 text-xs rounded-lg px-3 py-2 ${
+                      s.google_ads_customer_id ? "bg-blue-500/10 text-blue-400" : "bg-white/5 text-zinc-600"
+                    }`}>
+                      <div className={`w-1.5 h-1.5 rounded-full ${s.google_ads_customer_id ? "bg-blue-400" : "bg-zinc-700"}`} />
+                      Google Ads {s.google_ads_customer_id ? `— ${s.google_ads_customer_id}` : "— niet gekoppeld"}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 pt-1 flex-wrap">
+                    <a href={`/?store_id=${s.id}`}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-xs font-medium rounded-lg transition-all">
+                      <ExternalLink size={11} /> Dashboard openen
+                    </a>
+                    {!s.google_ads_customer_id && (
+                      <button onClick={() => startEdit(s)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/8 text-zinc-400 hover:text-white text-xs font-medium rounded-lg transition-all">
+                        <Link2 size={11} /> Ads koppelen
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
-
-            <input
-              value={storeName}
-              onChange={(e) => setStoreName(e.target.value)}
-              placeholder="Store name, e.g. CEOFO"
-              className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 mb-3"
-            />
-
-            <input
-              value={shopifyDomain}
-              onChange={(e) => setShopifyDomain(e.target.value)}
-              placeholder="Shopify domain, e.g. ceofo.myshopify.com"
-              className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 mb-3"
-            />
-
-            <input
-              value={shopifyToken}
-              onChange={(e) => setShopifyToken(e.target.value)}
-              placeholder="Shopify Admin Access Token"
-              type="password"
-              className="w-full bg-black border border-zinc-800 rounded-xl px-4 py-3 mb-4"
-            />
-
-            {message && (
-              <p className="text-sm text-yellow-400 mb-4">{message}</p>
-            )}
-
-            <button
-              onClick={addStore}
-              disabled={saving}
-              className="w-full bg-blue-600 rounded-xl py-3 font-bold"
-            >
-              {saving ? "Saving..." : "Save Store"}
-            </button>
-          </div>
+          ))}
         </div>
       )}
     </div>

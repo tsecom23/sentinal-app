@@ -135,6 +135,16 @@ const MIGRATIONS = [
     name TEXT NOT NULL, category TEXT DEFAULT 'other',
     amount REAL DEFAULT 0, recurring TEXT DEFAULT 'monthly',
     active INTEGER DEFAULT 1, created_at TEXT, updated_at TEXT)`,
+  `CREATE TABLE IF NOT EXISTS stores (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    shopify_domain TEXT DEFAULT '',
+    shopify_access_token TEXT DEFAULT '',
+    google_ads_customer_id TEXT DEFAULT '',
+    currency TEXT DEFAULT 'EUR',
+    created_at TEXT)`,
+  `INSERT OR IGNORE INTO stores (id,name,shopify_domain,currency,created_at) VALUES ('ceofo','CEOFO','','EUR','2024-01-01')`,
+  `INSERT OR IGNORE INTO stores (id,name,shopify_domain,currency,created_at) VALUES ('martaline','Martaline','','EUR','2024-01-01')`,
 ];
 
 async function runMigrations(db: D1Database) {
@@ -368,6 +378,42 @@ export default {
     const method = request.method;
 
     if (method === "OPTIONS") return withCors(new Response(null, { status: 204 }));
+
+    // ── GET /api/stores ───────────────────────────────────────────────────────
+    if (path === "/api/stores" && method === "GET") {
+      const rows = await env.DB.prepare(`SELECT id,name,shopify_domain,google_ads_customer_id,currency,created_at FROM stores ORDER BY created_at ASC`).all();
+      return json({ stores: rows.results });
+    }
+
+    // ── POST /api/stores ──────────────────────────────────────────────────────
+    if (path === "/api/stores" && method === "POST") {
+      const body = await request.json() as { name: string; shopify_domain?: string; shopify_access_token?: string; google_ads_customer_id?: string; currency?: string };
+      if (!body.name) return json({ error: "name required" }, 400);
+      const id = body.name.toLowerCase().trim().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+      await env.DB.prepare(
+        `INSERT OR IGNORE INTO stores (id,name,shopify_domain,shopify_access_token,google_ads_customer_id,currency,created_at) VALUES (?,?,?,?,?,?,?)`
+      ).bind(id, body.name.trim(), body.shopify_domain ?? "", body.shopify_access_token ?? "", body.google_ads_customer_id ?? "", body.currency ?? "EUR", new Date().toISOString()).run();
+      const store = await env.DB.prepare(`SELECT * FROM stores WHERE id=?`).bind(id).first();
+      return json({ ok: true, store });
+    }
+
+    // ── PUT /api/stores/:id ───────────────────────────────────────────────────
+    if (path.startsWith("/api/stores/") && method === "PUT") {
+      const id = path.split("/")[3];
+      const body = await request.json() as { name?: string; shopify_domain?: string; shopify_access_token?: string; google_ads_customer_id?: string; currency?: string };
+      await env.DB.prepare(
+        `UPDATE stores SET name=COALESCE(?,name), shopify_domain=COALESCE(?,shopify_domain), shopify_access_token=COALESCE(?,shopify_access_token), google_ads_customer_id=COALESCE(?,google_ads_customer_id), currency=COALESCE(?,currency) WHERE id=?`
+      ).bind(body.name ?? null, body.shopify_domain ?? null, body.shopify_access_token ?? null, body.google_ads_customer_id ?? null, body.currency ?? null, id).run();
+      const store = await env.DB.prepare(`SELECT * FROM stores WHERE id=?`).bind(id).first();
+      return json({ ok: true, store });
+    }
+
+    // ── DELETE /api/stores/:id ────────────────────────────────────────────────
+    if (path.startsWith("/api/stores/") && method === "DELETE") {
+      const id = path.split("/")[3];
+      await env.DB.prepare(`DELETE FROM stores WHERE id=?`).bind(id).run();
+      return json({ ok: true });
+    }
 
     // ── GET /api/dashboard/overview ──────────────────────────────────────────
     if (path === "/api/dashboard/overview" && method === "GET") {
