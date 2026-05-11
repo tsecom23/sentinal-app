@@ -145,6 +145,8 @@ const MIGRATIONS = [
     created_at TEXT)`,
   `INSERT OR IGNORE INTO stores (id,name,shopify_domain,currency,created_at) VALUES ('ceofo','CEOFO','','EUR','2024-01-01')`,
   `INSERT OR IGNORE INTO stores (id,name,shopify_domain,currency,created_at) VALUES ('martaline','Martaline','','EUR','2024-01-01')`,
+  // Add google_ads_customer_id to stores if it doesn't exist yet
+  `ALTER TABLE stores ADD COLUMN google_ads_customer_id TEXT DEFAULT ''`,
   // Tags on CS tickets
   `ALTER TABLE cs_tickets ADD COLUMN tags TEXT DEFAULT ''`,
   `ALTER TABLE cs_tickets ADD COLUMN source TEXT DEFAULT 'manual'`,
