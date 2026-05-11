@@ -598,6 +598,8 @@ export default function InboxPage() {
 
   async function handleOrderAction(shopifyOrderId: string, action: "refund" | "cancel") {
     if (!selected) return;
+    const label = action === "refund" ? "fully refund" : "cancel";
+    if (!confirm(`Are you sure you want to ${label} order ${shopifyOrderId}? This cannot be undone.`)) return;
     setOrderAction(shopifyOrderId);
     try {
       const r = await fetch(`${API}/api/shopify/order-action`, {
@@ -898,14 +900,14 @@ export default function InboxPage() {
         {selected ? (
           <div className="divide-y divide-white/5">
 
-            {/* ── Klantprofiel ── */}
+            {/* ── Customer profile ── */}
             <div className="p-4 space-y-3">
-              <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Klant</p>
+              <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Customer</p>
               <div className="flex items-center gap-3">
                 <Avatar name={selected.customer_name} email={selected.customer_email} size={44} />
                 <div className="min-w-0">
                   <p className="text-sm font-bold text-white truncate">
-                    {selected.customer_name || customer?.name || "Onbekend"}
+                    {selected.customer_name || customer?.name || "Unknown"}
                   </p>
                   <p className="text-[11px] text-zinc-500 truncate">{selected.customer_email}</p>
                   {customer?.phone && (
@@ -925,7 +927,7 @@ export default function InboxPage() {
               <div className="grid grid-cols-3 gap-2">
                 <div className="bg-white/4 rounded-xl p-2.5 text-center">
                   <p className="text-lg font-black text-white">{customer?.total_orders ?? "—"}</p>
-                  <p className="text-[9px] text-zinc-600 mt-0.5">Bestellingen</p>
+                  <p className="text-[9px] text-zinc-600 mt-0.5">Orders</p>
                 </div>
                 <div className="bg-white/4 rounded-xl p-2.5 text-center">
                   <p className="text-lg font-black text-emerald-400">
@@ -941,10 +943,10 @@ export default function InboxPage() {
                 </div>
               </div>
 
-              {/* Conversatie info */}
+              {/* Conversation info */}
               <div className="space-y-1 text-xs">
                 <div className="flex justify-between items-center py-0.5">
-                  <span className="text-zinc-600">Kanaal</span>
+                  <span className="text-zinc-600">Channel</span>
                   <span className={`font-semibold ${PROVIDER_COLORS[selected.provider]}`}>
                     {selected.provider === "gmail" ? "Gmail" : "Outlook"}
                   </span>
@@ -957,28 +959,28 @@ export default function InboxPage() {
                 </div>
                 {(selected.priority === "urgent" || selected.priority === "high") && (
                   <div className="flex justify-between items-center py-0.5">
-                    <span className="text-zinc-600">Prioriteit</span>
+                    <span className="text-zinc-600">Priority</span>
                     <span className={`font-bold px-1.5 py-0.5 rounded-full border text-[9px] ${PRIORITY_STYLES[selected.priority]?.cls}`}>
                       {PRIORITY_STYLES[selected.priority]?.label}
                     </span>
                   </div>
                 )}
                 <div className="flex justify-between items-center py-0.5">
-                  <span className="text-zinc-600">Berichten</span>
+                  <span className="text-zinc-600">Messages</span>
                   <span className="text-white font-semibold">{messages.length}</span>
                 </div>
               </div>
             </div>
 
-            {/* ── Bestellingen ── */}
+            {/* ── Orders ── */}
             <div className="p-4 space-y-2">
               <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest flex items-center gap-1.5">
-                <ShoppingBag size={10} /> Bestellingen
+                <ShoppingBag size={10} /> Orders
               </p>
               {!customer ? (
-                <p className="text-[11px] text-zinc-700 py-2">Laden…</p>
+                <p className="text-[11px] text-zinc-700 py-2">Loading…</p>
               ) : customer.orders.length === 0 ? (
-                <p className="text-[11px] text-zinc-700 py-2">Geen bestellingen gevonden</p>
+                <p className="text-[11px] text-zinc-700 py-2">No orders found</p>
               ) : (
                 <div className="space-y-2">
                   {customer.orders.map(o => {
@@ -989,18 +991,18 @@ export default function InboxPage() {
                       o.fulfillment_status === "partial"    ? "text-amber-400 bg-amber-500/10" :
                                                               "text-zinc-500 bg-white/5";
                     const fulfillLabel =
-                      o.fulfillment_status === "fulfilled" ? "Verzonden" :
-                      o.fulfillment_status === "partial"   ? "Gedeeltelijk" : "Niet verzonden";
+                      o.fulfillment_status === "fulfilled" ? "Shipped" :
+                      o.fulfillment_status === "partial"   ? "Partial" : "Unfulfilled";
                     const financialCls =
                       o.financial_status === "refunded" || o.financial_status === "voided" ? "text-red-400 bg-red-500/10" :
                       o.financial_status === "partially_refunded"                          ? "text-orange-400 bg-orange-500/10" :
                       o.financial_status === "paid"                                        ? "text-emerald-400 bg-emerald-500/10" :
                                                                                             "text-zinc-500 bg-white/5";
                     const financialLabel =
-                      o.financial_status === "refunded"           ? "Terugbetaald" :
-                      o.financial_status === "voided"             ? "Geannuleerd" :
-                      o.financial_status === "partially_refunded" ? "Deels terugbet." :
-                      o.financial_status === "paid"               ? "Betaald" :
+                      o.financial_status === "refunded"           ? "Refunded" :
+                      o.financial_status === "voided"             ? "Cancelled" :
+                      o.financial_status === "partially_refunded" ? "Partially refunded" :
+                      o.financial_status === "paid"               ? "Paid" :
                                                                     o.financial_status ?? "—";
                     return (
                       <div key={o.id ?? o.shopify_order_id} className="bg-white/4 border border-white/5 rounded-xl p-3 space-y-2">
@@ -1056,7 +1058,7 @@ export default function InboxPage() {
                               className="flex-1 flex items-center justify-center gap-1 py-1 rounded-lg text-[10px] font-semibold text-red-400 bg-red-500/10 hover:bg-red-500/20 disabled:opacity-40 transition-all"
                             >
                               {isBusy ? <Loader2 size={9} className="animate-spin" /> : null}
-                              Terugbetalen
+                              Refund
                             </button>
                             <button
                               onClick={() => handleOrderAction(o.shopify_order_id, "cancel")}
@@ -1069,7 +1071,7 @@ export default function InboxPage() {
                         )}
                         {isDone && (
                           <p className="text-[10px] text-emerald-400 text-center pt-1 border-t border-white/5">
-                            {isDone === "refund" ? "Terugbetaald" : "Geannuleerd"}
+                            {isDone === "refund" ? "Refunded" : "Cancelled"}
                           </p>
                         )}
                       </div>
@@ -1079,16 +1081,16 @@ export default function InboxPage() {
               )}
             </div>
 
-            {/* ── Eerdere tickets ── */}
+            {/* ── Previous tickets ── */}
             {customer && customer.tickets.length > 0 && (
               <div className="p-4 space-y-2">
-                <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Eerdere tickets</p>
+                <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Previous tickets</p>
                 <div className="space-y-1.5">
                   {customer.tickets.map(t => (
                     <a key={t.id} href="/customer-service"
                       className="flex items-start gap-2 bg-white/3 hover:bg-white/5 rounded-xl px-3 py-2 transition-colors group">
                       <div className="flex-1 min-w-0">
-                        <p className="text-[11px] text-zinc-300 group-hover:text-white truncate transition-colors">{t.subject || "Geen onderwerp"}</p>
+                        <p className="text-[11px] text-zinc-300 group-hover:text-white truncate transition-colors">{t.subject || "No subject"}</p>
                         <p className="text-[9px] text-zinc-600 mt-0.5">{fmtDate(t.created_at)}</p>
                       </div>
                       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border shrink-0 mt-0.5 ${STATUS_STYLES[t.status]?.cls ?? ""}`}>
@@ -1100,27 +1102,27 @@ export default function InboxPage() {
               </div>
             )}
 
-            {/* ── Acties ── */}
+            {/* ── Actions ── */}
             <div className="p-4 space-y-1.5">
-              <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-2">Acties</p>
+              <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-2">Actions</p>
               <button onClick={() => updateStatus(selected.id, "closed")}
                 className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-zinc-400 hover:bg-emerald-500/10 hover:text-emerald-400 transition-all">
-                <CheckCheck size={13} /> Sluiten
+                <CheckCheck size={13} /> Close
               </button>
               <button onClick={() => updateStatus(selected.id, "pending")}
                 className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-zinc-400 hover:bg-amber-500/10 hover:text-amber-400 transition-all">
-                <Clock size={13} /> Markeer als wachtend
+                <Clock size={13} /> Mark as pending
               </button>
               <button onClick={() => updateStatus(selected.id, "open")}
                 className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-zinc-400 hover:bg-blue-500/10 hover:text-blue-400 transition-all">
-                <Archive size={13} /> Heropenen
+                <Archive size={13} /> Reopen
               </button>
               <button onClick={handleCreateTicket} disabled={ticketCreating}
                 className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium transition-all disabled:opacity-40 ${
                   ticketCreated ? "bg-emerald-500/10 text-emerald-400" : "text-zinc-400 hover:bg-purple-500/10 hover:text-purple-400"
                 }`}>
                 {ticketCreating ? <Loader2 size={13} className="animate-spin" /> : ticketCreated ? <CheckCheck size={13} /> : <Zap size={13} />}
-                {ticketCreated ? "Ticket aangemaakt!" : "CS ticket aanmaken"}
+                {ticketCreated ? "Ticket created!" : "Create CS ticket"}
               </button>
             </div>
 
@@ -1139,7 +1141,7 @@ export default function InboxPage() {
                   <button onClick={() => deleteCanned(cr.id)} className="text-zinc-700 hover:text-red-400 transition-colors shrink-0 mt-0.5"><Trash2 size={11} /></button>
                 </div>
               ))}
-              {canned.length === 0 && <p className="text-[11px] text-zinc-600 text-center py-2">Geen templates</p>}
+              {canned.length === 0 && <p className="text-[11px] text-zinc-600 text-center py-2">No templates</p>}
             </div>
 
             {showNewCanned ? (
@@ -1149,18 +1151,18 @@ export default function InboxPage() {
                 <textarea value={newCannedBody} onChange={e => setNewCannedBody(e.target.value)} placeholder="Inhoud…" rows={4}
                   className="w-full bg-white/5 border border-white/8 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-zinc-600 outline-none focus:border-blue-500/40 resize-none" />
                 <div className="flex gap-1.5">
-                  <button onClick={saveCanned} className="flex-1 bg-blue-600 hover:bg-blue-500 transition-all rounded-lg py-1.5 text-xs font-semibold">Opslaan</button>
+                  <button onClick={saveCanned} className="flex-1 bg-blue-600 hover:bg-blue-500 transition-all rounded-lg py-1.5 text-xs font-semibold">Save</button>
                   <button onClick={() => setShowNewCanned(false)} className="flex-1 bg-white/5 hover:bg-white/10 transition-all rounded-lg py-1.5 text-xs text-zinc-400">Annuleren</button>
                 </div>
               </div>
             ) : (
               <button onClick={() => setShowNewCanned(true)} className="w-full bg-white/5 hover:bg-white/10 transition-all rounded-xl py-2 text-xs font-medium text-zinc-400 hover:text-white">
-                + Nieuwe template
+                + New template
               </button>
             )}
 
             <div className="pt-2 border-t border-white/5 space-y-2">
-              <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Gekoppelde accounts</p>
+              <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Connected accounts</p>
               {accounts.map(a => (
                 <div key={a.id} className="flex items-center gap-2 bg-white/3 rounded-xl px-3 py-2">
                   <span className={`text-xs font-bold ${PROVIDER_COLORS[a.provider]}`}>{a.provider === "gmail" ? "G" : "⊞"}</span>
@@ -1168,7 +1170,7 @@ export default function InboxPage() {
                   <button onClick={() => handleDeleteAccount(a.id)} className="text-zinc-700 hover:text-red-400 transition-colors"><X size={11} /></button>
                 </div>
               ))}
-              {accounts.length === 0 && <p className="text-[11px] text-zinc-600">Geen accounts gekoppeld</p>}
+              {accounts.length === 0 && <p className="text-[11px] text-zinc-600">No accounts connected</p>}
               <button onClick={() => setShowConnect(true)} className="w-full bg-white/5 hover:bg-white/10 transition-all rounded-xl py-2 text-xs font-medium text-zinc-400 hover:text-white">
                 + Account koppelen
               </button>

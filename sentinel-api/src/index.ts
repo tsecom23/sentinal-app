@@ -145,6 +145,19 @@ const MIGRATIONS = [
     created_at TEXT)`,
   `INSERT OR IGNORE INTO stores (id,name,shopify_domain,currency,created_at) VALUES ('ceofo','CEOFO','','EUR','2024-01-01')`,
   `INSERT OR IGNORE INTO stores (id,name,shopify_domain,currency,created_at) VALUES ('martaline','Martaline','','EUR','2024-01-01')`,
+  // Tags on CS tickets
+  `ALTER TABLE cs_tickets ADD COLUMN tags TEXT DEFAULT ''`,
+  `ALTER TABLE cs_tickets ADD COLUMN source TEXT DEFAULT 'manual'`,
+  `ALTER TABLE cs_tickets ADD COLUMN thread_id TEXT DEFAULT ''`,
+  // Order enrichment: tracking + fulfillment + customer profile
+  `ALTER TABLE orders ADD COLUMN tracking_number TEXT DEFAULT ''`,
+  `ALTER TABLE orders ADD COLUMN tracking_url TEXT DEFAULT ''`,
+  `ALTER TABLE orders ADD COLUMN fulfillment_status TEXT DEFAULT 'unfulfilled'`,
+  `ALTER TABLE orders ADD COLUMN financial_status TEXT DEFAULT 'paid'`,
+  `ALTER TABLE orders ADD COLUMN customer_name TEXT DEFAULT ''`,
+  `ALTER TABLE orders ADD COLUMN customer_phone TEXT DEFAULT ''`,
+  `ALTER TABLE orders ADD COLUMN customer_city TEXT DEFAULT ''`,
+  `ALTER TABLE orders ADD COLUMN customer_country TEXT DEFAULT ''`,
 ];
 
 async function runMigrations(db: D1Database) {
@@ -996,14 +1009,28 @@ export default {
       const orderId = String(body.id);
       const revenue = parseFloat(body.total_price ?? "0");
       const netRevenue = parseFloat(body.subtotal_price ?? String(revenue));
+      const customerName = `${body.customer?.first_name ?? ""} ${body.customer?.last_name ?? ""}`.trim();
+      const customerPhone = body.customer?.phone ?? body.billing_address?.phone ?? "";
+      const customerCity  = body.billing_address?.city ?? body.shipping_address?.city ?? "";
+      const customerCountry = body.billing_address?.country_code ?? body.shipping_address?.country_code ?? "";
+      const financialStatus  = body.financial_status ?? "paid";
+      const fulfillmentStatus = body.fulfillment_status ?? "unfulfilled";
+      // Tracking from first fulfillment if present
+      const firstFulfillment = (body.fulfillments ?? [])[0];
+      const trackingNumber = firstFulfillment?.tracking_number ?? "";
+      const trackingUrl    = firstFulfillment?.tracking_url ?? "";
 
       await env.DB.prepare(`
         INSERT OR REPLACE INTO orders
-          (id,shopify_order_id,order_number,email,currency,revenue,net_revenue,created_at,store_id)
-        VALUES (?,?,?,?,?,?,?,?,?)
+          (id,shopify_order_id,order_number,email,currency,revenue,net_revenue,created_at,store_id,
+           customer_name,customer_phone,customer_city,customer_country,
+           financial_status,fulfillment_status,tracking_number,tracking_url)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `).bind(orderId, orderId, String(body.order_number ?? ""), body.email ?? "",
               body.currency ?? "EUR", revenue, netRevenue,
-              body.created_at ?? new Date().toISOString(), storeId).run();
+              body.created_at ?? new Date().toISOString(), storeId,
+              customerName, customerPhone, customerCity, customerCountry,
+              financialStatus, fulfillmentStatus, trackingNumber, trackingUrl).run();
 
       for (const item of body.line_items ?? []) {
         await env.DB.prepare(`
@@ -1415,19 +1442,80 @@ export default {
       return json({ ok: true, imported: count });
     }
 
+    // ── POST /api/webhooks/shopify/fulfillments-create ───────────────────────
+    if (path === "/api/webhooks/shopify/fulfillments-create" && method === "POST") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const body = await request.json() as any;
+      const storeId = url.searchParams.get("store_id");
+      if (!storeId) return json({ ok: true });
+      const orderId = String(body.order_id ?? "");
+      const trackingNumber = body.tracking_number ?? "";
+      const trackingUrl    = body.tracking_url ?? "";
+      if (orderId) {
+        await env.DB.prepare(
+          `UPDATE orders SET fulfillment_status='fulfilled', tracking_number=?, tracking_url=? WHERE shopify_order_id=? AND store_id=?`
+        ).bind(trackingNumber, trackingUrl, orderId, storeId).run();
+      }
+      return json({ ok: true });
+    }
+
+    // ── POST /api/shopify/order-action ───────────────────────────────────────
+    // Actions: cancel, refund (full), mark_shipped
+    if (path === "/api/shopify/order-action" && method === "POST") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const body = await request.json() as any;
+      const { store_id, shopify_order_id, action } = body as { store_id: string; shopify_order_id: string; action: string };
+      if (!store_id || !shopify_order_id || !action) return json({ error: "Missing fields" }, 400);
+
+      const store = await env.DB.prepare(`SELECT shopify_domain, shopify_access_token FROM stores WHERE id=?`).bind(store_id).first() as { shopify_domain: string; shopify_access_token: string } | null;
+      if (!store?.shopify_domain || !store?.shopify_access_token) return json({ error: "Store not configured with Shopify credentials" }, 400);
+
+      const shopifyBase = `https://${store.shopify_domain}/admin/api/2024-01`;
+      const headers = { "X-Shopify-Access-Token": store.shopify_access_token, "Content-Type": "application/json" };
+
+      if (action === "cancel") {
+        const r = await fetch(`${shopifyBase}/orders/${shopify_order_id}/cancel.json`, { method: "POST", headers, body: JSON.stringify({ reason: "customer" }) });
+        const d = await r.json() as Record<string, unknown>;
+        if (d.order) await env.DB.prepare(`UPDATE orders SET financial_status='cancelled' WHERE shopify_order_id=? AND store_id=?`).bind(shopify_order_id, store_id).run();
+        return json({ ok: r.ok });
+      }
+
+      if (action === "refund") {
+        // Fetch order to get line items for full refund
+        const orderRes = await fetch(`${shopifyBase}/orders/${shopify_order_id}.json`, { headers });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const orderData = await orderRes.json() as any;
+        const order = orderData.order;
+        if (!order) return json({ error: "Order not found in Shopify" }, 404);
+        const refundLineItems = (order.line_items ?? []).map((li: { id: number; quantity: number }) => ({
+          line_item_id: li.id, quantity: li.quantity, restock_type: "return"
+        }));
+        const r = await fetch(`${shopifyBase}/orders/${shopify_order_id}/refunds.json`, {
+          method: "POST", headers,
+          body: JSON.stringify({ refund: { note: "Full refund via Sentinel", refund_line_items: refundLineItems, shipping: { full_refund: true } } }),
+        });
+        if (r.ok) await env.DB.prepare(`UPDATE orders SET financial_status='refunded' WHERE shopify_order_id=? AND store_id=?`).bind(shopify_order_id, store_id).run();
+        return json({ ok: r.ok });
+      }
+
+      return json({ error: "Unknown action" }, 400);
+    }
+
     // ── GET /api/cs/tickets ───────────────────────────────────────────────────
     if (path === "/api/cs/tickets" && method === "GET") {
-      const storeId = url.searchParams.get("store_id");
+      const storeId  = url.searchParams.get("store_id");
       if (!storeId) return json({ error: "Missing store_id" }, 400);
-      const status   = url.searchParams.get("status");   // filter optional
-      const category = url.searchParams.get("category"); // filter optional
+      const status   = url.searchParams.get("status");
+      const category = url.searchParams.get("category");
 
-      let sql = `SELECT * FROM cs_tickets WHERE store_id=?`;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const params: any[] = [storeId];
+      const params: any[] = [];
+      let sql = `SELECT * FROM cs_tickets`;
+      if (storeId !== "all") { sql += ` WHERE store_id=?`; params.push(storeId); }
+      else { sql += ` WHERE 1=1`; }
       if (status)   { sql += ` AND status=?`;   params.push(status); }
       if (category) { sql += ` AND category=?`; params.push(category); }
-      sql += ` ORDER BY created_at DESC LIMIT 300`;
+      sql += ` ORDER BY created_at DESC LIMIT 500`;
 
       const result = await env.DB.prepare(sql).bind(...params).all();
       return json({ tickets: result.results ?? [] });
@@ -1443,12 +1531,14 @@ export default {
       await env.DB.prepare(`
         INSERT INTO cs_tickets
           (id,store_id,order_number,customer_email,category,priority,status,
-           subject,description,product_title,resolution,created_at,updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+           subject,description,product_title,resolution,tags,source,thread_id,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `).bind(id, body.store_id, body.order_number ?? "", body.customer_email ?? "",
               body.category, body.priority ?? "medium", "open",
               body.subject ?? "", body.description ?? "",
-              body.product_title ?? "", "", now, now).run();
+              body.product_title ?? "", "",
+              JSON.stringify(body.tags ?? []),
+              body.source ?? "manual", body.thread_id ?? "", now, now).run();
       return json({ ok: true, id });
     }
 
@@ -1461,11 +1551,14 @@ export default {
       const resolvedAt = body.status === "resolved" ? now : null;
       await env.DB.prepare(`
         UPDATE cs_tickets SET
-          status=?, priority=?, resolution=?, updated_at=?,
-          resolved_at=COALESCE(resolved_at, ?)
+          status=COALESCE(?,status), priority=COALESCE(?,priority),
+          resolution=COALESCE(?,resolution), tags=COALESCE(?,tags),
+          updated_at=?, resolved_at=COALESCE(resolved_at, ?)
         WHERE id=?
-      `).bind(body.status ?? "open", body.priority ?? "medium",
-              body.resolution ?? "", now, resolvedAt, id).run();
+      `).bind(body.status ?? null, body.priority ?? null,
+              body.resolution ?? null,
+              body.tags !== undefined ? JSON.stringify(body.tags) : null,
+              now, resolvedAt, id).run();
       return json({ ok: true });
     }
 
@@ -1549,6 +1642,11 @@ export default {
           FROM order_items oi JOIN orders o ON oi.order_id = o.id
           WHERE o.store_id=?
             AND NOT EXISTS (SELECT 1 FROM orders o2 WHERE o2.shopify_order_id=o.shopify_order_id AND o2.store_id=o.store_id AND o2.rowid<o.rowid AND o.shopify_order_id IS NOT NULL AND o.shopify_order_id!='')
+            AND NOT EXISTS (
+              SELECT 1 FROM shopify_products sp
+              WHERE sp.store_id=o.store_id AND LOWER(sp.title)=LOWER(oi.product_title)
+                AND sp.status != 'active'
+            )
           GROUP BY oi.product_title ORDER BY revenue DESC
         `).bind(storeId).all(),
         env.DB.prepare(`SELECT product_title, cost FROM product_costs WHERE store_id=?`).bind(storeId).all(),
@@ -2280,7 +2378,9 @@ export default {
 
       const [ordersRes, ticketsRes, threadRes] = await Promise.all([
         env.DB.prepare(`
-          SELECT o.id, o.shopify_order_id, o.order_number, o.created_at, o.revenue, o.net_revenue, o.currency
+          SELECT o.id, o.shopify_order_id, o.order_number, o.created_at, o.revenue, o.net_revenue, o.currency,
+                 o.customer_name, o.customer_phone, o.customer_city, o.customer_country,
+                 o.financial_status, o.fulfillment_status, o.tracking_number, o.tracking_url
           FROM orders o
           WHERE o.store_id=? AND LOWER(o.email)=LOWER(?)
           GROUP BY COALESCE(o.shopify_order_id, o.id)
@@ -2310,13 +2410,22 @@ export default {
       }));
 
       const tickets = (ticketsRes.results ?? []) as Record<string, unknown>[];
-      const customerName = (threadRes as Record<string, string> | null)?.customer_name ?? "";
+      const threadName = (threadRes as Record<string, string> | null)?.customer_name ?? "";
       const totalSpend = orders.reduce((s, o) => s + ((o.revenue as number) ?? 0), 0);
+      // Customer profile from most recent order
+      const latestOrder = orders[0] as Record<string, string> | undefined;
+      const customerName  = threadName || (latestOrder?.customer_name as string) || "";
+      const customerPhone = (latestOrder?.customer_phone as string) || "";
+      const customerCity  = (latestOrder?.customer_city as string) || "";
+      const customerCountry = (latestOrder?.customer_country as string) || "";
 
       return json({
         customer: {
           email,
           name: customerName,
+          phone: customerPhone,
+          city: customerCity,
+          country: customerCountry,
           total_orders: orders.length,
           total_spend: totalSpend,
           ticket_count: tickets.length,
@@ -2341,19 +2450,34 @@ export default {
       const priority = (thread.priority as string) === "urgent" ? "urgent"
                      : (thread.priority as string) === "high"   ? "high"
                      : "medium";
+
+      // Auto-merge: check if open ticket already exists for this customer
+      const existing = await env.DB.prepare(
+        `SELECT id FROM cs_tickets WHERE store_id=? AND LOWER(customer_email)=LOWER(?) AND status='open' AND source='inbox' ORDER BY created_at DESC LIMIT 1`
+      ).bind(thread.store_id, thread.customer_email ?? "").first() as { id: string } | null;
+
+      if (existing) {
+        // Update existing ticket with new thread info instead of creating duplicate
+        const now2 = new Date().toISOString();
+        await env.DB.prepare(
+          `UPDATE cs_tickets SET description=description||'\n\n--- Nieuwe email ---\n'||?, updated_at=? WHERE id=?`
+        ).bind(firstMsg?.body_text?.slice(0, 300) ?? "(geen tekst)", now2, existing.id).run();
+        return json({ ok: true, ticket_id: existing.id, merged: true });
+      }
+
       const id  = `cs-${uid()}`;
       const now = new Date().toISOString();
       await env.DB.prepare(`
         INSERT INTO cs_tickets
           (id,store_id,order_number,customer_email,category,priority,status,
-           subject,description,product_title,resolution,created_at,updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+           subject,description,product_title,resolution,tags,source,thread_id,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `).bind(id, thread.store_id, "", thread.customer_email ?? "",
               "inbox", priority, "open",
               thread.subject ?? "", firstMsg?.body_text?.slice(0, 500) ?? "",
-              "", "", now, now).run();
+              "", "", "[]", "inbox", threadId, now, now).run();
 
-      return json({ ok: true, ticket_id: id });
+      return json({ ok: true, ticket_id: id, merged: false });
     }
 
     // ── GET /api/inbox/overview ──────────────────────────────────────────────

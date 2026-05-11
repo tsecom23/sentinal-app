@@ -32,7 +32,7 @@ export default function StoresPage() {
   const [editDraft, setEditDraft] = useState<EditDraft>(EMPTY_DRAFT);
 
   async function addStore() {
-    if (!draft.name) { setMessage("Store naam is verplicht."); return; }
+    if (!draft.name) { setMessage("Store name is required."); return; }
     setSaving(true); setMessage("");
     try {
       // Save to Worker D1
@@ -42,7 +42,7 @@ export default function StoresPage() {
         body: JSON.stringify(draft),
       });
       const d = await r.json();
-      if (!d.ok) { setMessage("Fout bij opslaan."); return; }
+      if (!d.ok) { setMessage("Error saving store."); return; }
 
       // Also save to Supabase for auth-linked data
       const { data: userData } = await supabase.auth.getUser();
@@ -101,30 +101,30 @@ export default function StoresPage() {
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-black tracking-tight">Store Manager</h1>
-          <p className="text-zinc-500 text-sm mt-0.5">Beheer je Shopify stores en advertentie-koppelingen</p>
+          <p className="text-zinc-500 text-sm mt-0.5">Manage your Shopify stores and ad connections</p>
         </div>
         <button
           onClick={() => { setShowAdd(true); setMessage(""); }}
           className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-all"
         >
-          <Plus size={15} /> Store toevoegen
+          <Plus size={15} /> Add store
         </button>
       </div>
 
       {/* Add form */}
       {showAdd && (
         <div className="bg-white/3 border border-blue-500/20 rounded-2xl p-5 space-y-3">
-          <p className="text-sm font-semibold text-blue-300 mb-1">Nieuwe store</p>
+          <p className="text-sm font-semibold text-blue-300 mb-1">New store</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <input
               className="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500/50"
-              placeholder="Store naam (bijv. CEOFO)"
+              placeholder="Store name (e.g. CEOFO)"
               value={draft.name}
               onChange={e => setDraft(p => ({ ...p, name: e.target.value }))}
             />
             <input
               className="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500/50"
-              placeholder="Shopify domain (bijv. ceofo.myshopify.com)"
+              placeholder="Shopify domain (e.g. ceofo.myshopify.com)"
               value={draft.shopify_domain}
               onChange={e => setDraft(p => ({ ...p, shopify_domain: e.target.value }))}
             />
@@ -148,13 +148,13 @@ export default function StoresPage() {
               onClick={addStore} disabled={saving || !draft.name}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-all"
             >
-              {saving ? "Opslaan…" : "Opslaan"}
+              {saving ? "Saving…" : "Save"}
             </button>
             <button
               onClick={() => { setShowAdd(false); setDraft(EMPTY_DRAFT); setMessage(""); }}
               className="px-4 py-2 text-zinc-500 hover:text-zinc-300 text-sm rounded-xl transition-all"
             >
-              Annuleren
+              Cancel
             </button>
           </div>
         </div>
@@ -162,10 +162,10 @@ export default function StoresPage() {
 
       {/* Store cards */}
       {loading ? (
-        <div className="text-zinc-600 text-sm">Laden…</div>
+        <div className="text-zinc-600 text-sm">Loading…</div>
       ) : stores.length === 0 ? (
         <div className="bg-white/3 border border-white/5 rounded-2xl p-8 text-center text-zinc-600 text-sm">
-          Nog geen stores — klik op &quot;Store toevoegen&quot; om te beginnen.
+          No stores yet — click &quot;Add store&quot; to get started.
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -177,7 +177,7 @@ export default function StoresPage() {
                   <input
                     className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50"
                     value={editDraft.name}
-                    placeholder="Store naam"
+                    placeholder="Store name"
                     onChange={e => setEditDraft(p => ({ ...p, name: e.target.value }))}
                   />
                   <input
@@ -202,11 +202,11 @@ export default function StoresPage() {
                   <div className="flex gap-2 pt-1">
                     <button onClick={() => saveEdit(s.id)} disabled={saving}
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg transition-all">
-                      <Check size={12} /> {saving ? "Opslaan…" : "Opslaan"}
+                      <Check size={12} /> {saving ? "Saving…" : "Save"}
                     </button>
                     <button onClick={() => setEditingId(null)}
                       className="flex items-center gap-1.5 px-3 py-1.5 text-zinc-500 hover:text-zinc-300 text-xs rounded-lg transition-all">
-                      <X size={12} /> Annuleren
+                      <X size={12} /> Cancel
                     </button>
                   </div>
                 </div>
@@ -216,7 +216,7 @@ export default function StoresPage() {
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <h2 className="text-lg font-black text-white">{s.name}</h2>
-                      <p className="text-xs text-zinc-500 mt-0.5">{s.shopify_domain || "Geen Shopify domain"}</p>
+                      <p className="text-xs text-zinc-500 mt-0.5">{s.shopify_domain || "No Shopify domain"}</p>
                     </div>
                     <div className="flex gap-1">
                       <button onClick={() => startEdit(s)}
@@ -232,25 +232,25 @@ export default function StoresPage() {
                       s.shopify_domain ? "bg-emerald-500/10 text-emerald-400" : "bg-white/5 text-zinc-600"
                     }`}>
                       <div className={`w-1.5 h-1.5 rounded-full ${s.shopify_domain ? "bg-emerald-400" : "bg-zinc-700"}`} />
-                      Shopify {s.shopify_domain ? `— ${s.shopify_domain}` : "— niet gekoppeld"}
+                      Shopify {s.shopify_domain ? `— ${s.shopify_domain}` : "— not connected"}
                     </div>
                     <div className={`flex items-center gap-2 text-xs rounded-lg px-3 py-2 ${
                       s.google_ads_customer_id ? "bg-blue-500/10 text-blue-400" : "bg-white/5 text-zinc-600"
                     }`}>
                       <div className={`w-1.5 h-1.5 rounded-full ${s.google_ads_customer_id ? "bg-blue-400" : "bg-zinc-700"}`} />
-                      Google Ads {s.google_ads_customer_id ? `— ${s.google_ads_customer_id}` : "— niet gekoppeld"}
+                      Google Ads {s.google_ads_customer_id ? `— ${s.google_ads_customer_id}` : "— not connected"}
                     </div>
                   </div>
 
                   <div className="flex gap-2 pt-1 flex-wrap">
                     <a href={`/?store_id=${s.id}`}
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-xs font-medium rounded-lg transition-all">
-                      <ExternalLink size={11} /> Dashboard openen
+                      <ExternalLink size={11} /> Open dashboard
                     </a>
                     {!s.google_ads_customer_id && (
                       <button onClick={() => startEdit(s)}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/8 text-zinc-400 hover:text-white text-xs font-medium rounded-lg transition-all">
-                        <Link2 size={11} /> Ads koppelen
+                        <Link2 size={11} /> Connect Ads
                       </button>
                     )}
                   </div>

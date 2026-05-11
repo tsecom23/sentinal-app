@@ -489,7 +489,7 @@ export default function CustomerServicePage() {
                       <div className="border-t border-white/5 px-4 py-4 space-y-4">
                         {ticket.description && (
                           <div>
-                            <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Omschrijving</p>
+                            <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Description</p>
                             <p className="text-sm text-zinc-300 whitespace-pre-wrap leading-relaxed">{ticket.description}</p>
                           </div>
                         )}
@@ -534,7 +534,7 @@ export default function CustomerServicePage() {
                             </select>
                           </div>
                           <div>
-                            <p className="text-[10px] text-zinc-500 mb-1">Prioriteit</p>
+                            <p className="text-[10px] text-zinc-500 mb-1">Priority</p>
                             <select value={ticket.priority}
                               onChange={e => updateTicket(ticket.id, { priority: e.target.value })}
                               className="bg-white/8 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none">
@@ -544,10 +544,10 @@ export default function CustomerServicePage() {
                             </select>
                           </div>
                           <div className="flex-1 min-w-[200px]">
-                            <p className="text-[10px] text-zinc-500 mb-1">Oplossing</p>
+                            <p className="text-[10px] text-zinc-500 mb-1">Resolution</p>
                             <input defaultValue={ticket.resolution}
                               onBlur={e => updateTicket(ticket.id, { resolution: e.target.value })}
-                              placeholder="Hoe is dit opgelost?"
+                              placeholder="How was this resolved?"
                               className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-zinc-700 outline-none focus:border-blue-500/40" />
                           </div>
                           <button onClick={() => deleteTicket(ticket.id)}
@@ -559,9 +559,9 @@ export default function CustomerServicePage() {
                         <div className="flex items-center gap-4 text-xs text-zinc-600">
                           {ticket.source === "inbox" && <span className="flex items-center gap-1 text-blue-500"><Inbox size={10} /> Via inbox</span>}
                           {ticket.resolved_at && (
-                            <span className="flex items-center gap-1 text-emerald-500"><CheckCircle2 size={10} /> Opgelost {timeAgo(ticket.resolved_at)}</span>
+                            <span className="flex items-center gap-1 text-emerald-500"><CheckCircle2 size={10} /> Resolved {timeAgo(ticket.resolved_at)}</span>
                           )}
-                          <span>Aangemaakt {timeAgo(ticket.created_at)}</span>
+                          <span>Created {timeAgo(ticket.created_at)}</span>
                         </div>
                       </div>
                     )}

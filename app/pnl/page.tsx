@@ -140,7 +140,7 @@ export default function PnLPage() {
           <h1 className="text-2xl font-black tracking-tight flex items-center gap-2">
             <TrendingUp size={22} className="text-emerald-400" /> Profit &amp; Loss
           </h1>
-          <p className="text-zinc-500 text-sm mt-0.5">Maandoverzicht omzet, kosten en winst</p>
+          <p className="text-zinc-500 text-sm mt-0.5">Monthly overview of revenue, costs and profit</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex gap-1 bg-white/5 rounded-xl p-1">
@@ -165,13 +165,13 @@ export default function PnLPage() {
       {/* KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {[
-          { label: "Netto Omzet",    value: totals ? fmt(totals.net_revenue)  : "—", color: "text-emerald-400", sub: "Na retouren" },
-          { label: "Advertentie",    value: totals ? fmt(totals.ad_spend)      : "—", color: "text-red-400",     sub: "Totaal ad spend" },
-          { label: "Productkosten",  value: totals ? fmt(totals.product_cost)  : "—", color: "text-amber-400",   sub: "COGS" },
-          { label: "Vaste Kosten",   value: fmt(totalOverhead),                       color: "text-purple-400",  sub: `${costs.filter(c => c.active).length} actieve kosten` },
-          { label: "Netto Winst",    value: totals ? fmt(totals.profit)        : "—",
+          { label: "Net Revenue",    value: totals ? fmt(totals.net_revenue)  : "—", color: "text-emerald-400", sub: "After returns" },
+          { label: "Ad Spend",    value: totals ? fmt(totals.ad_spend)      : "—", color: "text-red-400",     sub: "Total ad spend" },
+          { label: "Product Costs",  value: totals ? fmt(totals.product_cost)  : "—", color: "text-amber-400",   sub: "COGS" },
+          { label: "Fixed Costs",   value: fmt(totalOverhead),                       color: "text-purple-400",  sub: `${costs.filter(c => c.active).length} active costs` },
+          { label: "Net Profit",    value: totals ? fmt(totals.profit)        : "—",
             color: !totals ? "text-zinc-400" : totals.profit >= 0 ? "text-emerald-400" : "text-red-400",
-            sub: totals ? `${totalMargin}% marge` : "Marge %",
+            sub: totals ? `${totalMargin}% margin` : "Margin %",
             highlight: totals ? (totals.profit >= 0 ? "bg-emerald-950/30 border-emerald-500/20" : "bg-red-950/30 border-red-500/20") : "" },
         ].map(card => (
           <div key={card.label} className={`border rounded-2xl p-4 ${card.highlight ?? "bg-white/3 border-white/5"}`}>
@@ -186,25 +186,25 @@ export default function PnLPage() {
       <div className="flex gap-1 bg-white/5 rounded-xl p-1 w-fit">
         <button onClick={() => setTab("overview")}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${tab === "overview" ? "bg-white/10 text-white" : "text-zinc-500 hover:text-zinc-300"}`}>
-          <TrendingUp size={13} /> Maandoverzicht
+          <TrendingUp size={13} /> Monthly overview
         </button>
         <button onClick={() => setTab("costs")}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${tab === "costs" ? "bg-white/10 text-white" : "text-zinc-500 hover:text-zinc-300"}`}>
-          <Receipt size={13} /> Vaste Kosten
+          <Receipt size={13} /> Fixed Costs
           {costs.length > 0 && (
             <span className="bg-purple-500/30 text-purple-300 text-[10px] rounded-full px-1.5 font-bold">{costs.length}</span>
           )}
         </button>
       </div>
 
-      {/* ── TAB: Maandoverzicht ── */}
+      {/* ── TAB: Monthly overview ── */}
       {tab === "overview" && (
         <div className="space-y-4">
           {/* Chart */}
           <div className="bg-white/3 border border-white/5 rounded-2xl p-4">
-            <p className="text-xs font-semibold text-zinc-400 mb-3 uppercase tracking-widest">Winsttrend {year}</p>
+            <p className="text-xs font-semibold text-zinc-400 mb-3 uppercase tracking-widest">Profit trend {year}</p>
             {loading ? (
-              <div className="h-[180px] flex items-center justify-center text-zinc-600 text-sm">Laden…</div>
+              <div className="h-[180px] flex items-center justify-center text-zinc-600 text-sm">Loading…</div>
             ) : (
               <ResponsiveContainer width="100%" height={180}>
                 <BarChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
@@ -212,7 +212,7 @@ export default function PnLPage() {
                   <YAxis hide />
                   <Tooltip
                     contentStyle={{ background: "#111117", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, fontSize: 12, color: "#e4e4e7" }}
-                    formatter={(v: number) => [fmt(v), "Winst"]}
+                    formatter={(v: number) => [fmt(v), "Profit"]}
                     cursor={{ fill: "rgba(255,255,255,0.04)" }}
                   />
                   <Bar dataKey="profit" radius={[4, 4, 0, 0]}>
@@ -229,13 +229,13 @@ export default function PnLPage() {
           <div className="bg-white/3 border border-white/5 rounded-2xl overflow-hidden">
             {/* Column headers */}
             <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr] px-4 py-2.5 border-b border-white/5">
-              {["Maand", "Orders", "Netto Omzet", "Winst", "Marge"].map((h, i) => (
+              {["Month", "Orders", "Net Revenue", "Profit", "Margin"].map((h, i) => (
                 <span key={h} className={`text-[10px] text-zinc-600 uppercase tracking-widest font-semibold ${i > 0 ? "text-right" : ""}`}>{h}</span>
               ))}
             </div>
 
             {loading ? (
-              <div className="p-8 text-center text-zinc-600 text-sm">Laden…</div>
+              <div className="p-8 text-center text-zinc-600 text-sm">Loading…</div>
             ) : (
               <div className="divide-y divide-white/5">
                 {months.map((m, i) => {
@@ -284,11 +284,11 @@ export default function PnLPage() {
                       {isOpen && active && (
                         <div className="mx-4 mb-2 rounded-xl bg-black/20 border border-white/5 overflow-hidden">
                           {[
-                            { label: "Bruto Omzet",    value: fmt(m.gross_revenue),                                 color: "text-zinc-300" },
+                            { label: "Gross Revenue",    value: fmt(m.gross_revenue),                                 color: "text-zinc-300" },
                             { label: "Retouren",        value: m.return_amount > 0 ? `−${fmt(m.return_amount)}` : "—", color: "text-red-400" },
-                            { label: "Advertentiekosten", value: m.ad_spend > 0 ? `−${fmt(m.ad_spend)}` : "—",      color: "text-red-400" },
-                            { label: "Productkosten",   value: m.product_cost > 0 ? `−${fmt(m.product_cost)}` : "—", color: "text-amber-400" },
-                            { label: "Vaste Kosten",    value: m.overhead > 0 ? `−${fmt(m.overhead)}` : "—",        color: "text-purple-400" },
+                            { label: "Ad Spend", value: m.ad_spend > 0 ? `−${fmt(m.ad_spend)}` : "—",      color: "text-red-400" },
+                            { label: "Product Costs",   value: m.product_cost > 0 ? `−${fmt(m.product_cost)}` : "—", color: "text-amber-400" },
+                            { label: "Fixed Costs",    value: m.overhead > 0 ? `−${fmt(m.overhead)}` : "—",        color: "text-purple-400" },
                           ].map((row, ri) => (
                             <div key={row.label} className={`flex items-center justify-between px-4 py-2 ${ri < 4 ? "border-b border-white/5" : ""}`}>
                               <span className="text-xs text-zinc-500">{row.label}</span>
@@ -321,12 +321,12 @@ export default function PnLPage() {
         </div>
       )}
 
-      {/* ── TAB: Vaste Kosten ── */}
+      {/* ── TAB: Fixed Costs ── */}
       {tab === "costs" && (
         <div className="bg-white/3 border border-white/5 rounded-2xl overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
             <div>
-              <p className="text-sm font-bold text-white">Vaste Kosten</p>
+              <p className="text-sm font-bold text-white">Fixed Costs</p>
               <p className="text-xs text-zinc-500 mt-0.5">Abonnementen, salarissen en overige vaste lasten</p>
             </div>
             <button
@@ -344,7 +344,7 @@ export default function PnLPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
                 <input
                   className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500/50"
-                  placeholder="Naam (bijv. Shopify)"
+                  placeholder="Name (e.g. Shopify)"
                   value={draft.name}
                   onChange={e => setDraft(p => ({ ...p, name: e.target.value }))}
                 />
@@ -358,7 +358,7 @@ export default function PnLPage() {
                 <input
                   type="number"
                   className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-blue-500/50"
-                  placeholder="Bedrag in €"
+                  placeholder="Amount in €"
                   value={draft.amount}
                   onChange={e => setDraft(p => ({ ...p, amount: e.target.value }))}
                 />
@@ -374,11 +374,11 @@ export default function PnLPage() {
               <div className="flex gap-2">
                 <button onClick={addCost} disabled={saving || !draft.name || !draft.amount}
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-all">
-                  {saving ? "Opslaan…" : "Toevoegen"}
+                  {saving ? "Saving…" : "Add"}
                 </button>
                 <button onClick={() => { setShowAdd(false); setDraft(EMPTY); }}
                   className="px-4 py-2 text-zinc-500 hover:text-zinc-300 text-xs rounded-lg transition-all">
-                  Annuleren
+                  Cancel
                 </button>
               </div>
             </div>
@@ -386,7 +386,7 @@ export default function PnLPage() {
 
           {/* Cost rows */}
           {cLoading ? (
-            <div className="p-10 text-center text-zinc-600 text-sm">Laden…</div>
+            <div className="p-10 text-center text-zinc-600 text-sm">Loading…</div>
           ) : costs.length === 0 && !showAdd ? (
             <div className="p-10 text-center space-y-2">
               <Receipt size={32} className="text-zinc-700 mx-auto" />
@@ -397,7 +397,7 @@ export default function PnLPage() {
             <>
               {/* Column headers */}
               <div className="grid grid-cols-[2fr_1fr_1fr_1fr_80px] px-5 py-2 border-b border-white/5">
-                {["Naam","Categorie","Bedrag","Frequentie",""].map((h, i) => (
+                {["Name","Category","Amount","Frequency",""].map((h, i) => (
                   <span key={i} className="text-[10px] text-zinc-600 uppercase tracking-widest font-semibold">{h}</span>
                 ))}
               </div>
@@ -425,11 +425,11 @@ export default function PnLPage() {
                         <div className="flex gap-2">
                           <button onClick={() => saveCost(c.id)} disabled={saving}
                             className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg transition-all">
-                            <Check size={11} /> {saving ? "Opslaan…" : "Opslaan"}
+                            <Check size={11} /> {saving ? "Saving…" : "Save"}
                           </button>
                           <button onClick={() => setEditId(null)}
                             className="flex items-center gap-1 px-3 py-1.5 text-zinc-500 hover:text-zinc-300 text-xs rounded-lg transition-all">
-                            <X size={11} /> Annuleren
+                            <X size={11} /> Cancel
                           </button>
                         </div>
                       </div>
@@ -467,7 +467,7 @@ export default function PnLPage() {
               <div className="border-t border-white/10 px-5 py-3 flex items-center justify-between bg-white/2">
                 <span className="text-xs text-zinc-500">{costs.length} kost{costs.length !== 1 ? "en" : ""}</span>
                 <div className="text-right">
-                  <span className="text-xs text-zinc-500">Maandelijks totaal: </span>
+                  <span className="text-xs text-zinc-500">Monthly total: </span>
                   <span className="text-sm font-bold text-purple-400 tabular-nums">
                     {fmt(costs.reduce((s, c) => s + (c.recurring === "yearly" ? c.amount / 12 : c.amount), 0))}
                   </span>
