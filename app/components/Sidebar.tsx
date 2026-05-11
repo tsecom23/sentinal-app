@@ -13,18 +13,18 @@ import { createClient } from "../../utils/supabase/client";
 const GROUPS = [
   {
     id: "owner",
-    label: "Overzicht",
+    label: "Overview",
     icon: Activity,
     color: "text-emerald-400",
     bg: "bg-emerald-500/10",
     border: "border-emerald-500/20",
     items: [
-      { label: "Dashboard",   href: "/",           icon: Activity },
-      { label: "Bestellingen",href: "/orders",     icon: ShoppingCart },
-      { label: "P&L",         href: "/pnl",        icon: TrendingUp },
-      { label: "Klanten",     href: "/customers",  icon: Users },
-      { label: "Milestones",  href: "/milestones", icon: Trophy },
-      { label: "Stores",      href: "/stores",     icon: Store },
+      { label: "Dashboard",  href: "/",           icon: Activity },
+      { label: "Orders",     href: "/orders",     icon: ShoppingCart },
+      { label: "P&L",        href: "/pnl",        icon: TrendingUp },
+      { label: "Customers",  href: "/customers",  icon: Users },
+      { label: "Milestones", href: "/milestones", icon: Trophy },
+      { label: "Stores",     href: "/stores",     icon: Store },
     ],
   },
   {
@@ -35,8 +35,8 @@ const GROUPS = [
     bg: "bg-blue-500/10",
     border: "border-blue-500/20",
     items: [
-      { label: "Inbox",    href: "/inbox",            icon: Inbox },
-      { label: "Tickets",  href: "/customer-service", icon: Headphones },
+      { label: "Inbox",   href: "/inbox",            icon: Inbox },
+      { label: "Tickets", href: "/customer-service", icon: Headphones },
     ],
   },
   {
@@ -55,14 +55,14 @@ const GROUPS = [
   },
   {
     id: "ops",
-    label: "Operaties",
+    label: "Operations",
     icon: RotateCcw,
     color: "text-amber-400",
     bg: "bg-amber-500/10",
     border: "border-amber-500/20",
     items: [
-      { label: "Retouren & Disputes", href: "/returns",    icon: RotateCcw },
-      { label: "Dead Stock",          href: "/dead-stock", icon: Skull },
+      { label: "Returns & Disputes", href: "/returns",    icon: RotateCcw },
+      { label: "Dead Stock",         href: "/dead-stock", icon: Skull },
     ],
   },
   {
@@ -73,19 +73,19 @@ const GROUPS = [
     bg: "bg-pink-500/10",
     border: "border-pink-500/20",
     items: [
-      { label: "AI Chat",        href: "/ai-chat",            icon: MessageCircle },
-      { label: "Aanbevelingen",  href: "/ai-recommendations", icon: Bot },
+      { label: "AI Chat",          href: "/ai-chat",            icon: MessageCircle },
+      { label: "Recommendations",  href: "/ai-recommendations", icon: Bot },
     ],
   },
   {
     id: "settings",
-    label: "Instellingen",
+    label: "Settings",
     icon: Bell,
     color: "text-zinc-400",
     bg: "bg-zinc-500/10",
     border: "border-zinc-500/20",
     items: [
-      { label: "Notificaties", href: "/notifications", icon: Bell },
+      { label: "Notifications", href: "/notifications", icon: Bell },
     ],
   },
 ];
@@ -198,10 +198,10 @@ export default function Sidebar() {
       {/* AI badge */}
       <div className="mx-2 mt-3 rounded-xl bg-gradient-to-br from-blue-600/15 to-purple-600/10 border border-blue-500/15 p-3">
         <div className="flex items-center gap-1.5 text-blue-400 font-semibold text-[10px] mb-0.5">
-          <Zap size={9} /> AI Actief
+          <Zap size={9} /> AI Active
         </div>
         <p className="text-[10px] text-zinc-700 leading-relaxed">
-          Bewaakt marges, voorraad & schaal signalen.
+          Monitoring margins, stock & scaling signals.
         </p>
       </div>
 
@@ -211,7 +211,7 @@ export default function Sidebar() {
         className="mx-2 mt-2 flex items-center gap-2 px-3 py-2 rounded-xl text-zinc-600 hover:text-red-400 hover:bg-red-500/8 transition-all text-[12px] font-medium"
       >
         <LogOut size={12} />
-        Uitloggen
+        Sign out
       </button>
     </aside>
   );
