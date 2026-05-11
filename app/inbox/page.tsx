@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Archive, BarChart2, CheckCheck, ChevronDown, Clock, Inbox,
-  Languages, Loader2, Mail, RefreshCw, Send, ShoppingBag,
-  Trash2, X, Zap,
+  Languages, Loader2, Mail, MapPin, Phone, RefreshCw, Send, ShoppingBag,
+  Trash2, Truck, X, Zap,
 } from "lucide-react";
 
 const API = "https://sentinel-api.tssheets1.workers.dev";
@@ -68,6 +68,10 @@ interface CustomerOrder {
   revenue: number;
   net_revenue: number;
   currency: string;
+  financial_status: string;
+  fulfillment_status: string;
+  tracking_number: string;
+  tracking_url: string;
   items: OrderItem[];
 }
 
@@ -82,6 +86,9 @@ interface CustomerTicket {
 interface CustomerData {
   email: string;
   name: string;
+  phone: string;
+  city: string;
+  country: string;
   total_orders: number;
   total_spend: number;
   ticket_count: number;
@@ -218,7 +225,10 @@ function ConnectModal({ storeId, onClose }: { storeId: string; onClose: () => vo
   );
 }
 
-function CannedPicker({ canned, onSelect, onClose }: { canned: CannedResponse[]; onSelect: (b: string) => void; onClose: () => void }) {
+function CannedPicker({ canned, onSelect, onClose, vars }: { canned: CannedResponse[]; onSelect: (b: string) => void; onClose: () => void; vars: Record<string,string> }) {
+  function applyVars(text: string): string {
+    return text.replace(/\{\{([^}]+)\}\}/g, (_, key) => vars[key.trim()] ?? `{{${key}}}`);
+  }
   const [q, setQ]                           = useState("");
   const [cannedTrans, setCannedTrans]        = useState<Record<string, string>>({});
   const [cannedTranslating, setCannedTranslating] = useState<Record<string, boolean>>({});
@@ -246,7 +256,7 @@ function CannedPicker({ canned, onSelect, onClose }: { canned: CannedResponse[];
         {filtered.map(cr => (
           <div key={cr.id} className="border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors">
             <div className="flex items-start gap-2 px-3 py-2.5">
-              <button onClick={() => { onSelect(cr.body); onClose(); }} className="flex-1 text-left min-w-0">
+              <button onClick={() => { onSelect(applyVars(cr.body)); onClose(); }} className="flex-1 text-left min-w-0">
                 <div className="text-xs text-white font-medium">{cr.title}</div>
                 {showCannedTrans[cr.id] && cannedTrans[cr.id] ? (
                   <div className="mt-1 space-y-0.5">
@@ -448,6 +458,8 @@ export default function InboxPage() {
   const [newCannedBody, setNewCannedBody]   = useState("");
   const [ticketCreating, setTicketCreating] = useState(false);
   const [ticketCreated, setTicketCreated]   = useState<string | null>(null);
+  const [orderAction, setOrderAction]       = useState<string | null>(null); // orderId being actioned
+  const [orderActionDone, setOrderActionDone] = useState<Record<string, string>>({});
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -584,6 +596,25 @@ export default function InboxPage() {
   async function deleteCanned(id: string) {
     await fetch(`${API}/api/inbox/canned/${id}`, { method: "DELETE" });
     await fetchCanned();
+  }
+
+  async function handleOrderAction(shopifyOrderId: string, action: "refund" | "cancel") {
+    if (!selected) return;
+    setOrderAction(shopifyOrderId);
+    try {
+      const r = await fetch(`${API}/api/shopify/order-action`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ store_id: storeId, shopify_order_id: shopifyOrderId, action }),
+      });
+      const d = await r.json() as { ok: boolean; error?: string };
+      if (d.ok) {
+        setOrderActionDone(p => ({ ...p, [shopifyOrderId]: action }));
+        await fetchCustomer(selected.customer_email);
+      } else {
+        alert(d.error ?? "Actie mislukt — controleer Shopify credentials in Store instellingen");
+      }
+    } catch { alert("Netwerkfout"); }
+    finally { setOrderAction(null); }
   }
 
   async function handleCreateTicket() {
@@ -810,7 +841,17 @@ export default function InboxPage() {
             <div className="shrink-0 border-t border-white/5 px-6 py-4 space-y-3">
               <div className="relative">
                 {showCanned && (
-                  <CannedPicker canned={canned} onSelect={text => setReplyText(text)} onClose={() => setShowCanned(false)} />
+                  <CannedPicker
+                    canned={canned}
+                    onSelect={text => setReplyText(text)}
+                    onClose={() => setShowCanned(false)}
+                    vars={{
+                      "customer.name":   selected?.customer_name || customer?.name || "",
+                      "customer.email":  selected?.customer_email || "",
+                      "order.number":    customer?.orders?.[0]?.order_number || "",
+                      "store.name":      storeId,
+                    }}
+                  />
                 )}
                 <textarea value={replyText} onChange={e => setReplyText(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) handleReply(); }}
@@ -849,6 +890,16 @@ export default function InboxPage() {
                     {selected.customer_name || customer?.name || "Onbekend"}
                   </p>
                   <p className="text-[11px] text-zinc-500 truncate">{selected.customer_email}</p>
+                  {customer?.phone && (
+                    <p className="text-[10px] text-zinc-600 flex items-center gap-1 mt-0.5">
+                      <Phone size={9} /> {customer.phone}
+                    </p>
+                  )}
+                  {(customer?.city || customer?.country) && (
+                    <p className="text-[10px] text-zinc-600 flex items-center gap-1 mt-0.5">
+                      <MapPin size={9} /> {[customer.city, customer.country].filter(Boolean).join(", ")}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -912,38 +963,100 @@ export default function InboxPage() {
                 <p className="text-[11px] text-zinc-700 py-2">Geen bestellingen gevonden</p>
               ) : (
                 <div className="space-y-2">
-                  {customer.orders.map(o => (
-                    <div key={o.id ?? o.shopify_order_id} className="bg-white/4 border border-white/5 rounded-xl p-3 space-y-2">
-                      {/* Order header */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="text-xs font-bold text-white">
-                            #{o.order_number || o.shopify_order_id}
+                  {customer.orders.map(o => {
+                    const isDone = orderActionDone[o.shopify_order_id];
+                    const isBusy = orderAction === o.shopify_order_id;
+                    const fulfillCls =
+                      o.fulfillment_status === "fulfilled"  ? "text-emerald-400 bg-emerald-500/10" :
+                      o.fulfillment_status === "partial"    ? "text-amber-400 bg-amber-500/10" :
+                                                              "text-zinc-500 bg-white/5";
+                    const fulfillLabel =
+                      o.fulfillment_status === "fulfilled" ? "Verzonden" :
+                      o.fulfillment_status === "partial"   ? "Gedeeltelijk" : "Niet verzonden";
+                    const financialCls =
+                      o.financial_status === "refunded" || o.financial_status === "voided" ? "text-red-400 bg-red-500/10" :
+                      o.financial_status === "partially_refunded"                          ? "text-orange-400 bg-orange-500/10" :
+                      o.financial_status === "paid"                                        ? "text-emerald-400 bg-emerald-500/10" :
+                                                                                            "text-zinc-500 bg-white/5";
+                    const financialLabel =
+                      o.financial_status === "refunded"           ? "Terugbetaald" :
+                      o.financial_status === "voided"             ? "Geannuleerd" :
+                      o.financial_status === "partially_refunded" ? "Deels terugbet." :
+                      o.financial_status === "paid"               ? "Betaald" :
+                                                                    o.financial_status ?? "—";
+                    return (
+                      <div key={o.id ?? o.shopify_order_id} className="bg-white/4 border border-white/5 rounded-xl p-3 space-y-2">
+                        {/* Order header */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-xs font-bold text-white">
+                              #{o.order_number || o.shopify_order_id}
+                            </p>
+                            <p className="text-[10px] text-zinc-600 mt-0.5">{fmtDate(o.created_at)}</p>
+                          </div>
+                          <p className="text-sm font-black text-emerald-400 shrink-0">
+                            €{(o.revenue ?? 0).toFixed(2)}
                           </p>
-                          <p className="text-[10px] text-zinc-600 mt-0.5">{fmtDate(o.created_at)}</p>
                         </div>
-                        <p className="text-sm font-black text-emerald-400 shrink-0">
-                          €{(o.revenue ?? 0).toFixed(2)}
-                        </p>
+                        {/* Status badges */}
+                        <div className="flex flex-wrap gap-1">
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${financialCls}`}>{financialLabel}</span>
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${fulfillCls}`}>{fulfillLabel}</span>
+                        </div>
+                        {/* Tracking */}
+                        {o.tracking_number && (
+                          <a
+                            href={o.tracking_url || "#"}
+                            target="_blank" rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300 transition-colors"
+                          >
+                            <Truck size={9} /> {o.tracking_number}
+                          </a>
+                        )}
+                        {/* Items */}
+                        {o.items && o.items.length > 0 && (
+                          <div className="space-y-0.5 border-t border-white/5 pt-2">
+                            {o.items.map((item, ii) => (
+                              <div key={ii} className="flex items-start justify-between gap-1">
+                                <p className="text-[10px] text-zinc-400 leading-tight flex-1 min-w-0">
+                                  <span className="text-zinc-600">{item.quantity}×</span> {item.product_title}
+                                  {item.variant_title && item.variant_title !== "Default Title" && (
+                                    <span className="text-zinc-600"> · {item.variant_title}</span>
+                                  )}
+                                </p>
+                                <p className="text-[10px] text-zinc-500 shrink-0">€{(item.revenue ?? 0).toFixed(2)}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {/* Order actions */}
+                        {!isDone && o.financial_status !== "refunded" && o.financial_status !== "voided" && (
+                          <div className="flex gap-1.5 border-t border-white/5 pt-2">
+                            <button
+                              onClick={() => handleOrderAction(o.shopify_order_id, "refund")}
+                              disabled={!!isBusy}
+                              className="flex-1 flex items-center justify-center gap-1 py-1 rounded-lg text-[10px] font-semibold text-red-400 bg-red-500/10 hover:bg-red-500/20 disabled:opacity-40 transition-all"
+                            >
+                              {isBusy ? <Loader2 size={9} className="animate-spin" /> : null}
+                              Terugbetalen
+                            </button>
+                            <button
+                              onClick={() => handleOrderAction(o.shopify_order_id, "cancel")}
+                              disabled={!!isBusy}
+                              className="flex-1 flex items-center justify-center gap-1 py-1 rounded-lg text-[10px] font-semibold text-zinc-400 bg-white/5 hover:bg-white/10 disabled:opacity-40 transition-all"
+                            >
+                              Annuleren
+                            </button>
+                          </div>
+                        )}
+                        {isDone && (
+                          <p className="text-[10px] text-emerald-400 text-center pt-1 border-t border-white/5">
+                            {isDone === "refund" ? "Terugbetaald" : "Geannuleerd"}
+                          </p>
+                        )}
                       </div>
-                      {/* Items */}
-                      {o.items && o.items.length > 0 && (
-                        <div className="space-y-0.5 border-t border-white/5 pt-2">
-                          {o.items.map((item, ii) => (
-                            <div key={ii} className="flex items-start justify-between gap-1">
-                              <p className="text-[10px] text-zinc-400 leading-tight flex-1 min-w-0">
-                                <span className="text-zinc-600">{item.quantity}×</span> {item.product_title}
-                                {item.variant_title && item.variant_title !== "Default Title" && (
-                                  <span className="text-zinc-600"> · {item.variant_title}</span>
-                                )}
-                              </p>
-                              <p className="text-[10px] text-zinc-500 shrink-0">€{(item.revenue ?? 0).toFixed(2)}</p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
