@@ -31,7 +31,8 @@ type Product = {
 
 type SortKey =
   | "revenue" | "net_revenue" | "sold" | "gross_margin"
-  | "profit" | "return_rate" | "ad_spend" | "roas";
+  | "profit" | "return_rate" | "ad_spend" | "roas"
+  | "ad_clicks" | "ad_impressions" | "cpc" | "ctr";
 
 function f2(n: number) {
   return n.toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -139,22 +140,33 @@ export default function ProductInsightsPage() {
     );
   }
 
+  function cpc(p: Product)  { return p.ad_clicks > 0       ? p.ad_spend / p.ad_clicks            : 0; }
+  function ctr(p: Product)  { return p.ad_impressions > 0   ? (p.ad_clicks / p.ad_impressions) * 100 : 0; }
+
   const filtered = [...products]
     .filter(p => !search || p.product_title.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => {
-      const va = (a[sort.key] ?? -999) as number;
-      const vb = (b[sort.key] ?? -999) as number;
-      return sort.dir === "desc" ? vb - va : va - vb;
+      const val = (p: Product) => {
+        if (sort.key === "cpc") return cpc(p);
+        if (sort.key === "ctr") return ctr(p);
+        return (p[sort.key as keyof Product] ?? -999) as number;
+      };
+      return sort.dir === "desc" ? val(b) - val(a) : val(a) - val(b);
     });
 
   // Summary totals
-  const totalRevenue  = filtered.reduce((s, p) => s + p.revenue, 0);
-  const totalNet      = filtered.reduce((s, p) => s + p.net_revenue, 0);
-  const totalReturns  = filtered.reduce((s, p) => s + p.return_amount, 0);
-  const totalAdSpend  = filtered.reduce((s, p) => s + p.ad_spend, 0);
-  const totalCost     = filtered.reduce((s, p) => s + p.total_cost, 0);
-  const totalProfit   = totalNet - totalCost - totalAdSpend;
-  const avgMargin     = totalNet > 0 && totalCost > 0 ? ((totalNet - totalCost) / totalNet) * 100 : 0;
+  const totalRevenue    = filtered.reduce((s, p) => s + p.revenue, 0);
+  const totalNet        = filtered.reduce((s, p) => s + p.net_revenue, 0);
+  const totalReturns    = filtered.reduce((s, p) => s + p.return_amount, 0);
+  const totalAdSpend    = filtered.reduce((s, p) => s + p.ad_spend, 0);
+  const totalCost       = filtered.reduce((s, p) => s + p.total_cost, 0);
+  const totalClicks     = filtered.reduce((s, p) => s + p.ad_clicks, 0);
+  const totalImpressions= filtered.reduce((s, p) => s + p.ad_impressions, 0);
+  const totalProfit     = totalNet - totalCost - totalAdSpend;
+  const avgMargin       = totalNet > 0 && totalCost > 0 ? ((totalNet - totalCost) / totalNet) * 100 : 0;
+  const avgCpc          = totalClicks > 0 ? totalAdSpend / totalClicks : 0;
+  const avgCtr          = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
+  const totalRoas       = totalAdSpend > 0 ? totalNet / totalAdSpend : null;
   const pendingChanges = Object.keys(editCosts).length;
 
   return (
@@ -187,13 +199,17 @@ export default function ProductInsightsPage() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-6 gap-3">
+      <div className="grid grid-cols-4 lg:grid-cols-8 gap-3">
         {[
-          { label: "Gross revenue",  value: `€${f2(totalRevenue)}`,   color: "" },
-          { label: "Returns",        value: totalReturns > 0 ? `-€${f2(totalReturns)}` : "€0,00", color: totalReturns > 0 ? "text-red-400" : "" },
-          { label: "Net revenue",    value: `€${f2(totalNet)}`,       color: "" },
-          { label: "Total cost",     value: totalCost > 0 ? `€${f2(totalCost)}` : "—", color: "" },
-          { label: "Ad spend",       value: totalAdSpend > 0 ? `€${f2(totalAdSpend)}` : "—", color: "" },
+          { label: "Gross revenue",   value: `€${f2(totalRevenue)}`,   color: "" },
+          { label: "Net revenue",     value: `€${f2(totalNet)}`,       color: "text-blue-300" },
+          { label: "Total cost",      value: totalCost > 0 ? `€${f2(totalCost)}` : "—", color: "text-amber-400" },
+          { label: "Ad spend",        value: totalAdSpend > 0 ? `€${f2(totalAdSpend)}` : "—", color: "text-red-400" },
+          { label: totalRoas !== null ? `ROAS ${totalRoas.toFixed(2)}x` : "ROAS",
+            value: totalRoas !== null ? `${totalRoas.toFixed(2)}x` : "—",
+            color: totalRoas === null ? "" : totalRoas >= 3 ? "text-emerald-400" : totalRoas >= 1.5 ? "text-amber-400" : "text-red-400" },
+          { label: `CPC avg`,         value: avgCpc > 0 ? `€${avgCpc.toFixed(2)}` : "—", color: "" },
+          { label: `CTR avg`,         value: avgCtr > 0 ? `${avgCtr.toFixed(2)}%` : "—", color: "" },
           { label: avgMargin > 0 ? `Margin ${avgMargin.toFixed(1)}%` : "Profit",
             value: totalCost > 0 ? `€${f2(totalProfit)}` : "—",
             color: totalProfit > 0 ? "text-emerald-400" : totalProfit < 0 ? "text-red-400" : "" },
@@ -251,12 +267,24 @@ export default function ProductInsightsPage() {
                 <th className="text-right px-3 py-3 font-medium whitespace-nowrap">
                   ROAS <SortBtn k="roas" />
                 </th>
+                <th className="text-right px-3 py-3 font-medium whitespace-nowrap">
+                  Clicks <SortBtn k="ad_clicks" />
+                </th>
+                <th className="text-right px-3 py-3 font-medium whitespace-nowrap">
+                  Impressions <SortBtn k="ad_impressions" />
+                </th>
+                <th className="text-right px-3 py-3 font-medium whitespace-nowrap">
+                  CPC <SortBtn k="cpc" />
+                </th>
+                <th className="text-right px-3 py-3 font-medium whitespace-nowrap">
+                  CTR <SortBtn k="ctr" />
+                </th>
                 <th className="text-left px-3 py-3 font-medium">Status</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={11} className="text-center py-12 text-zinc-600">No products in this period</td></tr>
+                <tr><td colSpan={15} className="text-center py-12 text-zinc-600">No products in this period</td></tr>
               ) : filtered.map(p => {
                 const inputVal   = editCosts[p.product_title];
                 const costNow    = inputVal !== undefined ? parseFloat(inputVal.replace(",", ".")) || 0 : p.cost;
@@ -365,6 +393,32 @@ export default function ProductInsightsPage() {
                       {p.roas !== null ? (
                         <span className={`font-bold ${p.roas >= 3 ? "text-emerald-400" : p.roas >= 1.5 ? "text-amber-400" : "text-red-400"}`}>
                           {p.roas.toFixed(2)}x
+                        </span>
+                      ) : <span className="text-zinc-700">—</span>}
+                    </td>
+
+                    {/* Clicks */}
+                    <td className="px-3 py-3 text-right text-zinc-400">
+                      {p.ad_clicks > 0 ? p.ad_clicks.toLocaleString() : <span className="text-zinc-700">—</span>}
+                    </td>
+
+                    {/* Impressions */}
+                    <td className="px-3 py-3 text-right text-zinc-400">
+                      {p.ad_impressions > 0 ? p.ad_impressions.toLocaleString() : <span className="text-zinc-700">—</span>}
+                    </td>
+
+                    {/* CPC */}
+                    <td className="px-3 py-3 text-right">
+                      {p.ad_clicks > 0 ? (
+                        <span className="text-zinc-300">€{cpc(p).toFixed(2)}</span>
+                      ) : <span className="text-zinc-700">—</span>}
+                    </td>
+
+                    {/* CTR */}
+                    <td className="px-3 py-3 text-right">
+                      {p.ad_impressions > 0 ? (
+                        <span className={`${ctr(p) >= 2 ? "text-emerald-400" : ctr(p) >= 1 ? "text-amber-400" : "text-zinc-400"}`}>
+                          {ctr(p).toFixed(2)}%
                         </span>
                       ) : <span className="text-zinc-700">—</span>}
                     </td>
