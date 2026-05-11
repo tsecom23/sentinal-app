@@ -51,7 +51,7 @@ export default function StoresPage() {
     const { data: userData } = await supabase.auth.getUser();
 
     if (!userData.user) {
-      setMessage("Je bent niet ingelogd.");
+      setMessage("You are not logged in.");
       setSaving(false);
       return;
     }
@@ -63,7 +63,7 @@ export default function StoresPage() {
       .trim();
 
     if (!storeName || !cleanDomain || !shopifyToken) {
-      setMessage("Vul alle velden in.");
+      setMessage("Please fill in all fields.");
       setSaving(false);
       return;
     }
@@ -101,7 +101,7 @@ export default function StoresPage() {
           <h1 className="text-4xl font-bold mt-4">Store Manager</h1>
 
           <p className="text-zinc-400 mt-2">
-            Voeg Shopify stores toe en beheer je multi-store setup.
+            Add Shopify stores and manage your multi-store setup.
           </p>
         </div>
 
@@ -131,7 +131,7 @@ export default function StoresPage() {
               <p className="text-zinc-400 mb-4">{store.shopify_domain}</p>
 
               <p className="text-xs text-zinc-600 mb-5">
-                Added: {new Date(store.created_at).toLocaleString("nl-NL")}
+                Added: {new Date(store.created_at).toLocaleString("en-GB")}
               </p>
 
               <div className="flex gap-3">

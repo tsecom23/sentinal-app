@@ -63,7 +63,7 @@ export default function DeadStockPage() {
             <h1 className="text-2xl font-black flex items-center gap-2">
               <Skull size={20} className="text-red-400" /> Dead Stock
             </h1>
-            <p className="text-sm text-zinc-500">Producten 90+ dagen online zonder één verkoop</p>
+            <p className="text-sm text-zinc-500">Products online 90+ days with zero sales</p>
           </div>
           <div className="ml-auto">
             <select
@@ -79,21 +79,21 @@ export default function DeadStockPage() {
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4 mb-7">
           <div className="rounded-2xl bg-[#111118] border border-white/8 p-5">
-            <p className="text-[10px] text-zinc-600 uppercase tracking-widest mb-2">Dead Stock Producten</p>
+            <p className="text-[10px] text-zinc-600 uppercase tracking-widest mb-2">Dead Stock Products</p>
             <p className="text-2xl font-black text-red-400">{products.length}</p>
-            <p className="text-xs text-zinc-600 mt-1">Geen enkele verkoop ooit</p>
+            <p className="text-xs text-zinc-600 mt-1">Zero sales ever</p>
           </div>
           <div className="rounded-2xl bg-[#111118] border border-white/8 p-5">
-            <p className="text-[10px] text-zinc-600 uppercase tracking-widest mb-2">Gemiddeld online</p>
+            <p className="text-[10px] text-zinc-600 uppercase tracking-widest mb-2">Average days online</p>
             <p className="text-2xl font-black text-amber-400">
-              {products.length > 0 ? Math.round(products.reduce((s, p) => s + p.days_online, 0) / products.length) : 0} dagen
+              {products.length > 0 ? Math.round(products.reduce((s, p) => s + p.days_online, 0) / products.length) : 0} days
             </p>
             <p className="text-xs text-zinc-600 mt-1">Per product</p>
           </div>
           <div className="rounded-2xl bg-[#111118] border border-white/8 p-5">
-            <p className="text-[10px] text-zinc-600 uppercase tracking-widest mb-2">Gearchiveerd</p>
+            <p className="text-[10px] text-zinc-600 uppercase tracking-widest mb-2">Archived</p>
             <p className="text-2xl font-black text-emerald-400">{archived.size}</p>
-            <p className="text-xs text-zinc-600 mt-1">In deze sessie</p>
+            <p className="text-xs text-zinc-600 mt-1">This session</p>
           </div>
         </div>
 
@@ -106,14 +106,14 @@ export default function DeadStockPage() {
           ) : products.length === 0 ? (
             <div className="p-16 flex flex-col items-center text-zinc-700">
               <PackageX size={36} className="mb-3 opacity-40" />
-              <p className="text-sm font-medium">Geen dead stock gevonden</p>
-              <p className="text-xs text-zinc-700 mt-1">Alle producten 90+ dagen oud hebben minstens één verkoop</p>
+              <p className="text-sm font-medium">No dead stock found</p>
+              <p className="text-xs text-zinc-700 mt-1">All products 90+ days old have at least one sale</p>
             </div>
           ) : (
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/5">
-                  {["Product", "Leverancier", "Online sinds", "Dagen online", "Actie"].map(h => (
+                  {["Product", "Vendor", "Online since", "Days online", "Action"].map(h => (
                     <th key={h} className="text-left px-5 py-3 text-[10px] text-zinc-600 uppercase tracking-widest font-semibold">{h}</th>
                   ))}
                 </tr>
@@ -159,7 +159,7 @@ export default function DeadStockPage() {
 
         {products.length > 0 && (
           <p className="text-[11px] text-zinc-700 mt-4 text-center">
-            "Kill" archiveert het product in de database — verwijder het ook in Shopify Admin voor maximale opruiming.
+            "Kill" archives the product in the database — also remove it in Shopify Admin for a full clean-up.
           </p>
         )}
       </div>

@@ -2,17 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  BarChart3, Check, ChevronLeft, MousePointerClick,
+  BarChart3, Check, Eye, MousePointerClick,
   TrendingUp, Upload, X, Zap,
 } from "lucide-react";
+import { DateRangePicker, DateRange, initRange, toQueryString } from "../components/DateRangePicker";
 import {
-  Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Area, AreaChart, CartesianGrid, Line, LineChart,
+  ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 
 const API = "https://sentinel-api.tssheets1.workers.dev";
-
 const STORES = [
-  { key: "ceofo", name: "CEOFO" },
+  { key: "ceofo",     name: "CEOFO" },
   { key: "martaline", name: "Martaline" },
 ];
 
@@ -20,14 +21,16 @@ type AdRow = {
   store_id: string; date: string; spend: number; clicks: number;
   impressions: number; conversions: number; cpc: number; ctr: number; roas: number;
 };
-
-type AdSummary = {
+type DailyRow = {
   date: string; spend: number; clicks: number;
-  impressions: number; conversions: number; cpc: number; ctr: number; roas: number;
+  impressions: number; conversions: number; cpc: number; ctr: number;
+};
+type Totals = {
+  spend: number; clicks: number; impressions: number;
+  conversions: number; cpc: number; ctr: number;
 };
 
-// ─── CSV parser ───────────────────────────────────────────────────────────────
-
+// ─── CSV aliases ──────────────────────────────────────────────────────────────
 const ALIASES: Record<string, string[]> = {
   date:        ["day", "date", "datum", "dag"],
   spend:       ["cost", "spend", "kosten", "costs"],
@@ -37,102 +40,86 @@ const ALIASES: Record<string, string[]> = {
   cpc:         ["avg_cpc", "cpc", "gemiddelde_cpc", "avg__cpc"],
   ctr:         ["ctr", "click_through_rate", "ktr"],
 };
-
-function normalise(h: string) {
-  return h.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
-}
-
+function normalise(h: string) { return h.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, ""); }
 function parseNum(s: string | undefined): number {
   if (!s) return 0;
   return parseFloat(String(s).replace(/[^0-9.,]/g, "").replace(",", ".")) || 0;
 }
-
 function parseGoogleAdsCsv(content: string, storeId: string): AdRow[] {
   const allLines = content.split(/\r?\n/);
-  // Find header row (contains date/cost/day keyword)
   const headerIdx = allLines.findIndex(l => {
     const low = l.toLowerCase();
     return low.includes("day") || low.includes("date") || low.includes("datum") || low.includes("cost");
   });
   if (headerIdx === -1) return [];
-
   const lines = allLines.slice(headerIdx).filter(l => l.trim());
   const headers = lines[0].split(",").map(normalise);
-
-  function col(key: string): number {
-    const alts = ALIASES[key] ?? [key];
-    for (const a of alts) {
-      const i = headers.indexOf(a);
-      if (i !== -1) return i;
-    }
+  function col(key: string) {
+    for (const a of (ALIASES[key] ?? [key])) { const i = headers.indexOf(a); if (i !== -1) return i; }
     return -1;
   }
-
   const rows: AdRow[] = [];
   for (let i = 1; i < lines.length; i++) {
     const r = lines[i].split(",");
     const rawDate = r[col("date")]?.trim();
     if (!rawDate || /total|totaal|^--/i.test(rawDate)) continue;
-
     let date: string;
-    try {
-      const d = new Date(rawDate);
-      if (isNaN(d.getTime())) continue;
-      date = d.toISOString().slice(0, 10);
-    } catch { continue; }
-
+    try { const d = new Date(rawDate); if (isNaN(d.getTime())) continue; date = d.toISOString().slice(0, 10); }
+    catch { continue; }
     const spend = parseNum(r[col("spend")]);
     const clicks = Math.round(parseNum(r[col("clicks")]));
     const impressions = Math.round(parseNum(r[col("impressions")]));
     const conversions = parseNum(r[col("conversions")]);
     const cpc = clicks > 0 ? spend / clicks : parseNum(r[col("cpc")]);
     const ctr = impressions > 0 ? (clicks / impressions) * 100 : parseNum(r[col("ctr")]);
-
     rows.push({ store_id: storeId, date, spend, clicks, impressions, conversions, cpc, ctr, roas: 0 });
   }
   return rows;
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+function f2(n: number) { return n.toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
+// ─── Page ─────────────────────────────────────────────────────────────────────
 export default function GoogleAdsPage() {
-  const [storeId, setStoreId] = useState("ceofo");
+  const [storeId, setStoreId]   = useState("martaline");
+  const [dateRange, setDateRange] = useState<DateRange>(initRange("30d"));
   const [dragOver, setDragOver] = useState(false);
-  const [parsed, setParsed] = useState<AdRow[]>([]);
+  const [parsed, setParsed]     = useState<AdRow[]>([]);
   const [fileName, setFileName] = useState("");
   const [importing, setImporting] = useState(false);
-  const [imported, setImported] = useState(false);
-  const [summary, setSummary] = useState<AdSummary[]>([]);
-  const [loadingSummary, setLoadingSummary] = useState(false);
+  const [imported, setImported]   = useState(false);
+  const [rows, setRows]           = useState<DailyRow[]>([]);
+  const [totals, setTotals]       = useState<Totals | null>(null);
+  const [roas, setRoas]           = useState(0);
+  const [loading, setLoading]     = useState(false);
+  const [chart, setChart]         = useState<"spend" | "clicks" | "impressions">("spend");
   const fileRef = useRef<HTMLInputElement>(null);
 
-  async function loadSummary() {
-    setLoadingSummary(true);
+  async function loadData() {
+    setLoading(true);
     try {
-      const res = await fetch(`${API}/api/ads/overview?store_id=${storeId}&range=30d`, { cache: "no-store" });
-      const data = await res.json();
-      setSummary(data.rows ?? []);
-    } catch { /* ignore */ }
-    setLoadingSummary(false);
+      const dq = toQueryString(dateRange);
+      const [adsRes, dashRes] = await Promise.all([
+        fetch(`${API}/api/ads/overview?store_id=${storeId}&${dq}`, { cache: "no-store" }).then(r => r.json()),
+        fetch(`${API}/api/dashboard/overview?store_id=${storeId}&${dq}`, { cache: "no-store" }).then(r => r.json()),
+      ]);
+      setRows(adsRes.rows ?? []);
+      setTotals(adsRes.totals ?? null);
+      setRoas(dashRes.roas ?? 0);
+    } catch { /* ignore */ } finally { setLoading(false); }
   }
 
-  useEffect(() => { loadSummary(); }, [storeId]);
+  useEffect(() => { loadData(); }, [storeId, dateRange]);
 
   function handleFile(file: File) {
-    setFileName(file.name);
-    setImported(false);
+    setFileName(file.name); setImported(false);
     const reader = new FileReader();
-    reader.onload = e => {
-      const rows = parseGoogleAdsCsv(e.target?.result as string, storeId);
-      setParsed(rows);
-    };
+    reader.onload = e => setParsed(parseGoogleAdsCsv(e.target?.result as string, storeId));
     reader.readAsText(file, "utf-8");
   }
-
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault(); setDragOver(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
+    const file = e.dataTransfer.files[0]; if (file) handleFile(file);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeId]);
 
@@ -140,259 +127,279 @@ export default function GoogleAdsPage() {
     if (!parsed.length) return;
     setImporting(true);
     await fetch(`${API}/api/ads/import`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ rows: parsed }),
     });
-    setImporting(false);
-    setImported(true);
-    setParsed([]);
-    setFileName("");
-    await loadSummary();
+    setImporting(false); setImported(true); setParsed([]); setFileName("");
+    await loadData();
   }
 
-  const totalSpend = summary.reduce((s, r) => s + r.spend, 0);
-  const totalClicks = summary.reduce((s, r) => s + r.clicks, 0);
-  const totalImpressions = summary.reduce((s, r) => s + r.impressions, 0);
-  const avgCpc = totalClicks > 0 ? totalSpend / totalClicks : 0;
-  const avgCtr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
-
-  const prevSpend = parsed.reduce((s, r) => s + r.spend, 0);
+  const hasData = rows.length > 0;
+  const t = totals;
+  const prevSpend  = parsed.reduce((s, r) => s + r.spend,  0);
   const prevClicks = parsed.reduce((s, r) => s + r.clicks, 0);
-  const prevDays = parsed.length;
+
+  const chartData = [...rows].sort((a, b) => a.date.localeCompare(b.date));
+
+  const METRIC_CARDS = [
+    {
+      label: "Spend",
+      value: t ? `€${f2(t.spend)}` : "—",
+      icon: <span className="text-base">💸</span>,
+      color: "",
+    },
+    {
+      label: "Clicks",
+      value: t ? t.clicks.toLocaleString("nl-NL") : "—",
+      icon: <MousePointerClick size={15} className="text-blue-400" />,
+      color: "",
+    },
+    {
+      label: "Impressions",
+      value: t ? t.impressions.toLocaleString("nl-NL") : "—",
+      icon: <Eye size={15} className="text-purple-400" />,
+      color: "text-purple-300",
+    },
+    {
+      label: "CTR",
+      value: t ? `${t.ctr.toFixed(2)}%` : "—",
+      icon: <TrendingUp size={15} className="text-cyan-400" />,
+      color: t && t.ctr >= 2 ? "text-emerald-400" : t && t.ctr >= 1 ? "text-amber-400" : "text-red-400",
+    },
+    {
+      label: "CPC",
+      value: t ? `€${f2(t.cpc)}` : "—",
+      icon: <span className="text-base">🎯</span>,
+      color: "",
+    },
+    {
+      label: "Conversions",
+      value: t ? t.conversions.toFixed(1) : "—",
+      icon: <Check size={15} className="text-emerald-400" />,
+      color: "text-emerald-300",
+    },
+    {
+      label: "ROAS",
+      value: roas > 0 ? `${roas.toFixed(2)}x` : "—",
+      icon: <BarChart3 size={15} className={roas >= 3 ? "text-emerald-400" : roas >= 1.5 ? "text-amber-400" : "text-red-400"} />,
+      color: roas >= 3 ? "text-emerald-400" : roas >= 1.5 ? "text-amber-400" : roas > 0 ? "text-red-400" : "",
+    },
+  ];
 
   return (
-    <div className="min-h-screen bg-[#07070b] text-white p-8">
-      <div className="max-w-5xl mx-auto">
+    <div className="p-6 space-y-6 min-h-screen">
 
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-8">
-          <a href="/" className="h-9 w-9 rounded-xl bg-[#111118] border border-white/8 flex items-center justify-center text-zinc-500 hover:text-white transition">
-            <ChevronLeft size={16} />
-          </a>
-          <div>
-            <h1 className="text-2xl font-black">Google Ads</h1>
-            <p className="text-sm text-zinc-500">Importeer via CSV export — geen API goedkeuring nodig</p>
-          </div>
-          <div className="ml-auto">
-            <select
-              value={storeId}
-              onChange={e => { setStoreId(e.target.value); setParsed([]); setFileName(""); setImported(false); }}
-              className="bg-[#111118] border border-white/8 rounded-xl px-3 py-2 text-sm text-white"
-            >
-              {STORES.map(s => <option key={s.key} value={s.key}>{s.name}</option>)}
-            </select>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-black tracking-tight flex items-center gap-2">
+            <BarChart3 size={22} className="text-blue-400" /> Google Ads
+          </h1>
+          <p className="text-zinc-500 text-sm mt-0.5">Alle ad stats — spend, clicks, CTR, CPC, ROAS</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <DateRangePicker value={dateRange} onChange={setDateRange} />
+          <div className="flex gap-1 bg-white/5 rounded-xl p-1">
+            {STORES.map(s => (
+              <button key={s.key} onClick={() => { setStoreId(s.key); setParsed([]); setFileName(""); setImported(false); }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${storeId === s.key ? "bg-blue-600 text-white" : "text-zinc-400 hover:text-white"}`}>
+                {s.name}
+              </button>
+            ))}
           </div>
         </div>
+      </div>
 
-        {/* How-to banner */}
-        <div className="rounded-2xl bg-blue-600/8 border border-blue-500/20 p-5 mb-6">
-          <div className="flex items-center gap-2 mb-3">
-            <Zap size={13} className="text-blue-400" />
-            <p className="text-xs font-bold text-blue-300 uppercase tracking-widest">Hoe exporteer je uit Google Ads</p>
+      {/* Metric cards — 7 across */}
+      {loading ? (
+        <div className="grid grid-cols-7 gap-3">
+          {[...Array(7)].map((_, i) => <div key={i} className="h-20 rounded-2xl bg-white/4 animate-pulse" />)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-7 gap-3">
+          {METRIC_CARDS.map(c => (
+            <div key={c.label} className="rounded-2xl bg-white/3 border border-white/5 p-4">
+              <div className="flex items-center gap-1.5 mb-2 text-zinc-500">
+                {c.icon}
+                <p className="text-[10px] uppercase tracking-widest font-medium">{c.label}</p>
+              </div>
+              <p className={`text-lg font-black ${c.color}`}>{c.value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Chart */}
+      {hasData && (
+        <div className="rounded-2xl bg-white/3 border border-white/5 p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <BarChart3 size={14} className="text-blue-400" />
+            <h3 className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Trend</h3>
+            <span className="ml-auto text-[10px] text-zinc-600">{rows.length} days</span>
+            <div className="flex gap-1 bg-white/5 rounded-lg p-0.5 ml-2">
+              {([["spend","Spend"],["clicks","Clicks"],["impressions","Impr."]] as const).map(([k, l]) => (
+                <button key={k} onClick={() => setChart(k)}
+                  className={`px-2.5 py-1 rounded-md text-[10px] font-medium transition-all ${chart === k ? "bg-blue-600 text-white" : "text-zinc-500 hover:text-white"}`}>
+                  {l}
+                </button>
+              ))}
+            </div>
           </div>
-          <ol className="text-xs text-zinc-400 space-y-1.5">
-            <li><span className="text-zinc-600 mr-2">1.</span>Ga naar <span className="text-white font-medium">ads.google.com</span> → klik op <strong className="text-white">Rapporten</strong> in het linkermenu</li>
-            <li><span className="text-zinc-600 mr-2">2.</span>Kies <strong className="text-white">Vooraf ingesteld rapport → Tijd → Dag</strong> (of maak een eigen rapport)</li>
-            <li><span className="text-zinc-600 mr-2">3.</span>Stel datumbereik in (bijv. afgelopen 30 of 90 dagen)</li>
-            <li><span className="text-zinc-600 mr-2">4.</span>Klik rechtsboven <strong className="text-white">↓ Downloaden → CSV</strong></li>
-            <li><span className="text-zinc-600 mr-2">5.</span>Sleep het .csv bestand hieronder of klik om te uploaden</li>
-          </ol>
-          <p className="text-[10px] text-zinc-600 mt-3">Werkt met elke taal — herkent Dutch & English kolomnamen automatisch</p>
+          <div className="h-44">
+            <ResponsiveContainer width="100%" height="100%">
+              {chart === "spend" ? (
+                <AreaChart data={chartData} margin={{ left: -20, right: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
+                  <XAxis dataKey="date" stroke="transparent" tick={{ fill: "#3f3f46", fontSize: 10 }} tickFormatter={d => d.slice(5)} />
+                  <YAxis stroke="transparent" tick={{ fill: "#3f3f46", fontSize: 10 }} />
+                  <Tooltip contentStyle={{ background: "#0d0d13", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, fontSize: 11 }}
+                    labelStyle={{ color: "#71717a" }} itemStyle={{ color: "#60a5fa" }}
+                    formatter={(v: number) => [`€${v.toFixed(2)}`, "Spend"]} />
+                  <defs>
+                    <linearGradient id="spendGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.35} />
+                      <stop offset="100%" stopColor="#3b82f6" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <Area type="monotone" dataKey="spend" stroke="#3b82f6" strokeWidth={2} fill="url(#spendGrad)" dot={false} />
+                </AreaChart>
+              ) : chart === "clicks" ? (
+                <LineChart data={chartData} margin={{ left: -20, right: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
+                  <XAxis dataKey="date" stroke="transparent" tick={{ fill: "#3f3f46", fontSize: 10 }} tickFormatter={d => d.slice(5)} />
+                  <YAxis stroke="transparent" tick={{ fill: "#3f3f46", fontSize: 10 }} />
+                  <Tooltip contentStyle={{ background: "#0d0d13", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, fontSize: 11 }}
+                    labelStyle={{ color: "#71717a" }} itemStyle={{ color: "#a78bfa" }}
+                    formatter={(v: number) => [v.toLocaleString(), "Clicks"]} />
+                  <Line type="monotone" dataKey="clicks" stroke="#a78bfa" strokeWidth={2} dot={false} />
+                </LineChart>
+              ) : (
+                <AreaChart data={chartData} margin={{ left: -20, right: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
+                  <XAxis dataKey="date" stroke="transparent" tick={{ fill: "#3f3f46", fontSize: 10 }} tickFormatter={d => d.slice(5)} />
+                  <YAxis stroke="transparent" tick={{ fill: "#3f3f46", fontSize: 10 }} />
+                  <Tooltip contentStyle={{ background: "#0d0d13", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, fontSize: 11 }}
+                    labelStyle={{ color: "#71717a" }} itemStyle={{ color: "#c084fc" }}
+                    formatter={(v: number) => [v.toLocaleString(), "Impressions"]} />
+                  <defs>
+                    <linearGradient id="imprGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#a855f7" stopOpacity={0.35} />
+                      <stop offset="100%" stopColor="#a855f7" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <Area type="monotone" dataKey="impressions" stroke="#a855f7" strokeWidth={2} fill="url(#imprGrad)" dot={false} />
+                </AreaChart>
+              )}
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* Daily table */}
+      {hasData && (
+        <div className="rounded-2xl bg-white/3 border border-white/5 overflow-hidden">
+          <div className="overflow-y-auto max-h-72">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-white/5 text-zinc-500 sticky top-0 bg-[#0f0f18]">
+                  {["Date","Spend","Clicks","Impressions","CTR","CPC","Conv."].map(h => (
+                    <th key={h} className="text-left px-4 py-3 text-[10px] uppercase tracking-widest font-medium">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[...rows].sort((a, b) => b.date.localeCompare(a.date)).map((r, i) => (
+                  <tr key={i} className="border-b border-white/4 hover:bg-white/3 transition">
+                    <td className="px-4 py-2.5 text-zinc-400 font-mono">{r.date}</td>
+                    <td className="px-4 py-2.5 font-bold text-red-300">€{f2(r.spend)}</td>
+                    <td className="px-4 py-2.5 font-semibold">{r.clicks.toLocaleString()}</td>
+                    <td className="px-4 py-2.5 text-zinc-400">{r.impressions.toLocaleString()}</td>
+                    <td className={`px-4 py-2.5 font-semibold ${r.ctr >= 2 ? "text-emerald-400" : r.ctr >= 1 ? "text-amber-400" : "text-zinc-400"}`}>
+                      {r.ctr.toFixed(2)}%
+                    </td>
+                    <td className="px-4 py-2.5 text-zinc-300">€{f2(r.cpc)}</td>
+                    <td className="px-4 py-2.5 text-zinc-500">{r.conversions.toFixed(1)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* CSV import */}
+      <div className="rounded-2xl bg-white/3 border border-white/5 p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Zap size={14} className="text-blue-400" />
+          <h3 className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">CSV Import</h3>
+          <span className="ml-auto text-[10px] text-zinc-600">Manual backup alongside the Ads Script</span>
         </div>
 
-        {/* Upload zone */}
+        <div className="rounded-xl bg-blue-600/6 border border-blue-500/15 p-4 mb-4 text-xs text-zinc-400 space-y-1">
+          <p className="text-blue-300 font-semibold mb-2">Export from Google Ads:</p>
+          <p><span className="text-zinc-600">1.</span> ads.google.com → <strong className="text-white">Reports</strong> → Predefined → Time → Day</p>
+          <p><span className="text-zinc-600">2.</span> Set date range → <strong className="text-white">↓ Download → CSV</strong></p>
+          <p><span className="text-zinc-600">3.</span> Drop the .csv file below</p>
+        </div>
+
         <div
           onDrop={onDrop}
           onDragOver={e => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
           onClick={() => fileRef.current?.click()}
-          className={`rounded-3xl border-2 border-dashed p-12 mb-6 flex flex-col items-center cursor-pointer transition-all ${
-            dragOver
-              ? "border-blue-500 bg-blue-600/10"
-              : "border-white/10 bg-[#111118] hover:border-white/20 hover:bg-white/2"
+          className={`rounded-xl border-2 border-dashed p-8 flex flex-col items-center cursor-pointer transition-all ${
+            dragOver ? "border-blue-500 bg-blue-600/10" : "border-white/8 bg-white/2 hover:border-white/15 hover:bg-white/4"
           }`}
         >
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".csv"
-            className="hidden"
-            onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])}
-          />
-          <Upload size={30} className={`mb-3 ${dragOver ? "text-blue-400" : "text-zinc-700"}`} />
+          <input ref={fileRef} type="file" accept=".csv" className="hidden"
+            onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
+          <Upload size={22} className={`mb-2 ${dragOver ? "text-blue-400" : "text-zinc-700"}`} />
           {fileName ? (
             <div className="text-center">
-              <p className="text-sm font-semibold text-white">{fileName}</p>
-              <p className="text-xs text-zinc-500 mt-1">
+              <p className="text-sm font-semibold">{fileName}</p>
+              <p className="text-xs text-zinc-500 mt-0.5">
                 {parsed.length > 0
-                  ? `${parsed.length} dagen gevonden · €${prevSpend.toFixed(2)} spend · ${prevClicks.toLocaleString()} clicks`
-                  : "Geen herkende kolommen — check of het een Google Ads rapport CSV is"
-                }
+                  ? `${parsed.length} days · €${prevSpend.toFixed(2)} spend · ${prevClicks.toLocaleString()} clicks`
+                  : "No recognised columns — check the CSV format"}
               </p>
             </div>
           ) : (
-            <div className="text-center">
-              <p className="text-sm text-zinc-400">Sleep je Google Ads CSV hier naartoe</p>
-              <p className="text-xs text-zinc-700 mt-1">of klik om een bestand te kiezen</p>
-            </div>
+            <p className="text-sm text-zinc-500">Drop your Google Ads CSV here or click</p>
           )}
         </div>
 
-        {/* Preview & import */}
         {parsed.length > 0 && (
-          <div className="rounded-3xl bg-[#111118] border border-white/8 p-5 mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <p className="text-sm font-bold">Preview — {prevDays} dagen</p>
-                <p className="text-xs text-zinc-500 mt-0.5">
-                  {parsed[0]?.date} t/m {parsed[parsed.length - 1]?.date}
-                  {" · "}€{prevSpend.toFixed(2)} spend
-                  {" · "}{prevClicks.toLocaleString()} clicks
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => { setParsed([]); setFileName(""); }}
-                  className="h-9 px-3 rounded-xl bg-white/5 hover:bg-white/10 text-xs text-zinc-400 transition flex items-center gap-1.5"
-                >
-                  <X size={12} /> Annuleer
-                </button>
-                <button
-                  onClick={doImport}
-                  disabled={importing}
-                  className="h-9 px-5 rounded-xl bg-blue-600 hover:bg-blue-500 text-sm font-semibold flex items-center gap-2 transition disabled:opacity-60"
-                >
-                  {importing
-                    ? "Importeren..."
-                    : <><Upload size={13} /> Importeer {prevDays} dagen</>
-                  }
-                </button>
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-white/5">
-                    {["Datum", "Spend", "Clicks", "Impressions", "CTR", "CPC"].map(h => (
-                      <th key={h} className="text-left px-3 py-2 text-[10px] text-zinc-600 uppercase tracking-widest">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {parsed.slice(0, 6).map((r, i) => (
-                    <tr key={i} className="border-b border-white/4">
-                      <td className="px-3 py-2 text-zinc-400">{r.date}</td>
-                      <td className="px-3 py-2 font-semibold">€{r.spend.toFixed(2)}</td>
-                      <td className="px-3 py-2">{r.clicks.toLocaleString()}</td>
-                      <td className="px-3 py-2 text-zinc-500">{r.impressions.toLocaleString()}</td>
-                      <td className="px-3 py-2 text-zinc-500">{r.ctr.toFixed(2)}%</td>
-                      <td className="px-3 py-2 text-zinc-400">€{r.cpc.toFixed(2)}</td>
-                    </tr>
-                  ))}
-                  {parsed.length > 6 && (
-                    <tr>
-                      <td colSpan={6} className="px-3 py-2 text-[10px] text-zinc-700">
-                        +{parsed.length - 6} meer dagen…
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+          <div className="mt-4 flex items-center justify-between">
+            <p className="text-xs text-zinc-400">
+              {parsed.length} days found · {parsed[0]?.date} to {parsed[parsed.length - 1]?.date}
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => { setParsed([]); setFileName(""); }}
+                className="h-8 px-3 rounded-lg bg-white/5 hover:bg-white/10 text-xs text-zinc-400 transition flex items-center gap-1.5">
+                <X size={11} /> Cancel
+              </button>
+              <button onClick={doImport} disabled={importing}
+                className="h-8 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-semibold flex items-center gap-1.5 transition disabled:opacity-60">
+                {importing ? "Importing..." : <><Upload size={11} /> Import {parsed.length} days</>}
+              </button>
             </div>
           </div>
         )}
 
         {imported && (
-          <div className="rounded-2xl bg-emerald-600/10 border border-emerald-500/20 px-5 py-3 mb-6 flex items-center gap-2 text-emerald-400 text-sm font-semibold">
-            <Check size={16} /> Data geïmporteerd! Dashboard bijgewerkt met je ad stats.
-          </div>
-        )}
-
-        {/* Stats from DB */}
-        {summary.length > 0 && (
-          <>
-            <div className="grid grid-cols-4 gap-4 mb-5">
-              {[
-                { label: "Totale Spend (30d)", value: `€${totalSpend.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}` },
-                { label: "Clicks", value: totalClicks.toLocaleString("nl-NL"), icon: <MousePointerClick size={13} className="text-blue-400" /> },
-                { label: "Gem. CPC", value: `€${avgCpc.toFixed(2)}` },
-                { label: "Gem. CTR", value: `${avgCtr.toFixed(2)}%`, icon: <TrendingUp size={13} className="text-emerald-400" /> },
-              ].map(s => (
-                <div key={s.label} className="rounded-2xl bg-[#111118] border border-white/8 p-4">
-                  <p className="text-[10px] text-zinc-600 uppercase tracking-widest mb-2">{s.label}</p>
-                  <div className="flex items-center gap-1.5">
-                    {s.icon}
-                    <p className="text-xl font-black">{s.value}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="rounded-3xl bg-[#111118] border border-white/8 p-6">
-              <div className="flex items-center gap-2 mb-5">
-                <BarChart3 size={14} className="text-blue-400" />
-                <h3 className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Dagelijkse Ad Spend</h3>
-                <span className="ml-auto text-[10px] text-zinc-700">{summary.length} dagen</span>
-              </div>
-              <div className="h-48 mb-6">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={[...summary].reverse()} margin={{ left: -20, right: 10 }}>
-                    <XAxis dataKey="date" stroke="transparent" tick={{ fill: "#3f3f46", fontSize: 10 }} tickFormatter={d => d.slice(5)} />
-                    <YAxis stroke="transparent" tick={{ fill: "#3f3f46", fontSize: 10 }} />
-                    <Tooltip
-                      contentStyle={{ background: "#0d0d13", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, fontSize: 12 }}
-                      labelStyle={{ color: "#71717a" }} itemStyle={{ color: "#60a5fa" }}
-                      formatter={(v: number) => [`€${v.toFixed(2)}`, "Spend"]}
-                    />
-                    <defs>
-                      <linearGradient id="adsGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.3} />
-                        <stop offset="100%" stopColor="#3b82f6" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <Area type="monotone" dataKey="spend" stroke="#3b82f6" strokeWidth={2} fill="url(#adsGrad)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-
-              <div className="border-t border-white/5 pt-4">
-                <div className="overflow-y-auto max-h-64">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr>
-                        {["Datum", "Spend", "Clicks", "Impressions", "CTR", "CPC", "Conv."].map(h => (
-                          <th key={h} className="text-left px-3 py-2 text-[10px] text-zinc-600 uppercase tracking-widest sticky top-0 bg-[#111118]">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[...summary].reverse().map((r, i) => (
-                        <tr key={i} className="border-b border-white/4 hover:bg-white/2 transition">
-                          <td className="px-3 py-2 text-zinc-400">{r.date}</td>
-                          <td className="px-3 py-2 font-semibold">€{r.spend.toFixed(2)}</td>
-                          <td className="px-3 py-2">{r.clicks.toLocaleString()}</td>
-                          <td className="px-3 py-2 text-zinc-500">{r.impressions.toLocaleString()}</td>
-                          <td className="px-3 py-2 text-zinc-500">{r.ctr.toFixed(2)}%</td>
-                          <td className="px-3 py-2 text-zinc-400">€{r.cpc.toFixed(2)}</td>
-                          <td className="px-3 py-2 text-zinc-500">{r.conversions.toFixed(1)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-
-        {summary.length === 0 && !loadingSummary && parsed.length === 0 && !imported && (
-          <div className="rounded-3xl bg-[#111118] border border-white/8 p-16 flex flex-col items-center text-zinc-700">
-            <BarChart3 size={36} className="mb-3 opacity-30" />
-            <p className="text-sm">Nog geen ad data — upload een CSV hierboven</p>
+          <div className="mt-3 rounded-xl bg-emerald-600/10 border border-emerald-500/20 px-4 py-2.5 flex items-center gap-2 text-emerald-400 text-xs font-semibold">
+            <Check size={13} /> Imported — stats updated above
           </div>
         )}
       </div>
+
+      {!hasData && !loading && (
+        <div className="rounded-2xl bg-white/3 border border-white/5 p-12 flex flex-col items-center text-zinc-700">
+          <BarChart3 size={32} className="mb-3 opacity-30" />
+          <p className="text-sm">No ad data for {storeId} in this period</p>
+          <p className="text-xs text-zinc-700 mt-1">Upload a CSV above or check that the Ads Script is active</p>
+        </div>
+      )}
     </div>
   );
 }

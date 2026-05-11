@@ -1,209 +1,290 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BarChart3, Box, Camera, LogOut, Moon, RotateCcw, Settings, Tag } from "lucide-react";
+import { Bot } from "lucide-react";
 
-const API_URL = "https://sentinel-api.tssheets1.workers.dev";
+const API = "https://sentinel-api.tssheets1.workers.dev";
+const STORES = [
+  { key: "ceofo", name: "CEOFO" },
+  { key: "martaline", name: "Martaline" },
+];
 
-type Insight = {
+interface Insight {
   product_title: string;
-  variant_title: string;
   sold: number;
   revenue: number;
+  net_revenue: number;
   unit_cost: number;
   total_cost: number;
+  ad_spend: number;
   profit: number;
   margin: number;
+  roas: number | null;
+  return_amount: number;
   label: string;
   severity: string;
   recommendation: string;
+}
+
+type SortLabel = "ALL" | "KILL" | "SCALE" | "FIX MARGIN" | "SET COST" | "OPTIMIZE" | "MONITOR" | "DEAD";
+
+const LABEL_STYLES: Record<string, string> = {
+  KILL:       "bg-red-500/15 text-red-400 border border-red-500/30",
+  SCALE:      "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30",
+  "FIX MARGIN": "bg-amber-500/15 text-amber-400 border border-amber-500/30",
+  OPTIMIZE:   "bg-blue-500/15 text-blue-400 border border-blue-500/30",
+  MONITOR:    "bg-zinc-500/15 text-zinc-400 border border-zinc-500/30",
+  "SET COST": "bg-orange-500/15 text-orange-400 border border-orange-500/30",
+  DEAD:       "bg-red-500/15 text-red-400 border border-red-500/30",
 };
 
+function fmt(n: number) {
+  return n.toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function LabelBadge({ label }: { label: string }) {
+  const cls = LABEL_STYLES[label] ?? "bg-zinc-500/15 text-zinc-400 border border-zinc-500/30";
+  return (
+    <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide ${cls}`}>
+      {label}
+    </span>
+  );
+}
+
+function InsightCard({
+  item,
+  bgClass,
+}: {
+  item: Insight;
+  bgClass: string;
+}) {
+  return (
+    <div className={`rounded-2xl border p-4 space-y-2.5 ${bgClass}`}>
+      <div className="flex items-start justify-between gap-3">
+        <p className="font-semibold text-sm leading-snug line-clamp-2 flex-1">
+          {item.product_title}
+        </p>
+        <LabelBadge label={item.label} />
+      </div>
+      <p className="text-zinc-400 text-xs leading-relaxed">{item.recommendation}</p>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-zinc-500 pt-0.5">
+        <span>
+          <span className="text-zinc-300 font-medium">{item.sold}</span> sold
+        </span>
+        <span>
+          <span className="text-zinc-300 font-medium">€{fmt(item.revenue)}</span> revenue
+        </span>
+        <span>
+          <span className={`font-medium ${item.margin >= 30 ? "text-emerald-400" : item.margin >= 10 ? "text-amber-400" : "text-red-400"}`}>
+            {item.margin.toFixed(1)}%
+          </span>{" "}
+          margin
+        </span>
+        {item.roas !== null ? (
+          <span>
+            <span className={`font-medium ${item.roas >= 3 ? "text-emerald-400" : item.roas >= 1.5 ? "text-amber-400" : "text-red-400"}`}>
+              {item.roas.toFixed(2)}x
+            </span>{" "}
+            ROAS
+          </span>
+        ) : (
+          <span className="text-zinc-700">No ROAS</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SkeletonCards({ count = 4 }: { count?: number }) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="h-32 rounded-2xl bg-white/4 animate-pulse" />
+      ))}
+    </div>
+  );
+}
+
 export default function AIRecommendationsPage() {
+  const [storeId, setStoreId] = useState("martaline");
   const [insights, setInsights] = useState<Insight[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [sortLabel, setSortLabel] = useState<SortLabel>("ALL");
 
-  async function loadInsights() {
-    const res = await fetch(`${API_URL}/api/insights/products`, {
-      cache: "no-store",
-    });
-
-    const json = (await res.json()) as { insights: Insight[] };
-    setInsights(json.insights || []);
+  async function load(store: string) {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/api/insights/products?store_id=${store}`, {
+        cache: "no-store",
+      });
+      const json = (await res.json()) as { insights?: Insight[] };
+      setInsights(json.insights ?? []);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
-    loadInsights();
-  }, []);
+    load(storeId);
+  }, [storeId]);
 
-  const scale = insights.filter((i) => i.label === "SCALE");
-  const problems = insights.filter((i) =>
-    ["KILL", "FIX COST", "FIX MARGIN"].includes(i.label)
+  const kills = insights.filter((i) => i.label === "KILL");
+  const scales = insights.filter((i) => i.label === "SCALE");
+  const needFix = insights.filter((i) =>
+    ["KILL", "FIX MARGIN", "SET COST", "DEAD"].includes(i.label)
   );
 
-  return (
-    <div className="flex min-h-screen bg-[#0b0b0f] text-white">
-      <aside className="w-[280px] bg-[#111114] p-6 flex flex-col justify-between">
-        <div>
-          <h1 className="text-2xl font-bold mb-10">Sentinel</h1>
-
-          <nav className="space-y-3 text-zinc-400">
-            <a href="/">
-              <Nav label="Overview" icon={<Box size={18} />} />
-            </a>
-
-            <a href="/google-ads">
-              <Nav label="Google Ads" icon={<BarChart3 size={18} />} />
-            </a>
-
-            <a href="/product-insights">
-              <Nav label="Product Insights" icon={<Box size={18} />} />
-            </a>
-
-            <Nav active label="AI Recommendations" icon={<BarChart3 size={18} />} />
-
-            <div className="ml-4 border-l border-zinc-800 pl-4 mt-4 space-y-2">
-              <Nav small label="Price Negotiation" icon={<Tag size={16} />} />
-              <Nav small label="Quality Control" icon={<Camera size={16} />} />
-            </div>
-
-            <Nav label="Returns & Disputes" icon={<RotateCcw size={18} />} />
-          </nav>
-        </div>
-
-        <div className="space-y-4 text-zinc-400">
-          <Nav label="Dark Mode" icon={<Moon size={18} />} />
-          <Nav label="Settings" icon={<Settings size={18} />} />
-          <Nav label="Log out" icon={<LogOut size={18} />} />
-        </div>
-      </aside>
-
-      <main className="flex-1 p-10">
-        <div className="mb-10">
-          <p className="text-zinc-500">Sentinel</p>
-          <h1 className="text-4xl font-bold">AI Product Recommendations</h1>
-        </div>
-
-        <div className="grid grid-cols-4 gap-6 mb-8">
-          <Card title="Insights" value={insights.length.toString()} />
-          <Card title="Scale Candidates" value={scale.length.toString()} />
-          <Card title="Needs Fixing" value={problems.length.toString()} />
-          <Card title="Engine" value="Rule AI" />
-        </div>
-
-        <div className="grid grid-cols-2 gap-6">
-          <Panel title="Scale Opportunities">
-            {scale.length === 0 ? (
-              <Empty text="No scale candidates yet." />
-            ) : (
-              scale.map((item) => <InsightRow key={`${item.product_title}-${item.variant_title}`} item={item} />)
-            )}
-          </Panel>
-
-          <Panel title="Problems To Fix">
-            {problems.length === 0 ? (
-              <Empty text="No urgent product issues." />
-            ) : (
-              problems.map((item) => <InsightRow key={`${item.product_title}-${item.variant_title}`} item={item} />)
-            )}
-          </Panel>
-        </div>
-
-        <div className="mt-6">
-          <Panel title="All Recommendations">
-            {insights.map((item) => (
-              <InsightRow key={`${item.product_title}-${item.variant_title}-all`} item={item} />
-            ))}
-          </Panel>
-        </div>
-      </main>
-    </div>
-  );
-}
-
-function InsightRow({ item }: { item: Insight }) {
-  const labelClass =
-    item.label === "SCALE"
-      ? "bg-emerald-500/10 text-emerald-400"
-      : item.label === "KILL" || item.label === "FIX COST"
-      ? "bg-red-500/10 text-red-400"
-      : "bg-yellow-500/10 text-yellow-400";
+  const SORT_LABELS: SortLabel[] = ["ALL", "KILL", "SCALE", "FIX MARGIN", "SET COST", "OPTIMIZE", "MONITOR", "DEAD"];
+  const sorted =
+    sortLabel === "ALL"
+      ? insights
+      : insights.filter((i) => i.label === sortLabel);
 
   return (
-    <div className="border-b border-zinc-800 pb-5">
-      <div className="flex justify-between gap-4">
+    <div className="p-6 space-y-6 min-h-screen">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <p className="font-semibold text-lg">{item.product_title}</p>
-          <p className="text-sm text-zinc-500">
-            {item.variant_title || "Default"} · {item.sold} sold · {item.margin}% margin
+          <h1 className="text-2xl font-black tracking-tight flex items-center gap-2">
+            <Bot size={22} className="text-purple-400" />
+            AI Recommendations
+          </h1>
+          <p className="text-zinc-500 text-sm mt-0.5">
+            Rule-based AI signals for every product
           </p>
         </div>
-
-        <span className={`h-fit px-3 py-1 rounded-full text-xs font-bold ${labelClass}`}>
-          {item.label}
-        </span>
+        {/* Store selector */}
+        <div className="flex gap-1 bg-white/5 rounded-xl p-1">
+          {STORES.map((s) => (
+            <button
+              key={s.key}
+              onClick={() => setStoreId(s.key)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                storeId === s.key
+                  ? "bg-blue-600 text-white"
+                  : "text-zinc-400 hover:text-white"
+              }`}
+            >
+              {s.name}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <p className="text-zinc-400 mt-3">{item.recommendation}</p>
-
-      <div className="grid grid-cols-3 gap-3 mt-4 text-sm">
-        <Mini label="Revenue" value={`€${Number(item.revenue).toLocaleString("nl-NL")}`} />
-        <Mini label="Profit" value={`€${Number(item.profit).toLocaleString("nl-NL")}`} />
-        <Mini label="Cost" value={`€${Number(item.total_cost).toLocaleString("nl-NL")}`} />
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: "Total insights", value: insights.length, color: "" },
+          { label: "Scale candidates", value: scales.length, color: "text-emerald-400" },
+          { label: "Kill signals", value: kills.length, color: "text-red-400" },
+          { label: "Need fixing", value: needFix.length, color: "text-amber-400" },
+        ].map((c) => (
+          <div key={c.label} className="rounded-2xl bg-white/3 border border-white/5 p-4">
+            <p className="text-[10px] text-zinc-600 uppercase tracking-widest mb-2">
+              {c.label}
+            </p>
+            <p className={`text-2xl font-black ${c.color}`}>{c.value}</p>
+          </div>
+        ))}
       </div>
-    </div>
-  );
-}
 
-function Card({ title, value }: { title: string; value: string }) {
-  return (
-    <div className="bg-[#15151c] p-6 rounded-2xl">
-      <p className="text-zinc-500">{title}</p>
-      <h2 className="text-3xl font-bold mt-2">{value}</h2>
-    </div>
-  );
-}
+      {loading ? (
+        <div className="space-y-6">
+          <SkeletonCards count={4} />
+          <SkeletonCards count={4} />
+        </div>
+      ) : insights.length === 0 ? (
+        <div className="rounded-2xl bg-white/3 border border-white/5 p-12 text-center text-zinc-600">
+          No insights found for this store.
+        </div>
+      ) : (
+        <div className="space-y-8">
+          {/* Kill signals */}
+          {kills.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="text-sm font-bold text-zinc-300 flex items-center gap-2">
+                🔴 Kill signals
+                <span className="text-xs font-normal text-zinc-600">
+                  ({kills.length})
+                </span>
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {kills.map((item) => (
+                  <InsightCard
+                    key={item.product_title + "-kill"}
+                    item={item}
+                    bgClass="bg-red-950/20 border-red-500/30"
+                  />
+                ))}
+              </div>
+            </section>
+          )}
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="bg-[#15151c] rounded-2xl p-6">
-      <h3 className="text-xl font-bold mb-6">{title}</h3>
-      <div className="space-y-5">{children}</div>
-    </div>
-  );
-}
+          {/* Scale opportunities */}
+          {scales.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="text-sm font-bold text-zinc-300 flex items-center gap-2">
+                🚀 Scale opportunities
+                <span className="text-xs font-normal text-zinc-600">
+                  ({scales.length})
+                </span>
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {scales.map((item) => (
+                  <InsightCard
+                    key={item.product_title + "-scale"}
+                    item={item}
+                    bgClass="bg-emerald-950/20 border-emerald-500/30"
+                  />
+                ))}
+              </div>
+            </section>
+          )}
 
-function Mini({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="bg-[#0f0f14] rounded-xl p-3">
-      <p className="text-zinc-500">{label}</p>
-      <p className="font-bold">{value}</p>
-    </div>
-  );
-}
-
-function Empty({ text }: { text: string }) {
-  return <p className="text-zinc-500">{text}</p>;
-}
-
-function Nav({
-  label,
-  icon,
-  active,
-  small,
-}: {
-  label: string;
-  icon: React.ReactNode;
-  active?: boolean;
-  small?: boolean;
-}) {
-  return (
-    <div
-      className={`flex items-center gap-3 px-4 py-2 rounded-lg cursor-pointer ${
-        active ? "bg-blue-600 text-white" : "hover:bg-zinc-800"
-      } ${small ? "text-sm" : ""}`}
-    >
-      {icon}
-      {label}
+          {/* All recommendations */}
+          <section className="space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <h2 className="text-sm font-bold text-zinc-300">
+                All recommendations
+                <span className="text-xs font-normal text-zinc-600 ml-2">
+                  ({sorted.length})
+                </span>
+              </h2>
+              {/* Label filter */}
+              <div className="flex flex-wrap gap-1">
+                {SORT_LABELS.map((l) => (
+                  <button
+                    key={l}
+                    onClick={() => setSortLabel(l)}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-all ${
+                      sortLabel === l
+                        ? "bg-white/10 text-white"
+                        : "text-zinc-600 hover:text-zinc-400"
+                    }`}
+                  >
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {sorted.length === 0 ? (
+              <div className="rounded-2xl bg-white/3 border border-white/5 p-8 text-center text-zinc-600 text-sm">
+                No products with label "{sortLabel}".
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {sorted.map((item) => (
+                  <InsightCard
+                    key={item.product_title + "-all"}
+                    item={item}
+                    bgClass="bg-white/3 border-white/5"
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
     </div>
   );
 }

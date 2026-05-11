@@ -7,6 +7,7 @@ import {
   ArrowUpRight, ArrowDownRight, Lightbulb, Skull,
 } from "lucide-react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { DateRangePicker, DateRange, initRange, toQueryString } from "./DateRangePicker";
 
 const API = "https://sentinel-api.tssheets1.workers.dev";
 
@@ -15,9 +16,9 @@ const STORES = [
   { key: "martaline", name: "Martaline", domain: "cqb72v-if.myshopify.com" },
 ];
 
-type Range = "today" | "yesterday" | "30d";
+// DateRange is imported from DateRangePicker
 type Overview = {
-  revenue: number; netRevenue: number; orders: number;
+  revenue: number; grossRevenue: number; netRevenue: number; orders: number;
   adSpend: number; productCost: number; profit: number;
   aov: number; roas: number; returnAmount: number; returnCount: number;
   returnRate: number; disputeAmount: number; disputeCount: number;
@@ -31,7 +32,7 @@ type MilestoneData = { totalThisMonth: number; next: number | null; reached: num
 
 export default function Dashboard({ activeStoreId }: { activeStoreId?: string }) {
   const [storeId, setStoreId] = useState(activeStoreId || "ceofo");
-  const [range, setRange] = useState<Range>("30d");
+  const [dateRange, setDateRange] = useState<DateRange>(initRange("30d"));
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -43,7 +44,8 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
   async function loadData() {
     try {
       setLoading(true); setError("");
-      const q = `store_id=${storeId}&range=${range}`;
+      const dq = toQueryString(dateRange);
+      const q = `store_id=${storeId}&${dq}`;
       const [ov, al, pr, ms] = await Promise.all([
         fetch(`${API}/api/dashboard/overview?${q}`, { cache: "no-store" }).then(r => r.json()),
         fetch(`${API}/api/product-alerts?store_id=${storeId}`, { cache: "no-store" }).then(r => r.json()),
@@ -67,11 +69,12 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
   }
 
   useEffect(() => { if (activeStoreId) setStoreId(activeStoreId); }, [activeStoreId]);
-  useEffect(() => { loadData(); }, [storeId, range]);
+  useEffect(() => { loadData(); }, [storeId, dateRange]);
 
   const activeStore = STORES.find(s => s.key === storeId);
   const ov = overview;
-  const revenue = ov?.revenue ?? 0;
+  const grossRevenue = ov?.grossRevenue ?? ov?.revenue ?? 0;
+  const revenue = ov?.netRevenue ?? ov?.revenue ?? 0;  // net revenue is the truth
   const orders = ov?.orders ?? 0;
   const profit = ov?.profit ?? 0;
   const aov = ov?.aov ?? 0;
@@ -115,12 +118,8 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
           <p className="text-[11px] text-zinc-700 mt-1.5">{activeStore?.domain || "—"}</p>
         </div>
 
-        <div className="flex items-center gap-2">
-          {(["today", "yesterday", "30d"] as Range[]).map(r => (
-            <button key={r} onClick={() => setRange(r)} className={`h-9 px-4 rounded-xl text-xs font-semibold transition ${range === r ? "bg-blue-600 text-white" : "bg-[#111118] border border-white/8 text-zinc-500 hover:text-white"}`}>
-              {r === "30d" ? "30 Days" : r === "today" ? "Today" : "Yesterday"}
-            </button>
-          ))}
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <DateRangePicker value={dateRange} onChange={setDateRange} />
           <button onClick={loadData} className="h-9 w-9 rounded-xl bg-[#111118] border border-white/8 flex items-center justify-center text-zinc-500 hover:text-white transition">
             <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
           </button>
@@ -158,8 +157,13 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
 
       {/* Stats row 1 */}
       <div className="grid grid-cols-4 gap-3 mb-3">
-        <StatCard label="Revenue" value={`€${fmt(revenue)}`} sub={`AOV €${fmt(aov)}`} loading={loading} />
-        <StatCard label="Orders" value={orders.toString()} sub={range === "30d" ? "Last 30 days" : range} loading={loading} />
+        <StatCard
+          label="Revenue (net)"
+          value={`€${fmt(revenue)}`}
+          sub={returnAmount > 0 ? `Gross €${fmt(grossRevenue)} − €${fmt(returnAmount)} returns` : `AOV €${fmt(aov)}`}
+          loading={loading}
+        />
+        <StatCard label="Orders" value={orders.toString()} sub={`${dateRange.start} → ${dateRange.end}`} loading={loading} />
         <StatCard label="Profit" value={`€${fmt(profit)}`} sub={`${margin.toFixed(1)}% margin`} trend={profit > 0 ? "up" : profit < 0 ? "down" : undefined} loading={loading} />
         <StatCard label="ROAS" value={adSpend > 0 ? `${roas.toFixed(2)}x` : "—"} sub={adSpend > 0 ? `€${fmt(adSpend)} spend` : "Ads not connected"} loading={loading} />
       </div>
@@ -168,7 +172,13 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
       <div className="grid grid-cols-4 gap-3 mb-5">
         <StatCard label="Ad Spend" value={adSpend > 0 ? `€${fmt(adSpend)}` : "—"} sub={cpc > 0 ? `CPC €${cpc.toFixed(2)}` : "No data"} loading={loading} />
         <StatCard label="CTR / Clicks" value={ctr > 0 ? `${ctr.toFixed(2)}%` : "—"} sub={clicks > 0 ? `${clicks.toLocaleString()} clicks` : "No data"} loading={loading} />
-        <StatCard label="Returns" value={returnCount > 0 ? `${returnCount}x` : "0"} sub={returnCount > 0 ? `€${fmt(returnAmount)}` : "No returns"} trend={returnCount > 0 ? "down" : undefined} loading={loading} />
+        <StatCard
+          label="Returns / Refunds"
+          value={returnCount > 0 ? `${returnCount}x · €${fmt(returnAmount)}` : "0"}
+          sub={returnCount > 0 ? "Automatically deducted from revenue" : "No returns"}
+          trend={returnCount > 0 ? "down" : undefined}
+          loading={loading}
+        />
         <StatCard label="Disputes" value={disputeCount > 0 ? `${disputeCount}x` : "0"} sub={disputeCount > 0 ? `€${fmt(disputeAmount)} open` : "No disputes"} trend={disputeCount > 0 ? "down" : undefined} loading={loading} />
       </div>
 
@@ -177,6 +187,9 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
         <div className="flex items-center gap-2 mb-5">
           <TrendingUp size={15} className="text-blue-400" />
           <h3 className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Revenue Trend</h3>
+          {returnAmount > 0 && (
+            <span className="ml-auto text-[10px] text-zinc-600">net (excl. returns)</span>
+          )}
         </div>
         <div className="h-52">
           <ResponsiveContainer width="100%" height="100%">
@@ -207,7 +220,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
           <div className="flex items-center gap-2 mb-4">
             <Box size={14} className="text-blue-400" />
             <h3 className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Top Products</h3>
-            <span className="ml-auto text-[10px] text-zinc-700">{range === "30d" ? "30 days" : range}</span>
+            <span className="ml-auto text-[10px] text-zinc-700">{dateRange.start === dateRange.end ? dateRange.start : `${dateRange.start} → ${dateRange.end}`}</span>
           </div>
           {loading ? (
             <div className="space-y-2">{[...Array(6)].map((_, i) => <div key={i} className="h-10 rounded-xl bg-white/4 animate-pulse" />)}</div>
@@ -328,37 +341,37 @@ function AiTips({ ov, products }: { ov: Overview | null; products: TopProduct[] 
   const tips: { level: "green" | "amber" | "red"; text: string }[] = [];
 
   if (profit < 0) {
-    tips.push({ level: "red", text: `Verlies van €${Math.abs(profit).toFixed(0)} — controleer kosten, inkoop en ad spend direct.` });
+    tips.push({ level: "red", text: `Loss of €${Math.abs(profit).toFixed(0)} — check costs, purchase price and ad spend immediately.` });
   }
   if (adSpend > 0 && roas < 2) {
-    tips.push({ level: "red", text: `ROAS ${roas.toFixed(2)}x is te laag. Pauzeer slechte campagnes of verhoog biedingen op best-sellers.` });
+    tips.push({ level: "red", text: `ROAS ${roas.toFixed(2)}x is too low. Pause underperforming campaigns or raise bids on best-sellers.` });
   }
   if (adSpend > 0 && roas >= 2 && roas < 3.5) {
-    tips.push({ level: "amber", text: `ROAS ${roas.toFixed(2)}x — ruimte voor verbetering. Test nieuwe ad sets of optimaliseer landingspagina's.` });
+    tips.push({ level: "amber", text: `ROAS ${roas.toFixed(2)}x — room for improvement. Test new ad sets or optimise landing pages.` });
   }
   if (adSpend > 0 && roas >= 3.5) {
-    tips.push({ level: "green", text: `ROAS ${roas.toFixed(2)}x is sterk. Overweeg budget te verhogen op best presterende campagnes.` });
+    tips.push({ level: "green", text: `ROAS ${roas.toFixed(2)}x is strong. Consider increasing the budget on your best-performing campaigns.` });
   }
   if (revenue > 0 && margin > 0 && margin < 20) {
-    tips.push({ level: "red", text: `Marge van ${margin.toFixed(1)}% is te laag. Onderhandel lagere inkoop of verhoog verkoopprijs.` });
+    tips.push({ level: "red", text: `Margin of ${margin.toFixed(1)}% is too low. Negotiate a lower purchase price or raise the selling price.` });
   }
   if (revenue > 0 && margin >= 20 && margin < 40) {
-    tips.push({ level: "amber", text: `Marge van ${margin.toFixed(1)}% is redelijk. Stel inkooprijs in bij Product Insights om dit nauwkeuriger bij te houden.` });
+    tips.push({ level: "amber", text: `Margin of ${margin.toFixed(1)}% is reasonable. Set purchase cost in Product Insights to track this more accurately.` });
   }
   if (revenue > 0 && margin >= 40) {
-    tips.push({ level: "green", text: `Marge van ${margin.toFixed(1)}% is gezond. Schaal succesvol volume op met gerichte ads.` });
+    tips.push({ level: "green", text: `Margin of ${margin.toFixed(1)}% is healthy. Scale up volume with targeted ads.` });
   }
   if (returnRate > 10) {
-    tips.push({ level: "red", text: `Retourpercentage ${returnRate.toFixed(1)}% is hoog. Bekijk welke producten het meest worden teruggestuurd.` });
+    tips.push({ level: "red", text: `Return rate ${returnRate.toFixed(1)}% is high. Check which products are returned most often.` });
   }
   if (adSpend === 0) {
-    tips.push({ level: "amber", text: "Geen advertentiedata — koppel Google Ads via Google Ads-pagina voor ROAS-inzicht." });
+    tips.push({ level: "amber", text: "No ad data — connect Google Ads via the Google Ads page to get ROAS insights." });
   }
   if (products.length > 0) {
     const top = products[0];
     const topMargin = top.revenue > 0 ? (top.profit / top.revenue) * 100 : 0;
     if (topMargin > 40) {
-      tips.push({ level: "green", text: `"${top.product_title}" heeft ${topMargin.toFixed(0)}% marge — ideaal product om meer op te adverteren.` });
+      tips.push({ level: "green", text: `"${top.product_title}" has ${topMargin.toFixed(0)}% margin — ideal product to advertise more heavily.` });
     }
   }
 
@@ -374,8 +387,8 @@ function AiTips({ ov, products }: { ov: Overview | null; products: TopProduct[] 
     <div className="rounded-3xl bg-[#111118] border border-white/8 p-5">
       <div className="flex items-center gap-2 mb-4">
         <Lightbulb size={14} className="text-blue-400" />
-        <h3 className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">AI Optimalisatie Tips</h3>
-        <span className="ml-auto text-[10px] text-zinc-700">{tips.length} inzichten</span>
+        <h3 className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">AI Optimisation Tips</h3>
+        <span className="ml-auto text-[10px] text-zinc-700">{tips.length} insights</span>
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {tips.map((tip, i) => {

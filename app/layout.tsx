@@ -6,7 +6,7 @@ import LayoutShell from "./components/LayoutShell";
 const geist = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Sentinel — AI Commerce OS",
+  title: "TSecom — AI Commerce OS",
   description: "Multi-store ecommerce analytics dashboard",
 };
 

@@ -1,87 +1,117 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Box, Check, ChevronLeft, Search, TrendingUp, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  AlertTriangle, ArrowUpDown, Check, CheckCircle2,
+  RotateCcw, Search, TrendingUp, X, XCircle,
+} from "lucide-react";
+import { DateRangePicker, DateRange, initRange, toQueryString } from "../components/DateRangePicker";
 
 const API = "https://sentinel-api.tssheets1.workers.dev";
-
-type Product = {
-  product_title: string;
-  total_sold: number;
-  total_revenue: number;
-  cost: number;
-  updated_at: string | null;
-};
-
 const STORES = [
-  { key: "ceofo", name: "CEOFO" },
+  { key: "ceofo",     name: "CEOFO" },
   { key: "martaline", name: "Martaline" },
 ];
 
+type Product = {
+  product_title: string;
+  sold: number;
+  revenue: number;
+  net_revenue: number;
+  cost: number;
+  cost_updated_at: string | null;
+  total_cost: number;
+  gross_margin: number | null;
+  profit: number | null;
+  return_count: number;
+  return_amount: number;
+  return_rate: number;
+  ad_spend: number;
+  ad_clicks: number;
+  ad_impressions: number;
+  roas: number | null;
+};
+
+type SortKey =
+  | "revenue" | "net_revenue" | "sold" | "gross_margin"
+  | "profit" | "return_rate" | "ad_spend" | "roas";
+
+function f2(n: number) {
+  return n.toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function statusBadge(p: Product) {
+  if (p.return_rate > 20)
+    return <span className="flex items-center gap-1 text-red-400 text-[10px] font-semibold"><XCircle size={11} /> High returns</span>;
+  if (p.ad_spend > 20 && (p.roas ?? 0) < 1.5)
+    return <span className="flex items-center gap-1 text-red-400 text-[10px] font-semibold"><XCircle size={11} /> Kill signal</span>;
+  if ((p.gross_margin ?? 100) > 0 && (p.gross_margin ?? 100) < 20)
+    return <span className="flex items-center gap-1 text-amber-400 text-[10px] font-semibold"><AlertTriangle size={11} /> Low margin</span>;
+  if ((p.gross_margin ?? 0) >= 50)
+    return <span className="flex items-center gap-1 text-emerald-400 text-[10px] font-semibold"><CheckCircle2 size={11} /> Top</span>;
+  return null;
+}
+
+function rowBg(p: Product) {
+  if (p.return_rate > 20 || (p.ad_spend > 20 && (p.roas ?? 0) < 1.5)) return "border-l-2 border-red-500 bg-red-950/20";
+  if ((p.gross_margin ?? 100) > 0 && (p.gross_margin ?? 100) < 20) return "border-l-2 border-amber-500 bg-amber-950/10";
+  if ((p.gross_margin ?? 0) >= 50) return "border-l-2 border-emerald-600 bg-emerald-950/10";
+  return "";
+}
+
 export default function ProductInsightsPage() {
-  const [storeId, setStoreId] = useState("martaline");
+  const [storeId, setStoreId]   = useState("martaline");
+  const [dateRange, setDateRange] = useState<DateRange>(initRange("all"));
   const [products, setProducts] = useState<Product[]>([]);
-  const [filtered, setFiltered] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [search, setSearch] = useState("");
-  const [saving, setSaving] = useState<string | null>(null);
-  const [saved, setSaved] = useState<string | null>(null);
-  const [editingCosts, setEditingCosts] = useState<Record<string, string>>({});
+  const [loading, setLoading]   = useState(false);
+  const [search, setSearch]     = useState("");
+  const [sort, setSort]         = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "revenue", dir: "desc" });
+
+  // Cost editing
+  const [editCosts, setEditCosts]   = useState<Record<string, string>>({});
+  const [saving, setSaving]         = useState<string | null>(null);
+  const [saved, setSaved]           = useState<string | null>(null);
   const [bulkSaving, setBulkSaving] = useState(false);
-  const [sortBy, setSortBy] = useState<"revenue" | "margin" | "sold">("revenue");
-  // suppress unused ref warning
-  const _ref = useRef(null);
-  void _ref;
 
   async function load() {
     setLoading(true);
-    const res = await fetch(`${API}/api/product-costs?store_id=${storeId}`, { cache: "no-store" });
-    const data = await res.json();
-    setProducts(data.products || []);
-    setLoading(false);
+    try {
+      const dq = toQueryString(dateRange);
+      const res = await fetch(`${API}/api/products/stats?store_id=${storeId}&${dq}`, { cache: "no-store" });
+      const d = await res.json() as { products?: Product[] };
+      setProducts(d.products ?? []);
+    } finally { setLoading(false); }
   }
 
-  useEffect(() => { load(); }, [storeId]);
+  useEffect(() => { load(); }, [storeId, dateRange]);
 
-  useEffect(() => {
-    let list = [...products];
-    if (search) list = list.filter(p => p.product_title.toLowerCase().includes(search.toLowerCase()));
-    list.sort((a, b) => {
-      if (sortBy === "revenue") return b.total_revenue - a.total_revenue;
-      if (sortBy === "sold") return b.total_sold - a.total_sold;
-      const costA = editingCosts[a.product_title] !== undefined ? parseFloat(editingCosts[a.product_title].replace(",", ".")) || 0 : a.cost;
-      const costB = editingCosts[b.product_title] !== undefined ? parseFloat(editingCosts[b.product_title].replace(",", ".")) || 0 : b.cost;
-      const mA = a.total_revenue > 0 && costA > 0 ? ((a.total_revenue - costA * a.total_sold) / a.total_revenue) * 100 : 999;
-      const mB = b.total_revenue > 0 && costB > 0 ? ((b.total_revenue - costB * b.total_sold) / b.total_revenue) * 100 : 999;
-      return mA - mB;
-    });
-    setFiltered(list);
-  }, [products, search, sortBy, editingCosts]);
-
-  function setCostInput(title: string, val: string) {
-    setEditingCosts(prev => ({ ...prev, [title]: val }));
-  }
-
-  async function saveCost(product_title: string) {
-    const raw = editingCosts[product_title];
+  async function saveCost(title: string) {
+    const raw = editCosts[title];
     if (raw === undefined) return;
     const cost = parseFloat(raw.replace(",", ".")) || 0;
-    setSaving(product_title);
+    setSaving(title);
     await fetch(`${API}/api/product-costs`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ store_id: storeId, product_title, cost }),
+      body: JSON.stringify({ store_id: storeId, product_title: title, cost }),
     });
-    setProducts(prev => prev.map(p => p.product_title === product_title ? { ...p, cost, updated_at: new Date().toISOString() } : p));
-    setEditingCosts(prev => { const n = { ...prev }; delete n[product_title]; return n; });
+    setProducts(prev => prev.map(p => p.product_title === title ? {
+      ...p,
+      cost,
+      total_cost: cost * p.sold,
+      gross_margin: p.net_revenue > 0 && cost > 0 ? ((p.net_revenue - cost * p.sold) / p.net_revenue) * 100 : null,
+      profit: cost > 0 ? p.net_revenue - cost * p.sold - p.ad_spend : null,
+      cost_updated_at: new Date().toISOString(),
+    } : p));
+    setEditCosts(prev => { const n = { ...prev }; delete n[title]; return n; });
     setSaving(null);
-    setSaved(product_title);
+    setSaved(title);
     setTimeout(() => setSaved(null), 2000);
   }
 
   async function saveAll() {
-    const changed = Object.entries(editingCosts).filter(([, v]) => v !== "");
-    if (changed.length === 0) return;
+    const changed = Object.entries(editCosts).filter(([, v]) => v !== "");
+    if (!changed.length) return;
     setBulkSaving(true);
     const items = changed.map(([product_title, raw]) => ({
       store_id: storeId,
@@ -94,170 +124,268 @@ export default function ProductInsightsPage() {
       body: JSON.stringify({ items }),
     });
     await load();
-    setEditingCosts({});
+    setEditCosts({});
     setBulkSaving(false);
   }
 
-  const totalRevenue = filtered.reduce((s, p) => s + p.total_revenue, 0);
-  const totalCost = filtered.reduce((s, p) => s + p.cost * p.total_sold, 0);
-  const totalProfit = totalRevenue - totalCost;
-  const avgMargin = totalRevenue > 0 && totalCost > 0 ? (totalProfit / totalRevenue) * 100 : 0;
-  const pendingChanges = Object.keys(editingCosts).length;
+  function toggleSort(key: SortKey) {
+    setSort(prev => prev.key === key ? { key, dir: prev.dir === "desc" ? "asc" : "desc" } : { key, dir: "desc" });
+  }
+
+  function SortBtn({ k }: { k: SortKey }) {
+    const active = sort.key === k;
+    return (
+      <button onClick={() => toggleSort(k)} className={`ml-1 transition-opacity ${active ? "opacity-100 text-blue-400" : "opacity-30 hover:opacity-70"}`}>
+        <ArrowUpDown size={10} />
+      </button>
+    );
+  }
+
+  const filtered = [...products]
+    .filter(p => !search || p.product_title.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      const va = (a[sort.key] ?? -999) as number;
+      const vb = (b[sort.key] ?? -999) as number;
+      return sort.dir === "desc" ? vb - va : va - vb;
+    });
+
+  // Summary totals
+  const totalRevenue  = filtered.reduce((s, p) => s + p.revenue, 0);
+  const totalNet      = filtered.reduce((s, p) => s + p.net_revenue, 0);
+  const totalReturns  = filtered.reduce((s, p) => s + p.return_amount, 0);
+  const totalAdSpend  = filtered.reduce((s, p) => s + p.ad_spend, 0);
+  const totalCost     = filtered.reduce((s, p) => s + p.total_cost, 0);
+  const totalProfit   = totalNet - totalCost - totalAdSpend;
+  const avgMargin     = totalNet > 0 && totalCost > 0 ? ((totalNet - totalCost) / totalNet) * 100 : 0;
+  const pendingChanges = Object.keys(editCosts).length;
 
   return (
-    <div className="min-h-screen bg-[#07070b] text-white p-8">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex items-center gap-3 mb-8">
-          <a href="/" className="h-9 w-9 rounded-xl bg-[#111118] border border-white/8 flex items-center justify-center text-zinc-500 hover:text-white transition">
-            <ChevronLeft size={16} />
-          </a>
-          <div>
-            <h1 className="text-2xl font-black">Product Insights</h1>
-            <p className="text-sm text-zinc-500">Vul inkooprijs in — marge & winst updaten automatisch</p>
-          </div>
-          <div className="ml-auto flex items-center gap-3">
-            <select
-              value={storeId}
-              onChange={e => { setStoreId(e.target.value); setEditingCosts({}); }}
-              className="bg-[#111118] border border-white/8 rounded-xl px-3 py-2 text-sm text-white"
-            >
-              {STORES.map(s => <option key={s.key} value={s.key}>{s.name}</option>)}
-            </select>
-            {pendingChanges > 0 && (
-              <button onClick={saveAll} disabled={bulkSaving} className="h-9 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-sm font-semibold flex items-center gap-2 transition">
-                {bulkSaving ? "Opslaan..." : `Sla alles op (${pendingChanges})`}
+    <div className="p-6 space-y-6 min-h-screen">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-black tracking-tight flex items-center gap-2">
+            <TrendingUp size={22} className="text-blue-400" /> Product Stats
+          </h1>
+          <p className="text-zinc-500 text-sm mt-0.5">All stats per product — revenue, returns, margin, ad spend</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {pendingChanges > 0 && (
+            <button onClick={saveAll} disabled={bulkSaving} className="h-9 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-semibold transition flex items-center gap-1.5">
+              {bulkSaving ? "Saving..." : `Save cost (${pendingChanges})`}
+            </button>
+          )}
+          <DateRangePicker value={dateRange} onChange={setDateRange} />
+          {/* Store */}
+          <div className="flex gap-1 bg-white/5 rounded-xl p-1">
+            {STORES.map(s => (
+              <button key={s.key} onClick={() => { setStoreId(s.key); setEditCosts({}); }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${storeId === s.key ? "bg-blue-600 text-white" : "text-zinc-400 hover:text-white"}`}>
+                {s.name}
               </button>
-            )}
-          </div>
-        </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-4 gap-4 mb-7">
-          {[
-            { label: "Totale omzet", value: `€${totalRevenue.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}` },
-            { label: "Totale inkoopkosten", value: totalCost > 0 ? `€${totalCost.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}` : "—", dim: totalCost === 0 },
-            { label: "Netto winst", value: totalCost > 0 ? `€${totalProfit.toLocaleString("nl-NL", { minimumFractionDigits: 2 })}` : "—", color: totalProfit > 0 ? "text-emerald-400" : totalProfit < 0 ? "text-red-400" : "", dim: totalCost === 0 },
-            { label: "Gem. marge", value: avgMargin > 0 ? `${avgMargin.toFixed(1)}%` : "—", dim: totalCost === 0 },
-          ].map(s => (
-            <div key={s.label} className="rounded-2xl bg-[#111118] border border-white/8 p-4">
-              <p className="text-[10px] text-zinc-600 uppercase tracking-widest mb-2">{s.label}</p>
-              <p className={`text-xl font-black ${s.color ?? ""} ${s.dim ? "opacity-30" : ""}`}>{s.value}</p>
-              {s.dim && <p className="text-[10px] text-zinc-700 mt-1">Vul inkooprijs in</p>}
-            </div>
-          ))}
-        </div>
-
-        {/* Filter */}
-        <div className="flex items-center gap-3 mb-5">
-          <div className="relative flex-1 max-w-sm">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Zoek product..."
-              className="w-full bg-[#111118] border border-white/8 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-zinc-700 outline-none focus:border-blue-500/50"
-            />
-            {search && <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-white"><X size={13} /></button>}
-          </div>
-          <div className="flex gap-1 bg-[#111118] border border-white/8 rounded-xl p-1">
-            {([["revenue", "Omzet"], ["sold", "Verkopen"], ["margin", "Laagste marge"]] as const).map(([s, l]) => (
-              <button key={s} onClick={() => setSortBy(s)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${sortBy === s ? "bg-blue-600 text-white" : "text-zinc-500 hover:text-white"}`}>{l}</button>
             ))}
           </div>
-          <p className="text-xs text-zinc-600">{filtered.length} producten</p>
         </div>
+      </div>
 
-        {/* Table */}
-        <div className="rounded-3xl bg-[#111118] border border-white/8 overflow-hidden">
-          <div className="grid grid-cols-[1fr_70px_90px_110px_100px_140px_44px] border-b border-white/5">
-            {["Product", "Verkopen", "Omzet", "Inkoop/stuk", "Tot. inkoop", "Marge & winst", ""].map(h => (
-              <div key={h} className="px-4 py-3 text-[10px] text-zinc-600 uppercase tracking-widest font-semibold">{h}</div>
-            ))}
+      {/* Summary cards */}
+      <div className="grid grid-cols-6 gap-3">
+        {[
+          { label: "Gross revenue",  value: `€${f2(totalRevenue)}`,   color: "" },
+          { label: "Returns",        value: totalReturns > 0 ? `-€${f2(totalReturns)}` : "€0,00", color: totalReturns > 0 ? "text-red-400" : "" },
+          { label: "Net revenue",    value: `€${f2(totalNet)}`,       color: "" },
+          { label: "Total cost",     value: totalCost > 0 ? `€${f2(totalCost)}` : "—", color: "" },
+          { label: "Ad spend",       value: totalAdSpend > 0 ? `€${f2(totalAdSpend)}` : "—", color: "" },
+          { label: avgMargin > 0 ? `Margin ${avgMargin.toFixed(1)}%` : "Profit",
+            value: totalCost > 0 ? `€${f2(totalProfit)}` : "—",
+            color: totalProfit > 0 ? "text-emerald-400" : totalProfit < 0 ? "text-red-400" : "" },
+        ].map(c => (
+          <div key={c.label} className="rounded-2xl bg-white/3 border border-white/5 p-4">
+            <p className="text-[10px] text-zinc-600 uppercase tracking-widest mb-2">{c.label}</p>
+            <p className={`text-lg font-black ${c.color}`}>{c.value}</p>
           </div>
+        ))}
+      </div>
 
-          {loading ? (
-            <div className="p-8 space-y-3">{[...Array(8)].map((_, i) => <div key={i} className="h-12 rounded-xl bg-white/4 animate-pulse" />)}</div>
-          ) : filtered.length === 0 ? (
-            <div className="p-12 flex flex-col items-center text-zinc-700">
-              <Box size={28} className="mb-2 opacity-40" />
-              <p className="text-sm">{search ? "Geen producten gevonden" : "Nog geen verkopen"}</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-white/5">
-              {filtered.map(p => {
-                const inputVal = editingCosts[p.product_title];
-                const currentCost = inputVal !== undefined
-                  ? (parseFloat(inputVal.replace(",", ".")) || 0)
-                  : p.cost;
-                const totalCostItem = currentCost * p.total_sold;
-                const profit = p.total_revenue - totalCostItem;
-                const margin = p.total_revenue > 0 && currentCost > 0 ? (profit / p.total_revenue) * 100 : null;
-                const isEditing = inputVal !== undefined;
-                const isSaved = saved === p.product_title;
-                const isSaving = saving === p.product_title;
-                const marginColor = margin === null ? "" : margin >= 60 ? "text-emerald-400" : margin >= 40 ? "text-yellow-400" : margin > 0 ? "text-orange-400" : "text-red-400";
+      {/* Search */}
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-sm">
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search product..."
+            className="w-full bg-white/4 border border-white/8 rounded-xl pl-9 pr-4 py-2 text-sm text-white placeholder-zinc-700 outline-none focus:border-blue-500/50"
+          />
+          {search && <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-white"><X size={12} /></button>}
+        </div>
+        <p className="text-xs text-zinc-600">{filtered.length} products</p>
+      </div>
+
+      {/* Table */}
+      {loading ? (
+        <div className="space-y-2">{[...Array(8)].map((_, i) => <div key={i} className="h-14 rounded-xl bg-white/4 animate-pulse" />)}</div>
+      ) : (
+        <div className="rounded-2xl bg-white/3 border border-white/5 overflow-x-auto">
+          <table className="w-full text-xs min-w-[1000px]">
+            <thead>
+              <tr className="border-b border-white/5 text-zinc-500">
+                <th className="text-left px-4 py-3 font-medium">Product</th>
+                <th className="text-right px-3 py-3 font-medium whitespace-nowrap">
+                  Units sold <SortBtn k="sold" />
+                </th>
+                <th className="text-right px-3 py-3 font-medium whitespace-nowrap">
+                  Revenue <SortBtn k="revenue" />
+                </th>
+                <th className="text-right px-3 py-3 font-medium whitespace-nowrap">
+                  Returns <SortBtn k="return_rate" />
+                </th>
+                <th className="text-right px-3 py-3 font-medium whitespace-nowrap">
+                  Net revenue <SortBtn k="net_revenue" />
+                </th>
+                <th className="text-center px-3 py-3 font-medium whitespace-nowrap">Cost/unit</th>
+                <th className="text-right px-3 py-3 font-medium whitespace-nowrap">
+                  Margin <SortBtn k="gross_margin" />
+                </th>
+                <th className="text-right px-3 py-3 font-medium whitespace-nowrap">
+                  Profit <SortBtn k="profit" />
+                </th>
+                <th className="text-right px-3 py-3 font-medium whitespace-nowrap">
+                  Ad spend <SortBtn k="ad_spend" />
+                </th>
+                <th className="text-right px-3 py-3 font-medium whitespace-nowrap">
+                  ROAS <SortBtn k="roas" />
+                </th>
+                <th className="text-left px-3 py-3 font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr><td colSpan={11} className="text-center py-12 text-zinc-600">No products in this period</td></tr>
+              ) : filtered.map(p => {
+                const inputVal   = editCosts[p.product_title];
+                const costNow    = inputVal !== undefined ? parseFloat(inputVal.replace(",", ".")) || 0 : p.cost;
+                const isEditing  = inputVal !== undefined;
+                const isSaved    = saved === p.product_title;
+                const isSaving   = saving === p.product_title;
+
+                // Live-compute margin & profit if editing cost
+                const liveMargin = p.net_revenue > 0 && costNow > 0
+                  ? ((p.net_revenue - costNow * p.sold) / p.net_revenue) * 100
+                  : p.gross_margin;
+                const liveProfit = costNow > 0
+                  ? p.net_revenue - costNow * p.sold - p.ad_spend
+                  : p.profit;
+
+                const marginColor = liveMargin === null ? "text-zinc-600" :
+                  liveMargin >= 50 ? "text-emerald-400" :
+                  liveMargin >= 30 ? "text-yellow-400" :
+                  liveMargin >= 0  ? "text-orange-400" : "text-red-400";
 
                 return (
-                  <div key={p.product_title} className={`grid grid-cols-[1fr_70px_90px_110px_100px_140px_44px] items-center hover:bg-white/2 transition ${isEditing ? "bg-blue-600/4" : ""}`}>
-                    <div className="px-4 py-3 min-w-0">
-                      <p className="text-sm font-medium truncate">{p.product_title}</p>
-                      {p.cost > 0 && !isEditing && <p className="text-[10px] text-zinc-600 mt-0.5">inkoop €{p.cost.toFixed(2)}</p>}
-                    </div>
-                    <div className="px-4 py-3 text-sm text-zinc-400">{p.total_sold}x</div>
-                    <div className="px-4 py-3 text-sm font-semibold">€{p.total_revenue.toFixed(2)}</div>
+                  <tr key={p.product_title}
+                    className={`border-b border-white/5 hover:bg-white/4 transition-colors ${rowBg(p)} ${isEditing ? "bg-blue-950/20" : ""}`}>
 
-                    <div className="px-3 py-3">
-                      <div className="relative">
-                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-zinc-600">€</span>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={inputVal ?? (p.cost > 0 ? p.cost.toFixed(2) : "")}
-                          onChange={e => setCostInput(p.product_title, e.target.value)}
-                          onKeyDown={e => { if (e.key === "Enter") saveCost(p.product_title); }}
-                          placeholder="0.00"
-                          className="w-full bg-white/6 border border-white/8 rounded-lg pl-6 pr-2 py-1.5 text-xs text-white placeholder-zinc-700 outline-none focus:border-blue-500/50 focus:bg-blue-600/8"
-                        />
-                      </div>
-                    </div>
+                    {/* Product title */}
+                    <td className="px-4 py-3 max-w-[240px]">
+                      <p className="font-medium text-[11px] leading-snug line-clamp-2">{p.product_title}</p>
+                    </td>
 
-                    <div className="px-4 py-3 text-sm text-zinc-500">
-                      {currentCost > 0 ? `€${totalCostItem.toFixed(2)}` : <span className="text-zinc-700">—</span>}
-                    </div>
+                    {/* Sold */}
+                    <td className="px-3 py-3 text-right text-zinc-300">{p.sold}x</td>
 
-                    <div className="px-4 py-3">
-                      {margin !== null ? (
+                    {/* Gross revenue */}
+                    <td className="px-3 py-3 text-right font-semibold">€{f2(p.revenue)}</td>
+
+                    {/* Returns */}
+                    <td className="px-3 py-3 text-right">
+                      {p.return_count > 0 ? (
                         <div>
-                          <div className="flex items-center gap-1.5">
-                            <TrendingUp size={11} className={marginColor} />
-                            <span className={`text-sm font-bold ${marginColor}`}>{margin.toFixed(1)}%</span>
-                          </div>
-                          <p className="text-[10px] text-zinc-600 mt-0.5">€{profit.toFixed(2)} winst</p>
+                          <span className={`font-semibold ${p.return_rate > 20 ? "text-red-400" : p.return_rate > 10 ? "text-amber-400" : "text-zinc-400"}`}>
+                            {p.return_count}x
+                          </span>
+                          <span className="text-zinc-600 ml-1">({p.return_rate.toFixed(0)}%)</span>
+                          <div className="text-zinc-600 text-[10px]">−€{f2(p.return_amount)}</div>
                         </div>
-                      ) : (
-                        <span className="text-[10px] text-zinc-700">Vul inkoop in →</span>
-                      )}
-                    </div>
+                      ) : <span className="text-zinc-700">—</span>}
+                    </td>
 
-                    <div className="px-2 py-3 flex justify-center">
-                      {isSaved ? (
-                        <div className="w-7 h-7 rounded-lg bg-emerald-600/20 flex items-center justify-center">
-                          <Check size={12} className="text-emerald-400" />
+                    {/* Net revenue */}
+                    <td className="px-3 py-3 text-right font-semibold text-blue-300">
+                      {p.return_count > 0 ? `€${f2(p.net_revenue)}` : <span className="text-zinc-400">€{f2(p.revenue)}</span>}
+                    </td>
+
+                    {/* Cost input */}
+                    <td className="px-3 py-3">
+                      <div className="flex items-center gap-1.5">
+                        <div className="relative">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-600 text-[10px]">€</span>
+                          <input
+                            type="number" step="0.01" min="0"
+                            value={inputVal ?? (p.cost > 0 ? p.cost.toFixed(2) : "")}
+                            onChange={e => setEditCosts(prev => ({ ...prev, [p.product_title]: e.target.value }))}
+                            onKeyDown={e => e.key === "Enter" && saveCost(p.product_title)}
+                            placeholder="0.00"
+                            className="w-20 bg-white/6 border border-white/8 rounded-lg pl-5 pr-2 py-1 text-[11px] text-white placeholder-zinc-700 outline-none focus:border-blue-500/50"
+                          />
                         </div>
-                      ) : isEditing ? (
-                        <button onClick={() => saveCost(p.product_title)} disabled={isSaving} className="w-7 h-7 rounded-lg bg-blue-600 hover:bg-blue-500 flex items-center justify-center transition">
-                          {isSaving ? <span className="text-[9px]">...</span> : <Check size={12} />}
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
+                        {isSaved ? (
+                          <div className="w-6 h-6 rounded-lg bg-emerald-600/20 flex items-center justify-center shrink-0">
+                            <Check size={10} className="text-emerald-400" />
+                          </div>
+                        ) : isEditing ? (
+                          <button onClick={() => saveCost(p.product_title)} disabled={isSaving}
+                            className="w-6 h-6 rounded-lg bg-blue-600 hover:bg-blue-500 flex items-center justify-center shrink-0 transition">
+                            {isSaving ? <span className="text-[8px]">…</span> : <Check size={10} />}
+                          </button>
+                        ) : null}
+                      </div>
+                    </td>
+
+                    {/* Margin */}
+                    <td className="px-3 py-3 text-right">
+                      {liveMargin !== null ? (
+                        <span className={`font-bold ${marginColor}`}>{liveMargin.toFixed(1)}%</span>
+                      ) : <span className="text-zinc-700">—</span>}
+                    </td>
+
+                    {/* Profit */}
+                    <td className="px-3 py-3 text-right">
+                      {liveProfit !== null ? (
+                        <span className={`font-semibold ${liveProfit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                          €{f2(liveProfit)}
+                        </span>
+                      ) : <span className="text-zinc-700">—</span>}
+                    </td>
+
+                    {/* Ad spend */}
+                    <td className="px-3 py-3 text-right">
+                      {p.ad_spend > 0 ? (
+                        <span className="text-red-300">€{f2(p.ad_spend)}</span>
+                      ) : <span className="text-zinc-700">—</span>}
+                    </td>
+
+                    {/* ROAS */}
+                    <td className="px-3 py-3 text-right">
+                      {p.roas !== null ? (
+                        <span className={`font-bold ${p.roas >= 3 ? "text-emerald-400" : p.roas >= 1.5 ? "text-amber-400" : "text-red-400"}`}>
+                          {p.roas.toFixed(2)}x
+                        </span>
+                      ) : <span className="text-zinc-700">—</span>}
+                    </td>
+
+                    {/* Status */}
+                    <td className="px-3 py-3">{statusBadge(p)}</td>
+                  </tr>
                 );
               })}
-            </div>
-          )}
+            </tbody>
+          </table>
         </div>
-        <p className="text-[11px] text-zinc-700 mt-4 text-center">Druk op Enter of ✓ om per product op te slaan · "Sla alles op" voor bulk · Marge update live</p>
+      )}
+
+      <div className="flex items-center gap-4 text-[11px] text-zinc-700 pb-4">
+        <span className="flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-sm bg-emerald-600" /> Margin ≥50%</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-sm bg-amber-500" /> Low margin &lt;20%</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block w-2 h-2 rounded-sm bg-red-500" /> Kill signal or high returns</span>
+        <span className="flex items-center gap-1.5"><RotateCcw size={10} /> Enter cost → margin &amp; profit update live</span>
       </div>
     </div>
   );
