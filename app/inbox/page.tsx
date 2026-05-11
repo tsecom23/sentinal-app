@@ -1065,7 +1065,7 @@ export default function InboxPage() {
                               disabled={!!isBusy}
                               className="flex-1 flex items-center justify-center gap-1 py-1 rounded-lg text-[10px] font-semibold text-zinc-400 bg-white/5 hover:bg-white/10 disabled:opacity-40 transition-all"
                             >
-                              Annuleren
+                              Cancel
                             </button>
                           </div>
                         )}
@@ -1146,13 +1146,13 @@ export default function InboxPage() {
 
             {showNewCanned ? (
               <div className="space-y-2">
-                <input value={newCannedTitle} onChange={e => setNewCannedTitle(e.target.value)} placeholder="Template naam"
+                <input value={newCannedTitle} onChange={e => setNewCannedTitle(e.target.value)} placeholder="Template name"
                   className="w-full bg-white/5 border border-white/8 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-zinc-600 outline-none focus:border-blue-500/40" />
-                <textarea value={newCannedBody} onChange={e => setNewCannedBody(e.target.value)} placeholder="Inhoud…" rows={4}
+                <textarea value={newCannedBody} onChange={e => setNewCannedBody(e.target.value)} placeholder="Content…" rows={4}
                   className="w-full bg-white/5 border border-white/8 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-zinc-600 outline-none focus:border-blue-500/40 resize-none" />
                 <div className="flex gap-1.5">
                   <button onClick={saveCanned} className="flex-1 bg-blue-600 hover:bg-blue-500 transition-all rounded-lg py-1.5 text-xs font-semibold">Save</button>
-                  <button onClick={() => setShowNewCanned(false)} className="flex-1 bg-white/5 hover:bg-white/10 transition-all rounded-lg py-1.5 text-xs text-zinc-400">Annuleren</button>
+                  <button onClick={() => setShowNewCanned(false)} className="flex-1 bg-white/5 hover:bg-white/10 transition-all rounded-lg py-1.5 text-xs text-zinc-400">Cancel</button>
                 </div>
               </div>
             ) : (
@@ -1172,7 +1172,7 @@ export default function InboxPage() {
               ))}
               {accounts.length === 0 && <p className="text-[11px] text-zinc-600">No accounts connected</p>}
               <button onClick={() => setShowConnect(true)} className="w-full bg-white/5 hover:bg-white/10 transition-all rounded-xl py-2 text-xs font-medium text-zinc-400 hover:text-white">
-                + Account koppelen
+                + Connect account
               </button>
             </div>
           </div>

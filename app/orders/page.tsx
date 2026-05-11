@@ -6,12 +6,9 @@ import {
   Search, ShoppingCart, TrendingUp, X,
 } from "lucide-react";
 import { DateRangePicker, DateRange, initRange, toQueryString } from "../components/DateRangePicker";
+import { useStores } from "../hooks/useStores";
 
 const API = "https://sentinel-api.tssheets1.workers.dev";
-const STORES = [
-  { key: "ceofo",     name: "CEOFO" },
-  { key: "martaline", name: "Martaline" },
-];
 
 interface OrderItem {
   product_title: string;
@@ -63,6 +60,7 @@ function formatDate(iso: string) {
 }
 
 export default function OrdersPage() {
+  const { stores } = useStores();
   const [storeId, setStoreId]     = useState("martaline");
   const [dateRange, setDateRange] = useState<DateRange>(initRange("7d"));
   const [orders, setOrders]       = useState<Order[]>([]);
@@ -137,9 +135,9 @@ export default function OrdersPage() {
         <div className="flex items-center gap-3 flex-wrap">
           <DateRangePicker value={dateRange} onChange={setDateRange} />
           <div className="flex gap-1 bg-white/5 rounded-xl p-1">
-            {STORES.map(s => (
-              <button key={s.key} onClick={() => setStoreId(s.key)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${storeId === s.key ? "bg-blue-600 text-white" : "text-zinc-400 hover:text-white"}`}>
+            {stores.map(s => (
+              <button key={s.id} onClick={() => setStoreId(s.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${storeId === s.id ? "bg-blue-600 text-white" : "text-zinc-400 hover:text-white"}`}>
                 {s.name}
               </button>
             ))}

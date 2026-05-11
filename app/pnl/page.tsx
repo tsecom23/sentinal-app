@@ -260,7 +260,7 @@ export default function PnLPage() {
                           <span className={`text-sm font-semibold ${isCurrent ? "text-blue-300" : active ? "text-zinc-200" : "text-zinc-700"}`}>
                             {MONTH_NAMES[i]}
                           </span>
-                          {isCurrent && <span className="text-[9px] bg-blue-500/20 text-blue-400 rounded px-1.5 py-0.5 font-bold">NU</span>}
+                          {isCurrent && <span className="text-[9px] bg-blue-500/20 text-blue-400 rounded px-1.5 py-0.5 font-bold">NOW</span>}
                         </div>
                         {/* Orders */}
                         <span className={`text-sm text-right tabular-nums ${active ? "text-zinc-300" : "text-zinc-700"}`}>
@@ -285,7 +285,7 @@ export default function PnLPage() {
                         <div className="mx-4 mb-2 rounded-xl bg-black/20 border border-white/5 overflow-hidden">
                           {[
                             { label: "Gross Revenue",    value: fmt(m.gross_revenue),                                 color: "text-zinc-300" },
-                            { label: "Retouren",        value: m.return_amount > 0 ? `−${fmt(m.return_amount)}` : "—", color: "text-red-400" },
+                            { label: "Returns",          value: m.return_amount > 0 ? `−${fmt(m.return_amount)}` : "—", color: "text-red-400" },
                             { label: "Ad Spend", value: m.ad_spend > 0 ? `−${fmt(m.ad_spend)}` : "—",      color: "text-red-400" },
                             { label: "Product Costs",   value: m.product_cost > 0 ? `−${fmt(m.product_cost)}` : "—", color: "text-amber-400" },
                             { label: "Fixed Costs",    value: m.overhead > 0 ? `−${fmt(m.overhead)}` : "—",        color: "text-purple-400" },
@@ -306,7 +306,7 @@ export default function PnLPage() {
             {/* Totals */}
             {totals && !loading && (
               <div className="border-t border-white/10 grid grid-cols-[2fr_1fr_1fr_1fr_1fr] px-4 py-3 bg-white/2">
-                <span className="text-xs font-bold text-zinc-300 pl-5">Totaal {year}</span>
+                <span className="text-xs font-bold text-zinc-300 pl-5">Total {year}</span>
                 <span className="text-xs font-bold text-zinc-300 text-right tabular-nums">{totals.orders}</span>
                 <span className="text-xs font-bold text-zinc-200 text-right tabular-nums">{fmt(totals.net_revenue)}</span>
                 <span className={`text-xs font-bold text-right tabular-nums ${totals.profit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
@@ -333,7 +333,7 @@ export default function PnLPage() {
               onClick={() => { setShowAdd(true); setEditId(null); }}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-all"
             >
-              <Plus size={13} /> Kost toevoegen
+              <Plus size={13} /> Add cost
             </button>
           </div>
 
@@ -367,8 +367,8 @@ export default function PnLPage() {
                   value={draft.recurring}
                   onChange={e => setDraft(p => ({ ...p, recurring: e.target.value as "monthly" | "yearly" }))}
                 >
-                  <option value="monthly">Per maand</option>
-                  <option value="yearly">Per jaar (÷12)</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="yearly">Yearly (÷12)</option>
                 </select>
               </div>
               <div className="flex gap-2">
@@ -390,8 +390,8 @@ export default function PnLPage() {
           ) : costs.length === 0 && !showAdd ? (
             <div className="p-10 text-center space-y-2">
               <Receipt size={32} className="text-zinc-700 mx-auto" />
-              <p className="text-zinc-500 text-sm">Nog geen vaste kosten</p>
-              <p className="text-zinc-700 text-xs">Klik op &quot;Kost toevoegen&quot; om te beginnen</p>
+              <p className="text-zinc-500 text-sm">No fixed costs yet</p>
+              <p className="text-zinc-700 text-xs">Click &quot;Add cost&quot; to get started</p>
             </div>
           ) : (
             <>
@@ -442,9 +442,9 @@ export default function PnLPage() {
                         </span>
                         <span className="text-sm font-semibold text-purple-400 tabular-nums">{fmt(c.amount)}</span>
                         <div className="text-xs text-zinc-500">
-                          <span>{c.recurring === "yearly" ? "Per jaar" : "Per maand"}</span>
+                          <span>{c.recurring === "yearly" ? "Yearly" : "Monthly"}</span>
                           {c.recurring === "yearly" && (
-                            <span className="block text-zinc-700">= {fmt(c.amount / 12)}/mnd</span>
+                            <span className="block text-zinc-700">= {fmt(c.amount / 12)}/mo</span>
                           )}
                         </div>
                         <div className="flex items-center gap-1 justify-end">

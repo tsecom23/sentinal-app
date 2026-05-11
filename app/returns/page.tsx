@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle, ChevronLeft, Plus, RotateCcw, ShieldAlert, X } from "lucide-react";
+import { useStores } from "../hooks/useStores";
 
 const API = "https://sentinel-api.tssheets1.workers.dev";
 
@@ -28,7 +29,8 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function ReturnsPage() {
-  const [storeId] = useState("ceofo");
+  const { stores } = useStores();
+  const [storeId, setStoreId] = useState("ceofo");
   const [tab, setTab] = useState<"returns" | "disputes">("returns");
   const [returns, setReturns] = useState<Return[]>([]);
   const [disputes, setDisputes] = useState<Dispute[]>([]);
@@ -64,7 +66,7 @@ export default function ReturnsPage() {
     load();
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [storeId]); // eslint-disable-line
 
   return (
     <div className="min-h-screen bg-[#07070b] text-white p-8">
@@ -77,9 +79,19 @@ export default function ReturnsPage() {
             <h1 className="text-2xl font-black">Returns & Disputes</h1>
             <p className="text-sm text-zinc-500">Manage refunds, returns and customer disputes</p>
           </div>
-          <button onClick={() => setShowAdd(true)} className="ml-auto h-9 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-sm font-semibold flex items-center gap-2 transition">
+          <div className="ml-auto flex items-center gap-3">
+            <div className="flex gap-1 bg-white/5 rounded-xl p-1">
+              {stores.map(s => (
+                <button key={s.id} onClick={() => setStoreId(s.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${storeId === s.id ? "bg-blue-600 text-white" : "text-zinc-400 hover:text-white"}`}>
+                  {s.name}
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setShowAdd(true)} className="h-9 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-sm font-semibold flex items-center gap-2 transition">
             <Plus size={14} /> Add Return
-          </button>
+            </button>
+          </div>
         </div>
 
         {/* Stats */}

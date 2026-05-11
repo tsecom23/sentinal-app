@@ -2,12 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Users, Search, X } from "lucide-react";
+import { useStores } from "../hooks/useStores";
 
 const API = "https://sentinel-api.tssheets1.workers.dev";
-const STORES = [
-  { key: "ceofo",     name: "CEOFO" },
-  { key: "martaline", name: "Martaline" },
-];
 
 interface CustomerData {
   email: string;
@@ -61,6 +58,7 @@ function Badge({ count }: { count: number }) {
 }
 
 export default function CustomersPage() {
+  const { stores } = useStores();
   const [store, setStore]   = useState("ceofo");
   const [data, setData]     = useState<StatsResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -111,12 +109,12 @@ export default function CustomersPage() {
 
         {/* Store selector */}
         <div className="flex gap-1 bg-white/5 rounded-xl p-1">
-          {STORES.map(s => (
+          {stores.map(s => (
             <button
-              key={s.key}
-              onClick={() => setStore(s.key)}
+              key={s.id}
+              onClick={() => setStore(s.id)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                store === s.key ? "bg-blue-600 text-white" : "text-zinc-400 hover:text-white"
+                store === s.id ? "bg-blue-600 text-white" : "text-zinc-400 hover:text-white"
               }`}
             >
               {s.name}
