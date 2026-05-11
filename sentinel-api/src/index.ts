@@ -2273,46 +2273,55 @@ export default {
     }
 
     // ── GET /api/inbox/customer ──────────────────────────────────────────────
-    // Returns order history for a customer email from D1
     if (path === "/api/inbox/customer" && method === "GET") {
-      const storeId     = url.searchParams.get("store_id") ?? "";
-      const email       = url.searchParams.get("email") ?? "";
+      const storeId = url.searchParams.get("store_id") ?? "";
+      const email   = url.searchParams.get("email") ?? "";
       if (!email) return json({ customer: null }, 200);
 
-      const [ordersRes, ticketsRes] = await Promise.all([
+      const [ordersRes, ticketsRes, threadRes] = await Promise.all([
         env.DB.prepare(`
-          SELECT shopify_order_id, created_at, revenue, status
-          FROM orders
-          WHERE store_id=? AND LOWER(customer_email)=LOWER(?)
-            AND NOT EXISTS (
-              SELECT 1 FROM orders o2
-              WHERE o2.shopify_order_id = orders.shopify_order_id
-                AND o2.store_id = orders.store_id
-                AND o2.rowid < orders.rowid
-                AND orders.shopify_order_id IS NOT NULL
-                AND orders.shopify_order_id != ''
-            )
-          ORDER BY created_at DESC LIMIT 20
+          SELECT o.id, o.shopify_order_id, o.order_number, o.created_at, o.revenue, o.net_revenue, o.currency
+          FROM orders o
+          WHERE o.store_id=? AND LOWER(o.email)=LOWER(?)
+          GROUP BY COALESCE(o.shopify_order_id, o.id)
+          ORDER BY o.created_at DESC LIMIT 20
         `).bind(storeId, email).all(),
 
         env.DB.prepare(`
-          SELECT COUNT(*) as count FROM cs_tickets
+          SELECT id, subject, status, priority, created_at FROM cs_tickets
           WHERE store_id=? AND LOWER(customer_email)=LOWER(?)
+          ORDER BY created_at DESC LIMIT 5
+        `).bind(storeId, email).all(),
+
+        env.DB.prepare(`
+          SELECT customer_name FROM email_threads
+          WHERE store_id=? AND LOWER(customer_email)=LOWER(?) AND customer_name != ''
+          ORDER BY last_message_at DESC LIMIT 1
         `).bind(storeId, email).first(),
       ]);
 
       const orders = (ordersRes.results ?? []) as Record<string, unknown>[];
-      const totalOrders   = orders.length;
-      const totalSpend    = orders.reduce((s, o) => s + ((o.revenue as number) ?? 0), 0);
-      const ticketCount   = (ticketsRes as Record<string, number> | null)?.count ?? 0;
+      // Fetch items for each order
+      const ordersWithItems = await Promise.all(orders.map(async o => {
+        const itemsRes = await env.DB.prepare(
+          `SELECT product_title, variant_title, quantity, revenue FROM order_items WHERE order_id=? LIMIT 5`
+        ).bind(o.id ?? o.shopify_order_id).all();
+        return { ...o, items: itemsRes.results ?? [] };
+      }));
+
+      const tickets = (ticketsRes.results ?? []) as Record<string, unknown>[];
+      const customerName = (threadRes as Record<string, string> | null)?.customer_name ?? "";
+      const totalSpend = orders.reduce((s, o) => s + ((o.revenue as number) ?? 0), 0);
 
       return json({
         customer: {
           email,
-          total_orders: totalOrders,
-          total_spend:  totalSpend,
-          ticket_count: ticketCount,
-          orders,
+          name: customerName,
+          total_orders: orders.length,
+          total_spend: totalSpend,
+          ticket_count: tickets.length,
+          tickets,
+          orders: ordersWithItems,
         },
       });
     }
