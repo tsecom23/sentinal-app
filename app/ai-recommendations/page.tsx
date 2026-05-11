@@ -2,12 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Bot } from "lucide-react";
+import { useStores } from "../hooks/useStores";
 
 const API = "https://sentinel-api.tssheets1.workers.dev";
-const STORES = [
-  { key: "ceofo", name: "CEOFO" },
-  { key: "martaline", name: "Martaline" },
-];
 
 interface Insight {
   product_title: string;
@@ -67,29 +64,39 @@ function InsightCard({
         <LabelBadge label={item.label} />
       </div>
       <p className="text-zinc-400 text-xs leading-relaxed">{item.recommendation}</p>
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-zinc-500 pt-0.5">
-        <span>
-          <span className="text-zinc-300 font-medium">{item.sold}</span> sold
-        </span>
-        <span>
-          <span className="text-zinc-300 font-medium">€{fmt(item.revenue)}</span> revenue
-        </span>
-        <span>
-          <span className={`font-medium ${item.margin >= 30 ? "text-emerald-400" : item.margin >= 10 ? "text-amber-400" : "text-red-400"}`}>
+      <div className="grid grid-cols-3 gap-2 pt-1">
+        <div className="bg-white/4 rounded-lg px-2 py-1.5">
+          <p className="text-[9px] text-zinc-600 uppercase tracking-wide">Verkocht</p>
+          <p className="text-xs font-bold text-zinc-200">{item.sold}x</p>
+        </div>
+        <div className="bg-white/4 rounded-lg px-2 py-1.5">
+          <p className="text-[9px] text-zinc-600 uppercase tracking-wide">Revenue</p>
+          <p className="text-xs font-bold text-zinc-200">€{fmt(item.net_revenue)}</p>
+        </div>
+        <div className="bg-white/4 rounded-lg px-2 py-1.5">
+          <p className="text-[9px] text-zinc-600 uppercase tracking-wide">Marge</p>
+          <p className={`text-xs font-bold ${item.margin >= 30 ? "text-emerald-400" : item.margin >= 10 ? "text-amber-400" : "text-red-400"}`}>
             {item.margin.toFixed(1)}%
-          </span>{" "}
-          margin
-        </span>
-        {item.roas !== null ? (
-          <span>
-            <span className={`font-medium ${item.roas >= 3 ? "text-emerald-400" : item.roas >= 1.5 ? "text-amber-400" : "text-red-400"}`}>
-              {item.roas.toFixed(2)}x
-            </span>{" "}
-            ROAS
-          </span>
-        ) : (
-          <span className="text-zinc-700">No ROAS</span>
-        )}
+          </p>
+        </div>
+        <div className="bg-white/4 rounded-lg px-2 py-1.5">
+          <p className="text-[9px] text-zinc-600 uppercase tracking-wide">Ad spend</p>
+          <p className={`text-xs font-bold ${item.ad_spend > 0 ? "text-red-300" : "text-zinc-600"}`}>
+            {item.ad_spend > 0 ? `€${fmt(item.ad_spend)}` : "—"}
+          </p>
+        </div>
+        <div className="bg-white/4 rounded-lg px-2 py-1.5">
+          <p className="text-[9px] text-zinc-600 uppercase tracking-wide">ROAS</p>
+          <p className={`text-xs font-bold ${item.roas === null ? "text-zinc-600" : item.roas >= 3 ? "text-emerald-400" : item.roas >= 1.5 ? "text-amber-400" : "text-red-400"}`}>
+            {item.roas !== null ? `${item.roas.toFixed(2)}x` : "—"}
+          </p>
+        </div>
+        <div className="bg-white/4 rounded-lg px-2 py-1.5">
+          <p className="text-[9px] text-zinc-600 uppercase tracking-wide">Winst</p>
+          <p className={`text-xs font-bold ${item.profit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+            €{fmt(item.profit)}
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -106,6 +113,7 @@ function SkeletonCards({ count = 4 }: { count?: number }) {
 }
 
 export default function AIRecommendationsPage() {
+  const { stores } = useStores();
   const [storeId, setStoreId] = useState("martaline");
   const [insights, setInsights] = useState<Insight[]>([]);
   const [loading, setLoading] = useState(false);
@@ -155,12 +163,12 @@ export default function AIRecommendationsPage() {
         </div>
         {/* Store selector */}
         <div className="flex gap-1 bg-white/5 rounded-xl p-1">
-          {STORES.map((s) => (
+          {stores.map((s) => (
             <button
-              key={s.key}
-              onClick={() => setStoreId(s.key)}
+              key={s.id}
+              onClick={() => setStoreId(s.id)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                storeId === s.key
+                storeId === s.id
                   ? "bg-blue-600 text-white"
                   : "text-zinc-400 hover:text-white"
               }`}

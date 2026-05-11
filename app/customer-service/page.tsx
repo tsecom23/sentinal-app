@@ -2,21 +2,18 @@
 
 import { useEffect, useState } from "react";
 import {
-  AlertTriangle, BarChart2, CheckCircle2, ChevronDown,
-  Clock, Headphones, Loader2, Package, Plus,
-  Search, Trash2, TrendingDown, TrendingUp, X,
+  BarChart2, CheckCircle2, ChevronDown,
+  Headphones, Inbox, Loader2, Package, Plus,
+  Search, Tag, Trash2, TrendingDown, TrendingUp, X,
 } from "lucide-react";
 import {
   Bar, BarChart, CartesianGrid, Line, LineChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { DateRangePicker, DateRange, initRange, toQueryString } from "../components/DateRangePicker";
+import { useStores } from "../hooks/useStores";
 
 const API = "https://sentinel-api.tssheets1.workers.dev";
-const STORES = [
-  { key: "ceofo",     name: "CEOFO" },
-  { key: "martaline", name: "Martaline" },
-];
 
 const CATEGORIES: Record<string, { label: string; emoji: string; color: string }> = {
   not_received:  { label: "Not received",      emoji: "📦", color: "text-blue-400"    },
@@ -44,11 +41,14 @@ const STATUSES: Record<string, { label: string; color: string; bg: string }> = {
   closed:      { label: "Closed",      color: "text-zinc-500",    bg: "bg-zinc-800"        },
 };
 
+const PRESET_TAGS = ["retour","fraude","betaling","klacht","dringend","vip","dubbel","ophouden"];
+
 interface Ticket {
   id: string; store_id: string; order_number: string; customer_email: string;
   category: string; priority: string; status: string;
   subject: string; description: string; product_title: string;
-  resolution: string; created_at: string; updated_at: string; resolved_at: string;
+  resolution: string; tags: string; source: string; thread_id: string;
+  created_at: string; updated_at: string; resolved_at: string;
 }
 
 interface Stats {
@@ -84,8 +84,14 @@ function timeAgo(iso: string) {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
+function parseTags(raw: string | undefined): string[] {
+  if (!raw) return [];
+  try { return JSON.parse(raw); } catch { return raw.split(",").map(t => t.trim()).filter(Boolean); }
+}
+
 export default function CustomerServicePage() {
-  const [store, setStore]           = useState("martaline");
+  const { stores } = useStores();
+  const [store, setStore]           = useState("all");
   const [dateRange, setDateRange]   = useState<DateRange>(initRange("30d"));
   const [tickets, setTickets]       = useState<Ticket[]>([]);
   const [stats, setStats]           = useState<Stats | null>(null);
@@ -181,10 +187,14 @@ export default function CustomerServicePage() {
         <div className="flex items-center gap-3 flex-wrap">
           <DateRangePicker value={dateRange} onChange={setDateRange} />
           <div className="flex gap-1 bg-white/5 rounded-xl p-1">
-            {STORES.map(s => (
-              <button key={s.key} onClick={() => setStore(s.key)}
+            <button onClick={() => setStore("all")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${store === "all" ? "bg-blue-600 text-white" : "text-zinc-400 hover:text-white"}`}>
+              Alle
+            </button>
+            {stores.map(s => (
+              <button key={s.id} onClick={() => setStore(s.id)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  store === s.key ? "bg-blue-600 text-white" : "text-zinc-400 hover:text-white"
+                  store === s.id ? "bg-blue-600 text-white" : "text-zinc-400 hover:text-white"
                 }`}>{s.name}</button>
             ))}
           </div>
@@ -445,6 +455,9 @@ export default function CustomerServicePage() {
 
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                          {ticket.source === "inbox" && (
+                            <Inbox size={10} className="text-blue-400 shrink-0" />
+                          )}
                           <span className="text-sm font-semibold text-white truncate">{ticket.subject || "—"}</span>
                           {ticket.order_number && (
                             <span className="text-[10px] text-blue-400 font-mono">#{ticket.order_number}</span>
@@ -455,9 +468,11 @@ export default function CustomerServicePage() {
                           {ticket.customer_email && (
                             <span className="text-[10px] text-zinc-600">{ticket.customer_email}</span>
                           )}
-                          {ticket.product_title && (
-                            <span className="text-[10px] text-zinc-600 truncate max-w-[180px]">{ticket.product_title}</span>
-                          )}
+                          {parseTags(ticket.tags).map(tag => (
+                            <span key={tag} className="text-[9px] bg-blue-500/15 text-blue-300 border border-blue-500/20 rounded-full px-1.5 py-0.5 font-medium">
+                              {tag}
+                            </span>
+                          ))}
                         </div>
                       </div>
 
@@ -474,61 +489,80 @@ export default function CustomerServicePage() {
                       <div className="border-t border-white/5 px-4 py-4 space-y-4">
                         {ticket.description && (
                           <div>
-                            <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Description</p>
-                            <p className="text-sm text-zinc-300 whitespace-pre-wrap">{ticket.description}</p>
+                            <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Omschrijving</p>
+                            <p className="text-sm text-zinc-300 whitespace-pre-wrap leading-relaxed">{ticket.description}</p>
                           </div>
                         )}
+
+                        {/* Tags editor */}
+                        <div>
+                          <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1.5 flex items-center gap-1"><Tag size={9} /> Tags</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {parseTags(ticket.tags).map(tag => (
+                              <button key={tag}
+                                onClick={() => {
+                                  const current = parseTags(ticket.tags).filter(t => t !== tag);
+                                  updateTicket(ticket.id, { tags: current as unknown as string });
+                                }}
+                                className="text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded-full px-2 py-0.5 hover:bg-red-500/20 hover:text-red-300 hover:border-red-500/30 transition-all">
+                                {tag} ×
+                              </button>
+                            ))}
+                            {PRESET_TAGS.filter(t => !parseTags(ticket.tags).includes(t)).map(tag => (
+                              <button key={tag}
+                                onClick={() => {
+                                  const current = [...parseTags(ticket.tags), tag];
+                                  updateTicket(ticket.id, { tags: current as unknown as string });
+                                }}
+                                className="text-[10px] bg-white/5 text-zinc-600 border border-white/8 rounded-full px-2 py-0.5 hover:bg-blue-500/15 hover:text-blue-300 hover:border-blue-500/20 transition-all">
+                                + {tag}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
 
                         {/* Quick update controls */}
                         <div className="flex items-center gap-3 flex-wrap">
                           <div>
                             <p className="text-[10px] text-zinc-500 mb-1">Status</p>
-                            <select
-                              value={ticket.status}
+                            <select value={ticket.status}
                               onChange={e => updateTicket(ticket.id, { status: e.target.value })}
-                              className="bg-white/8 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none"
-                            >
+                              className="bg-white/8 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none">
                               {Object.entries(STATUSES).map(([k, v]) => (
                                 <option key={k} value={k}>{v.label}</option>
                               ))}
                             </select>
                           </div>
                           <div>
-                            <p className="text-[10px] text-zinc-500 mb-1">Priority</p>
-                            <select
-                              value={ticket.priority}
+                            <p className="text-[10px] text-zinc-500 mb-1">Prioriteit</p>
+                            <select value={ticket.priority}
                               onChange={e => updateTicket(ticket.id, { priority: e.target.value })}
-                              className="bg-white/8 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none"
-                            >
+                              className="bg-white/8 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none">
                               {Object.entries(PRIORITIES).map(([k, v]) => (
                                 <option key={k} value={k}>{v.label}</option>
                               ))}
                             </select>
                           </div>
-
                           <div className="flex-1 min-w-[200px]">
-                            <p className="text-[10px] text-zinc-500 mb-1">Resolution note</p>
-                            <input
-                              defaultValue={ticket.resolution}
+                            <p className="text-[10px] text-zinc-500 mb-1">Oplossing</p>
+                            <input defaultValue={ticket.resolution}
                               onBlur={e => updateTicket(ticket.id, { resolution: e.target.value })}
-                              placeholder="How was this resolved?"
-                              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-zinc-700 outline-none focus:border-blue-500/40"
-                            />
+                              placeholder="Hoe is dit opgelost?"
+                              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-zinc-700 outline-none focus:border-blue-500/40" />
                           </div>
-
-                          <button
-                            onClick={() => deleteTicket(ticket.id)}
-                            className="mt-4 p-1.5 rounded-lg text-zinc-700 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                          >
+                          <button onClick={() => deleteTicket(ticket.id)}
+                            className="mt-4 p-1.5 rounded-lg text-zinc-700 hover:text-red-400 hover:bg-red-500/10 transition-colors">
                             <Trash2 size={13} />
                           </button>
                         </div>
 
-                        {ticket.resolved_at && (
-                          <div className="flex items-center gap-1.5 text-xs text-emerald-500">
-                            <CheckCircle2 size={12} /> Resolved {timeAgo(ticket.resolved_at)}
-                          </div>
-                        )}
+                        <div className="flex items-center gap-4 text-xs text-zinc-600">
+                          {ticket.source === "inbox" && <span className="flex items-center gap-1 text-blue-500"><Inbox size={10} /> Via inbox</span>}
+                          {ticket.resolved_at && (
+                            <span className="flex items-center gap-1 text-emerald-500"><CheckCircle2 size={10} /> Opgelost {timeAgo(ticket.resolved_at)}</span>
+                          )}
+                          <span>Aangemaakt {timeAgo(ticket.created_at)}</span>
+                        </div>
                       </div>
                     )}
                   </div>

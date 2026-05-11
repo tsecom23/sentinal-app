@@ -6,12 +6,9 @@ import {
   RotateCcw, Search, TrendingUp, X, XCircle,
 } from "lucide-react";
 import { DateRangePicker, DateRange, initRange, toQueryString } from "../components/DateRangePicker";
+import { useStores } from "../hooks/useStores";
 
 const API = "https://sentinel-api.tssheets1.workers.dev";
-const STORES = [
-  { key: "ceofo",     name: "CEOFO" },
-  { key: "martaline", name: "Martaline" },
-];
 
 type Product = {
   product_title: string;
@@ -60,6 +57,7 @@ function rowBg(p: Product) {
 }
 
 export default function ProductInsightsPage() {
+  const { stores } = useStores();
   const [storeId, setStoreId]   = useState("martaline");
   const [dateRange, setDateRange] = useState<DateRange>(initRange("all"));
   const [products, setProducts] = useState<Product[]>([]);
@@ -178,9 +176,9 @@ export default function ProductInsightsPage() {
           <DateRangePicker value={dateRange} onChange={setDateRange} />
           {/* Store */}
           <div className="flex gap-1 bg-white/5 rounded-xl p-1">
-            {STORES.map(s => (
-              <button key={s.key} onClick={() => { setStoreId(s.key); setEditCosts({}); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${storeId === s.key ? "bg-blue-600 text-white" : "text-zinc-400 hover:text-white"}`}>
+            {stores.map(s => (
+              <button key={s.id} onClick={() => { setStoreId(s.id); setEditCosts({}); }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${storeId === s.id ? "bg-blue-600 text-white" : "text-zinc-400 hover:text-white"}`}>
                 {s.name}
               </button>
             ))}

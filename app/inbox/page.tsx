@@ -6,12 +6,9 @@ import {
   Languages, Loader2, Mail, MapPin, Phone, RefreshCw, Send, ShoppingBag,
   Trash2, Truck, X, Zap,
 } from "lucide-react";
+import { useStores } from "../hooks/useStores";
 
 const API = "https://sentinel-api.tssheets1.workers.dev";
-const STORES = [
-  { key: "ceofo",     name: "CEOFO" },
-  { key: "martaline", name: "Martaline" },
-];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -424,6 +421,7 @@ function OverviewPanel({ data, storeId, loading }: { data: OverviewData | null; 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function InboxPage() {
+  const { stores } = useStores();
   const [tab, setTab]               = useState<"inbox" | "overview">("inbox");
   const [storeId, setStoreId]       = useState("martaline");
   const [statusFilter, setStatusFilter] = useState<"open" | "pending" | "closed" | "all">("open");
@@ -666,9 +664,9 @@ export default function InboxPage() {
           </div>
 
           <div className="flex gap-1 bg-white/5 rounded-lg p-0.5">
-            {STORES.map(s => (
-              <button key={s.key} onClick={() => { setStoreId(s.key); setSelected(null); }}
-                className={`flex-1 py-1 rounded-md text-[11px] font-medium transition-all ${storeId === s.key ? "bg-blue-600 text-white" : "text-zinc-500 hover:text-white"}`}>
+            {stores.map(s => (
+              <button key={s.id} onClick={() => { setStoreId(s.id); setSelected(null); }}
+                className={`flex-1 py-1 rounded-md text-[11px] font-medium transition-all ${storeId === s.id ? "bg-blue-600 text-white" : "text-zinc-500 hover:text-white"}`}>
                 {s.name}
               </button>
             ))}
@@ -709,29 +707,49 @@ export default function InboxPage() {
               {accounts.length === 0 && <button onClick={() => setShowConnect(true)} className="text-xs text-blue-400 underline">Connect account</button>}
             </div>
           )}
-          {threads.map(t => (
-            <button key={t.id} onClick={() => setSelected(t)}
-              className={`w-full text-left px-4 py-3 border-b border-white/5 transition-colors hover:bg-white/5 ${selected?.id === t.id ? "bg-white/8 border-l-2 border-l-blue-500" : ""}`}>
-              <div className="flex items-start gap-2.5">
-                <Avatar name={t.customer_name} email={t.customer_email} size={32} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-xs font-semibold text-white truncate">{t.customer_name || t.customer_email.split("@")[0]}</span>
-                    <span className="text-[10px] text-zinc-600 shrink-0">{timeAgo(t.last_message_at)}</span>
-                  </div>
-                  <p className="text-[11px] text-zinc-400 truncate mt-0.5">{t.subject}</p>
-                  <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                    {(t.priority === "urgent" || t.priority === "high") && (
-                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${PRIORITY_STYLES[t.priority]?.cls}`}>{PRIORITY_STYLES[t.priority]?.label}</span>
-                    )}
-                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${STATUS_STYLES[t.status]?.cls}`}>{STATUS_STYLES[t.status]?.label}</span>
-                    <span className={`text-[9px] font-semibold ${PROVIDER_COLORS[t.provider]}`}>{t.provider === "gmail" ? "Gmail" : "Outlook"}</span>
-                    {t.message_count > 1 && <span className="text-[9px] text-zinc-600">{t.message_count} msgs</span>}
+          {threads.map(t => {
+            const isSelected = selected?.id === t.id;
+            const isUrgent   = t.priority === "urgent";
+            const isHigh     = t.priority === "high";
+            return (
+              <button key={t.id} onClick={() => setSelected(t)}
+                className={`w-full text-left px-3 py-2.5 border-b border-white/4 transition-all group
+                  ${isSelected ? "bg-blue-600/10 border-l-2 border-l-blue-500 pl-2.5" : "hover:bg-white/4"}
+                  ${isUrgent ? "border-l-2 border-l-red-500 pl-2.5" : ""}
+                `}>
+                <div className="flex items-start gap-2.5">
+                  <Avatar name={t.customer_name} email={t.customer_email} size={30} />
+                  <div className="flex-1 min-w-0">
+                    {/* Row 1: name + time */}
+                    <div className="flex items-center justify-between gap-1 mb-0.5">
+                      <span className={`text-[11px] font-bold truncate ${isSelected ? "text-white" : "text-zinc-200"}`}>
+                        {t.customer_name || t.customer_email.split("@")[0]}
+                      </span>
+                      <span className="text-[10px] text-zinc-600 shrink-0 tabular-nums">{timeAgo(t.last_message_at)}</span>
+                    </div>
+                    {/* Row 2: subject */}
+                    <p className="text-[10px] text-zinc-500 truncate leading-snug">{t.subject || "(no subject)"}</p>
+                    {/* Row 3: indicators */}
+                    <div className="flex items-center gap-1.5 mt-1">
+                      {isUrgent && <span className="text-[9px] font-bold text-red-400 bg-red-500/10 px-1 rounded">URGENT</span>}
+                      {isHigh   && <span className="text-[9px] font-bold text-orange-400 bg-orange-500/10 px-1 rounded">HIGH</span>}
+                      {t.status !== "open" && (
+                        <span className={`text-[9px] font-semibold px-1 rounded ${STATUS_STYLES[t.status]?.cls}`}>
+                          {STATUS_STYLES[t.status]?.label}
+                        </span>
+                      )}
+                      <span className={`text-[9px] ${PROVIDER_COLORS[t.provider]}`}>
+                        {t.provider === "gmail" ? "G" : "⊞"}
+                      </span>
+                      {t.message_count > 1 && (
+                        <span className="text-[9px] text-zinc-700 ml-auto">{t.message_count}</span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            </button>
-          ))}
+              </button>
+            );
+          })}
         </div>
       </div>
 
