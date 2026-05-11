@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { TrendingUp, Plus, Pencil, Trash2, X, Check } from "lucide-react";
+import { TrendingUp, Plus, Pencil, Trash2, X, Check, ChevronDown } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
@@ -115,6 +115,16 @@ export default function PnLPage() {
       .catch(() => {})
       .finally(() => setCostsLoading(false));
   }, [store]);
+
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
+
+  function toggleMonth(key: string) {
+    setExpandedMonths(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }
 
   const totals = data?.totals;
   const months = data?.months ?? [];
@@ -481,89 +491,105 @@ export default function PnLPage() {
         )}
       </div>
 
-      {/* Monthly breakdown table */}
+      {/* Monthly breakdown — collapsible */}
       <div className="bg-white/3 border border-white/5 rounded-2xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-white/5">
-                {["Month","Orders","Gross Rev","Returns","Net Rev","Ad Spend","Product Cost","Overhead","Profit","Margin"].map(h => (
-                  <th key={h} className="text-left px-4 py-3 text-[10px] text-zinc-600 uppercase tracking-widest font-semibold whitespace-nowrap">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {months.map((m, i) => {
-                const monthNum = i + 1;
-                const isCurrentMonth = year === currentYear && monthNum === currentMonth;
-                const active = hasData(m);
-
-                const rowBase = isCurrentMonth
-                  ? "bg-blue-950/20 border-l-2 border-blue-500"
-                  : "border-l-2 border-transparent";
-
-                return (
-                  <tr
-                    key={m.month}
-                    className={`border-b border-white/5 hover:bg-white/2 transition ${rowBase}`}
-                  >
-                    <td className="px-4 py-3 font-medium text-zinc-300 whitespace-nowrap">
-                      {MONTH_NAMES[i]}
-                    </td>
-                    {active ? (
-                      <>
-                        <td className="px-4 py-3 text-zinc-300">{m.orders}</td>
-                        <td className="px-4 py-3 text-zinc-300 whitespace-nowrap">{fmt(m.gross_revenue)}</td>
-                        <td className="px-4 py-3 text-red-400 whitespace-nowrap">{m.return_amount > 0 ? fmt(m.return_amount) : "—"}</td>
-                        <td className="px-4 py-3 text-zinc-300 whitespace-nowrap">{fmt(m.net_revenue)}</td>
-                        <td className="px-4 py-3 text-red-400 whitespace-nowrap">{m.ad_spend > 0 ? fmt(m.ad_spend) : "—"}</td>
-                        <td className="px-4 py-3 text-amber-400 whitespace-nowrap">{m.product_cost > 0 ? fmt(m.product_cost) : "—"}</td>
-                        <td className="px-4 py-3 text-purple-400 whitespace-nowrap">{m.overhead > 0 ? fmt(m.overhead) : "—"}</td>
-                        <td className={`px-4 py-3 font-semibold whitespace-nowrap ${m.profit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                          {fmt(m.profit)}
-                        </td>
-                        <td className={`px-4 py-3 whitespace-nowrap ${m.margin >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                          {m.margin}%
-                        </td>
-                      </>
-                    ) : (
-                      <>
-                        {[...Array(9)].map((_, j) => (
-                          <td key={j} className="px-4 py-3 text-zinc-700">—</td>
-                        ))}
-                      </>
-                    )}
-                  </tr>
-                );
-              })}
-            </tbody>
-            {totals && (
-              <tfoot>
-                <tr className="border-t border-white/10 font-bold">
-                  <td className="px-4 py-3 text-zinc-200">Total</td>
-                  <td className="px-4 py-3 text-zinc-200">{totals.orders}</td>
-                  <td className="px-4 py-3 text-zinc-200 whitespace-nowrap">{fmt(totals.gross_revenue)}</td>
-                  <td className="px-4 py-3 text-red-400 whitespace-nowrap">{totals.return_amount > 0 ? fmt(totals.return_amount) : "—"}</td>
-                  <td className="px-4 py-3 text-zinc-200 whitespace-nowrap">{fmt(totals.net_revenue)}</td>
-                  <td className="px-4 py-3 text-red-400 whitespace-nowrap">{totals.ad_spend > 0 ? fmt(totals.ad_spend) : "—"}</td>
-                  <td className="px-4 py-3 text-amber-400 whitespace-nowrap">{totals.product_cost > 0 ? fmt(totals.product_cost) : "—"}</td>
-                  <td className="px-4 py-3 text-purple-400 whitespace-nowrap">{totals.overhead > 0 ? fmt(totals.overhead) : "—"}</td>
-                  <td className={`px-4 py-3 whitespace-nowrap ${totals.profit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                    {fmt(totals.profit)}
-                  </td>
-                  <td className={`px-4 py-3 whitespace-nowrap ${totalMargin >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                    {totalMargin}%
-                  </td>
-                </tr>
-              </tfoot>
-            )}
-          </table>
+        {/* Header row */}
+        <div className="grid grid-cols-[1fr_80px_120px_100px_80px] gap-2 px-4 py-2.5 border-b border-white/5">
+          <span className="text-[10px] text-zinc-600 uppercase tracking-widest font-semibold">Month</span>
+          <span className="text-[10px] text-zinc-600 uppercase tracking-widest font-semibold text-right">Orders</span>
+          <span className="text-[10px] text-zinc-600 uppercase tracking-widest font-semibold text-right">Net Revenue</span>
+          <span className="text-[10px] text-zinc-600 uppercase tracking-widest font-semibold text-right">Profit</span>
+          <span className="text-[10px] text-zinc-600 uppercase tracking-widest font-semibold text-right">Margin</span>
         </div>
 
-        {loading && (
+        {loading ? (
           <div className="p-8 text-center text-zinc-600 text-sm">Loading…</div>
+        ) : (
+          <div className="divide-y divide-white/5">
+            {months.map((m, i) => {
+              const monthNum = i + 1;
+              const isCurrentMonth = year === currentYear && monthNum === currentMonth;
+              const active = hasData(m);
+              const key = m.month;
+              const expanded = expandedMonths.has(key);
+
+              return (
+                <div key={key}>
+                  {/* Summary row — always visible */}
+                  <button
+                    onClick={() => active && toggleMonth(key)}
+                    className={`w-full grid grid-cols-[1fr_80px_120px_100px_80px] gap-2 px-4 py-3 text-left transition-all ${
+                      isCurrentMonth ? "bg-blue-950/20 border-l-2 border-blue-500" : "border-l-2 border-transparent"
+                    } ${active ? "hover:bg-white/3 cursor-pointer" : "cursor-default"}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {active && (
+                        <ChevronDown
+                          size={12}
+                          className={`text-zinc-600 shrink-0 transition-transform duration-200 ${expanded ? "" : "-rotate-90"}`}
+                        />
+                      )}
+                      <span className={`text-sm font-semibold ${isCurrentMonth ? "text-blue-300" : active ? "text-zinc-200" : "text-zinc-700"}`}>
+                        {MONTH_NAMES[i]}
+                      </span>
+                      {isCurrentMonth && (
+                        <span className="text-[9px] bg-blue-500/20 text-blue-400 rounded px-1.5 py-0.5 font-bold uppercase tracking-wide">Now</span>
+                      )}
+                    </div>
+                    <span className={`text-sm text-right ${active ? "text-zinc-300" : "text-zinc-700"}`}>
+                      {active ? m.orders : "—"}
+                    </span>
+                    <span className={`text-sm font-medium text-right ${active ? "text-zinc-200" : "text-zinc-700"}`}>
+                      {active ? fmt(m.net_revenue) : "—"}
+                    </span>
+                    <span className={`text-sm font-bold text-right ${
+                      !active ? "text-zinc-700" : m.profit >= 0 ? "text-emerald-400" : "text-red-400"
+                    }`}>
+                      {active ? fmt(m.profit) : "—"}
+                    </span>
+                    <span className={`text-sm text-right ${
+                      !active ? "text-zinc-700" : m.margin >= 0 ? "text-emerald-400" : "text-red-400"
+                    }`}>
+                      {active ? `${m.margin}%` : "—"}
+                    </span>
+                  </button>
+
+                  {/* Expanded detail */}
+                  {expanded && active && (
+                    <div className="mx-4 mb-3 rounded-xl bg-white/3 border border-white/5 divide-y divide-white/5">
+                      {[
+                        { label: "Gross Revenue", value: fmt(m.gross_revenue), color: "text-zinc-300" },
+                        { label: "Returns",        value: m.return_amount > 0 ? fmt(m.return_amount) : "—", color: "text-red-400" },
+                        { label: "Ad Spend",       value: m.ad_spend > 0 ? fmt(m.ad_spend) : "—",         color: "text-red-400" },
+                        { label: "Product Cost",   value: m.product_cost > 0 ? fmt(m.product_cost) : "—", color: "text-amber-400" },
+                        { label: "Overhead",       value: m.overhead > 0 ? fmt(m.overhead) : "—",         color: "text-purple-400" },
+                      ].map(row => (
+                        <div key={row.label} className="flex items-center justify-between px-4 py-2">
+                          <span className="text-xs text-zinc-500">{row.label}</span>
+                          <span className={`text-xs font-medium ${row.color}`}>{row.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Totals footer */}
+        {totals && !loading && (
+          <div className="border-t border-white/10 grid grid-cols-[1fr_80px_120px_100px_80px] gap-2 px-4 py-3 bg-white/2">
+            <span className="text-xs font-bold text-zinc-300 pl-5">Total {year}</span>
+            <span className="text-xs font-bold text-zinc-300 text-right">{totals.orders}</span>
+            <span className="text-xs font-bold text-zinc-200 text-right">{fmt(totals.net_revenue)}</span>
+            <span className={`text-xs font-bold text-right ${totals.profit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+              {fmt(totals.profit)}
+            </span>
+            <span className={`text-xs font-bold text-right ${totalMargin >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+              {totalMargin}%
+            </span>
+          </div>
         )}
       </div>
     </div>
