@@ -1481,20 +1481,49 @@ export default {
       }
 
       if (action === "refund") {
-        // Fetch order to get line items for full refund
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { refund_type, amount: partialAmount } = body as any;
+        const isPartial = refund_type === "partial" && partialAmount > 0;
+
         const orderRes = await fetch(`${shopifyBase}/orders/${shopify_order_id}.json`, { headers });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const orderData = await orderRes.json() as any;
         const order = orderData.order;
         if (!order) return json({ error: "Order not found in Shopify" }, 404);
-        const refundLineItems = (order.line_items ?? []).map((li: { id: number; quantity: number }) => ({
-          line_item_id: li.id, quantity: li.quantity, restock_type: "return"
-        }));
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let refundBody: any;
+
+        if (isPartial) {
+          // Partial refund via transaction — find the original payment transaction
+          const txRes = await fetch(`${shopifyBase}/orders/${shopify_order_id}/transactions.json`, { headers });
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const txData = await txRes.json() as any;
+          const transactions: any[] = txData.transactions ?? [];
+          const parentTx = transactions.find((t: any) => t.kind === "sale" || t.kind === "capture");
+          if (!parentTx) return json({ error: "No payment transaction found for this order" }, 400);
+          refundBody = {
+            refund: {
+              currency: order.currency,
+              note: `Partial refund of ${order.currency} ${(partialAmount as number).toFixed(2)} via Sentinel`,
+              transactions: [{ parent_id: parentTx.id, amount: (partialAmount as number).toFixed(2), kind: "refund", gateway: parentTx.gateway }],
+            },
+          };
+        } else {
+          // Full refund — refund all line items + shipping
+          const refundLineItems = (order.line_items ?? []).map((li: { id: number; quantity: number }) => ({
+            line_item_id: li.id, quantity: li.quantity, restock_type: "return",
+          }));
+          refundBody = { refund: { note: "Full refund via Sentinel", refund_line_items: refundLineItems, shipping: { full_refund: true } } };
+        }
+
         const r = await fetch(`${shopifyBase}/orders/${shopify_order_id}/refunds.json`, {
-          method: "POST", headers,
-          body: JSON.stringify({ refund: { note: "Full refund via Sentinel", refund_line_items: refundLineItems, shipping: { full_refund: true } } }),
+          method: "POST", headers, body: JSON.stringify(refundBody),
         });
-        if (r.ok) await env.DB.prepare(`UPDATE orders SET financial_status='refunded' WHERE shopify_order_id=? AND store_id=?`).bind(shopify_order_id, store_id).run();
+        if (r.ok) {
+          const newStatus = isPartial ? "partially_refunded" : "refunded";
+          await env.DB.prepare(`UPDATE orders SET financial_status=? WHERE shopify_order_id=? AND store_id=?`).bind(newStatus, shopify_order_id, store_id).run();
+        }
         return json({ ok: r.ok });
       }
 

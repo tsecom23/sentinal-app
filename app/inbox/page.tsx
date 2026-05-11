@@ -418,6 +418,94 @@ function OverviewPanel({ data, storeId, loading }: { data: OverviewData | null; 
   );
 }
 
+// ─── Refund Modal ─────────────────────────────────────────────────────────────
+
+function RefundModal({ order, onConfirm, onClose }: {
+  order: CustomerOrder;
+  onConfirm: (type: "full" | "partial", amount?: number) => void;
+  onClose: () => void;
+}) {
+  const [type, setType] = useState<"full" | "partial">("full");
+  const [amountStr, setAmountStr] = useState(order.revenue.toFixed(2));
+
+  const total   = order.revenue;
+  const partial = Math.max(0, Math.min(parseFloat(amountStr.replace(",", ".")) || 0, total));
+  const pct     = total > 0 ? Math.round((partial / total) * 100) : 0;
+
+  function confirm() {
+    if (type === "full") { onConfirm("full"); return; }
+    if (partial <= 0) return;
+    onConfirm("partial", partial);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+      <div className="bg-[#111118] border border-white/10 rounded-2xl p-6 w-full max-w-sm space-y-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-bold">Refund order #{order.order_number || order.shopify_order_id}</h2>
+            <p className="text-[11px] text-zinc-500 mt-0.5">Total: €{(order.revenue ?? 0).toFixed(2)}</p>
+          </div>
+          <button onClick={onClose} className="text-zinc-500 hover:text-white"><X size={16} /></button>
+        </div>
+
+        {/* Type toggle */}
+        <div className="flex gap-1 bg-white/5 rounded-xl p-1">
+          {(["full", "partial"] as const).map(t => (
+            <button key={t} onClick={() => setType(t)}
+              className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all ${type === t ? "bg-red-600 text-white" : "text-zinc-500 hover:text-white"}`}>
+              {t === "full" ? `Full (€${(order.revenue ?? 0).toFixed(2)})` : "Partial amount"}
+            </button>
+          ))}
+        </div>
+
+        {/* Partial amount input */}
+        {type === "partial" && (
+          <div className="space-y-2">
+            <label className="text-[11px] text-zinc-500">Refund amount</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">€</span>
+              <input
+                type="number" min="0.01" max={total} step="0.01"
+                value={amountStr}
+                onChange={e => setAmountStr(e.target.value)}
+                className="w-full bg-white/6 border border-white/10 rounded-xl pl-8 pr-4 py-2.5 text-sm text-white outline-none focus:border-red-500/50"
+                autoFocus
+              />
+            </div>
+            <div className="flex gap-2">
+              {[25, 50, 75, 100].map(p => (
+                <button key={p} onClick={() => setAmountStr(((total * p) / 100).toFixed(2))}
+                  className={`flex-1 py-1 rounded-lg text-[10px] font-semibold transition-all ${pct === p ? "bg-red-600 text-white" : "bg-white/5 text-zinc-500 hover:text-white"}`}>
+                  {p}%
+                </button>
+              ))}
+            </div>
+            {partial > 0 && <p className="text-[10px] text-zinc-600 text-center">{pct}% of total · €{partial.toFixed(2)} back to customer</p>}
+          </div>
+        )}
+
+        <div className="bg-amber-950/30 border border-amber-600/20 rounded-xl p-3 text-[11px] text-amber-400">
+          This will send a refund to the customer's original payment method via Shopify. This cannot be undone.
+        </div>
+
+        <div className="flex gap-2">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-medium text-zinc-400 transition-all">
+            Cancel
+          </button>
+          <button
+            onClick={confirm}
+            disabled={type === "partial" && partial <= 0}
+            className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 disabled:opacity-40 text-xs font-bold text-white transition-all"
+          >
+            {type === "full" ? "Refund full amount" : `Refund €${partial.toFixed(2)}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function InboxPage() {
@@ -456,8 +544,9 @@ export default function InboxPage() {
   const [newCannedBody, setNewCannedBody]   = useState("");
   const [ticketCreating, setTicketCreating] = useState(false);
   const [ticketCreated, setTicketCreated]   = useState<string | null>(null);
-  const [orderAction, setOrderAction]       = useState<string | null>(null); // orderId being actioned
+  const [orderAction, setOrderAction]       = useState<string | null>(null);
   const [orderActionDone, setOrderActionDone] = useState<Record<string, string>>({});
+  const [refundTarget, setRefundTarget]     = useState<CustomerOrder | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -596,24 +685,27 @@ export default function InboxPage() {
     await fetchCanned();
   }
 
-  async function handleOrderAction(shopifyOrderId: string, action: "refund" | "cancel") {
+  async function handleOrderAction(shopifyOrderId: string, action: "refund" | "cancel", refundType?: "full" | "partial", amount?: number) {
     if (!selected) return;
-    const label = action === "refund" ? "fully refund" : "cancel";
-    if (!confirm(`Are you sure you want to ${label} order ${shopifyOrderId}? This cannot be undone.`)) return;
+    if (action === "cancel") {
+      if (!confirm(`Cancel order ${shopifyOrderId}? This cannot be undone.`)) return;
+    }
     setOrderAction(shopifyOrderId);
     try {
+      const body: Record<string, unknown> = { store_id: storeId, shopify_order_id: shopifyOrderId, action };
+      if (action === "refund") { body.refund_type = refundType ?? "full"; if (refundType === "partial") body.amount = amount; }
       const r = await fetch(`${API}/api/shopify/order-action`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ store_id: storeId, shopify_order_id: shopifyOrderId, action }),
+        body: JSON.stringify(body),
       });
       const d = await r.json() as { ok: boolean; error?: string };
       if (d.ok) {
         setOrderActionDone(p => ({ ...p, [shopifyOrderId]: action }));
         await fetchCustomer(selected.customer_email);
       } else {
-        alert(d.error ?? "Actie mislukt — controleer Shopify credentials in Store instellingen");
+        alert(d.error ?? "Action failed — check Shopify credentials in Store settings");
       }
-    } catch { alert("Netwerkfout"); }
+    } catch { alert("Network error"); }
     finally { setOrderAction(null); }
   }
 
@@ -1053,7 +1145,7 @@ export default function InboxPage() {
                         {!isDone && o.financial_status !== "refunded" && o.financial_status !== "voided" && (
                           <div className="flex gap-1.5 border-t border-white/5 pt-2">
                             <button
-                              onClick={() => handleOrderAction(o.shopify_order_id, "refund")}
+                              onClick={() => setRefundTarget(o)}
                               disabled={!!isBusy}
                               className="flex-1 flex items-center justify-center gap-1 py-1 rounded-lg text-[10px] font-semibold text-red-400 bg-red-500/10 hover:bg-red-500/20 disabled:opacity-40 transition-all"
                             >
@@ -1180,6 +1272,18 @@ export default function InboxPage() {
       </div>
 
       {showConnect && <ConnectModal storeId={storeId} onClose={() => { setShowConnect(false); fetchAccounts(); }} />}
+
+      {refundTarget && (
+        <RefundModal
+          order={refundTarget}
+          onConfirm={(type, amount) => {
+            const o = refundTarget;
+            setRefundTarget(null);
+            handleOrderAction(o.shopify_order_id, "refund", type, amount);
+          }}
+          onClose={() => setRefundTarget(null)}
+        />
+      )}
     </div>
   );
 }
