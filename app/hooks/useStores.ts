@@ -12,6 +12,12 @@ export interface Store {
   currency: string;
 }
 
+// Always-available fallback — used when the API is unreachable or broken
+const FALLBACK_STORES: Store[] = [
+  { id: "ceofo",     name: "CEOFO",     shopify_domain: "", google_ads_customer_id: "", currency: "EUR" },
+  { id: "martaline", name: "Martaline", shopify_domain: "", google_ads_customer_id: "", currency: "EUR" },
+];
+
 let _cache: Store[] | null = null;
 let _promise: Promise<Store[]> | null = null;
 
@@ -20,20 +26,23 @@ async function fetchStores(): Promise<Store[]> {
   if (!_promise) {
     _promise = fetch(`${API}/api/stores`, { cache: "no-store" })
       .then(r => r.json())
-      .then((d: { stores: Store[] }) => {
-        _cache = d.stores ?? [];
+      .then((d: { stores?: Store[] }) => {
+        const stores = d.stores ?? [];
+        // If API returns valid stores, use them; otherwise fall back
+        _cache = stores.length > 0 ? stores : FALLBACK_STORES;
         return _cache;
       })
       .catch(() => {
-        _promise = null;
-        return [] as Store[];
+        _promise = null; // allow retry next time
+        return FALLBACK_STORES;
       });
   }
   return _promise;
 }
 
 export function useStores() {
-  const [stores, setStores] = useState<Store[]>(_cache ?? []);
+  // Start with fallback so buttons render immediately, before fetch completes
+  const [stores, setStores] = useState<Store[]>(_cache ?? FALLBACK_STORES);
   const [loading, setLoading] = useState(!_cache);
 
   useEffect(() => {
