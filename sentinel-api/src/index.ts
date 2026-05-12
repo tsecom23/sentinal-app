@@ -1062,6 +1062,83 @@ export default {
       return json({ ok: true, order_id: orderId });
     }
 
+    // ── POST /api/shopify/sync-orders ─────────────────────────────────────────
+    // Pulls the last N orders from Shopify REST API and upserts them into D1.
+    if (path === "/api/shopify/sync-orders" && method === "POST") {
+      const body = await request.json() as { store_id: string; days?: number };
+      const { store_id, days = 30 } = body;
+      if (!store_id) return json({ error: "Missing store_id" }, 400);
+
+      const store = await env.DB.prepare(`SELECT shopify_domain, shopify_access_token FROM stores WHERE id=?`).bind(store_id).first() as { shopify_domain: string; shopify_access_token: string } | null;
+      if (!store?.shopify_domain || !store?.shopify_access_token) return json({ error: "Store not configured with Shopify credentials" }, 400);
+
+      const since = new Date();
+      since.setDate(since.getDate() - days);
+      const sinceIso = since.toISOString();
+
+      const shopifyBase = `https://${store.shopify_domain}/admin/api/2024-01`;
+      const headers = { "X-Shopify-Access-Token": store.shopify_access_token, "Content-Type": "application/json" };
+
+      let imported = 0;
+      let pageInfo: string | null = null;
+
+      for (let page = 0; page < 10; page++) {
+        const qs = pageInfo
+          ? `page_info=${pageInfo}&limit=250`
+          : `limit=250&status=any&created_at_min=${sinceIso}&order=created_at+asc`;
+        const res = await fetch(`${shopifyBase}/orders.json?${qs}`, { headers });
+        if (!res.ok) return json({ error: `Shopify error ${res.status}` }, 502);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const data = await res.json() as any;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const orders: any[] = data.orders ?? [];
+        if (orders.length === 0) break;
+
+        for (const o of orders) {
+          const orderId = String(o.id);
+          const revenue = parseFloat(o.total_price ?? "0");
+          const netRevenue = parseFloat(o.subtotal_price ?? String(revenue));
+          const customerName = `${o.customer?.first_name ?? ""} ${o.customer?.last_name ?? ""}`.trim();
+          const customerPhone = o.customer?.phone ?? o.billing_address?.phone ?? "";
+          const customerCity = o.billing_address?.city ?? o.shipping_address?.city ?? "";
+          const customerCountry = o.billing_address?.country_code ?? o.shipping_address?.country_code ?? "";
+          const firstFulfillment = (o.fulfillments ?? [])[0];
+
+          await env.DB.prepare(`
+            INSERT OR REPLACE INTO orders
+              (id,shopify_order_id,order_number,email,currency,revenue,net_revenue,created_at,store_id,
+               customer_name,customer_phone,customer_city,customer_country,
+               financial_status,fulfillment_status,tracking_number,tracking_url)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          `).bind(orderId, orderId, String(o.order_number ?? ""), o.email ?? "",
+                  o.currency ?? "EUR", revenue, netRevenue,
+                  o.created_at ?? new Date().toISOString(), store_id,
+                  customerName, customerPhone, customerCity, customerCountry,
+                  o.financial_status ?? "paid", o.fulfillment_status ?? "unfulfilled",
+                  firstFulfillment?.tracking_number ?? "", firstFulfillment?.tracking_url ?? "").run();
+
+          for (const item of o.line_items ?? []) {
+            await env.DB.prepare(`
+              INSERT OR REPLACE INTO order_items
+                (id,order_id,product_id,variant_id,product_title,variant_title,quantity,revenue,cost,store_id)
+              VALUES (?,?,?,?,?,?,?,?,?,?)
+            `).bind(`${orderId}-item-${item.id}`, orderId, String(item.product_id ?? ""),
+                    String(item.variant_id ?? ""), item.title ?? "", item.variant_title ?? "",
+                    item.quantity ?? 1, parseFloat(item.price ?? "0") * (item.quantity ?? 1),
+                    0, store_id).run();
+          }
+          imported++;
+        }
+
+        // Check for next page via Link header
+        const link = res.headers.get("Link") ?? "";
+        const nextMatch = link.match(/page_info=([^&>]+)[^>]*>;\s*rel="next"/);
+        if (nextMatch) { pageInfo = nextMatch[1]; } else { break; }
+      }
+
+      return json({ ok: true, imported });
+    }
+
     // ── POST /api/webhooks/shopify/products-create ────────────────────────────
     if (path === "/api/webhooks/shopify/products-create" && method === "POST") {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

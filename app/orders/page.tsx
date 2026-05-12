@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   ArrowDownRight, ArrowUpRight, ChevronDown, ChevronRight,
-  Search, ShoppingCart, TrendingUp, X,
+  Loader2, RefreshCw, Search, ShoppingCart, TrendingUp, X,
 } from "lucide-react";
 import { DateRangePicker, DateRange, initRange, toQueryString } from "../components/DateRangePicker";
 import { useStores } from "../hooks/useStores";
@@ -67,6 +67,8 @@ export default function OrdersPage() {
   const [today, setToday]         = useState<DayStat | null>(null);
   const [yesterday, setYesterday] = useState<DayStat | null>(null);
   const [loading, setLoading]     = useState(false);
+  const [syncing, setSyncing]     = useState(false);
+  const [syncMsg, setSyncMsg]     = useState("");
   const [search, setSearch]       = useState("");
   const [expanded, setExpanded]   = useState<Set<string>>(new Set());
 
@@ -84,7 +86,25 @@ export default function OrdersPage() {
     } finally { setLoading(false); }
   }
 
-  useEffect(() => { load(); }, [storeId, dateRange]);
+  useEffect(() => { load(); }, [storeId, dateRange]); // eslint-disable-line
+
+  async function syncOrders() {
+    setSyncing(true); setSyncMsg("");
+    try {
+      const r = await fetch(`${API}/api/shopify/sync-orders`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ store_id: storeId, days: 60 }),
+      });
+      const d = await r.json() as { ok: boolean; imported?: number; error?: string };
+      if (d.ok) {
+        setSyncMsg(`${d.imported} orders synced`);
+        await load();
+      } else {
+        setSyncMsg(d.error ?? "Sync failed");
+      }
+    } catch { setSyncMsg("Network error"); }
+    finally { setSyncing(false); setTimeout(() => setSyncMsg(""), 4000); }
+  }
 
   function toggleExpand(id: string) {
     setExpanded(prev => {
@@ -133,6 +153,13 @@ export default function OrdersPage() {
           <p className="text-zinc-500 text-sm mt-0.5">All incoming orders</p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
+          {syncMsg && <span className="text-xs text-zinc-400">{syncMsg}</span>}
+          <button onClick={syncOrders} disabled={syncing}
+            title="Sync orders from Shopify (last 60 days)"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-medium text-zinc-400 hover:text-white transition-all disabled:opacity-40">
+            {syncing ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+            Sync Shopify
+          </button>
           <DateRangePicker value={dateRange} onChange={setDateRange} />
           <div className="flex gap-1 bg-white/5 rounded-xl p-1">
             {stores.map(s => (
