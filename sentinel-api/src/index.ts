@@ -396,6 +396,9 @@ export default {
 
     // ── GET /api/stores ───────────────────────────────────────────────────────
     if (path === "/api/stores" && method === "GET") {
+      // First ensure google_ads_customer_id column exists (idempotent, safe to run every time)
+      try { await env.DB.prepare(`ALTER TABLE stores ADD COLUMN google_ads_customer_id TEXT DEFAULT ''`).run(); } catch { /* already exists */ }
+      try { await env.DB.prepare(`ALTER TABLE stores ADD COLUMN shopify_access_token TEXT DEFAULT ''`).run(); } catch { /* already exists */ }
       const rows = await env.DB.prepare(`SELECT id,name,shopify_domain,google_ads_customer_id,currency,created_at FROM stores ORDER BY created_at ASC`).all();
       return json({ stores: rows.results });
     }
