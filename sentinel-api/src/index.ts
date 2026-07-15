@@ -275,6 +275,7 @@ const MIGRATIONS = [
   `ALTER TABLE disputes ADD COLUMN country TEXT DEFAULT ''`,
   `ALTER TABLE disputes ADD COLUMN source_platform TEXT DEFAULT 'stripe'`,
   `ALTER TABLE disputes ADD COLUMN dispute_type TEXT DEFAULT 'dispute'`,
+  `ALTER TABLE returns ADD COLUMN tracking_number TEXT DEFAULT ''`,
 ];
 
 async function runMigrations(db: D1Database) {
@@ -1051,7 +1052,7 @@ export default {
         `).bind(storeId, since).all(),
         env.DB.prepare(`
           SELECT status, COUNT(*) as count, COALESCE(SUM(amount),0) as amount
-          FROM disputes WHERE store_id=? AND (dispute_type='dispute' OR dispute_type IS NULL OR dispute_type='')
+          FROM disputes WHERE store_id=? AND (dispute_type='dispute' OR dispute_type='refund' OR dispute_type IS NULL OR dispute_type='')
           GROUP BY status
         `).bind(storeId).all(),
         env.DB.prepare(`
@@ -1065,14 +1066,14 @@ export default {
       const productStats = await Promise.all(
         (productRows.results ?? []).slice(0, 15).map(async (p: any) => {
           const cats = await env.DB.prepare(`
-            SELECT COALESCE(NULLIF(reason_category,''),'Onbekend') as category, COUNT(*) as cnt
+            SELECT COALESCE(NULLIF(reason_category,''),'Unknown') as category, COUNT(*) as cnt
             FROM returns WHERE store_id=? AND product_title=? AND created_at>=?
             GROUP BY category ORDER BY cnt DESC LIMIT 3
           `).bind(storeId, p.product_title, since).all();
           const topCats = (cats.results ?? []) as Array<{ category: string; cnt: number }>;
           return {
             ...p,
-            top_category: topCats[0]?.category ?? "Onbekend",
+            top_category: topCats[0]?.category ?? "Unknown",
             top_categories: topCats,
           };
         })
@@ -1091,8 +1092,8 @@ export default {
           refund_total: (totalsRow as any)?.refund_total ?? 0,
           pending: (totalsRow as any)?.pending ?? 0,
           disputes: dTotal,
-          dispute_open: dStats["open"]?.count ?? 0,
-          dispute_at_risk: dStats["open"]?.amount ?? 0,
+          dispute_open: (dStats["open"]?.count ?? 0) + (dStats["pending"]?.count ?? 0),
+          dispute_at_risk: (dStats["open"]?.amount ?? 0) + (dStats["pending"]?.amount ?? 0),
           chargebacks: cbTotal,
           chargeback_amount: cbAmount,
           won: dWon,
@@ -1196,12 +1197,13 @@ export default {
       const id = `ret-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
       const category = classifyReason(body.reason ?? "");
       await env.DB.prepare(`
-        INSERT INTO returns (id,order_id,store_id,product_title,variant_title,reason,amount,status,created_at,reason_category,source_platform,event_type)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+        INSERT INTO returns (id,order_id,store_id,product_title,variant_title,reason,amount,status,created_at,reason_category,source_platform,event_type,tracking_number)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
       `).bind(id, body.order_id ?? "", body.store_id, body.product_title ?? "",
               body.variant_title ?? "", body.reason ?? "", body.amount ?? 0,
               body.status ?? "pending", new Date().toISOString(),
-              category, body.source_platform ?? "manual", body.event_type ?? "return").run();
+              category, body.source_platform ?? "manual", body.event_type ?? "return",
+              body.tracking_number ?? "").run();
       return json({ ok: true, id });
     }
 
@@ -1210,9 +1212,11 @@ export default {
       const id = path.split("/")[3];
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const body = await request.json() as any;
-      await env.DB.prepare(
-        `UPDATE returns SET status=?, resolved_at=? WHERE id=?`
-      ).bind(body.status, new Date().toISOString(), id).run();
+      const sets: string[] = [`status=?`, `resolved_at=?`];
+      const vals: unknown[] = [body.status, new Date().toISOString()];
+      if (body.tracking_number !== undefined) { sets.push(`tracking_number=?`); vals.push(body.tracking_number); }
+      vals.push(id);
+      await env.DB.prepare(`UPDATE returns SET ${sets.join(",")} WHERE id=?`).bind(...vals).run();
       return json({ ok: true });
     }
 
@@ -1241,8 +1245,8 @@ export default {
         INSERT INTO disputes (id,order_id,store_id,customer_email,amount,reason,status,created_at,reason_category,source_platform,dispute_type)
         VALUES (?,?,?,?,?,?,?,?,?,?,?)
       `).bind(id, body.order_id ?? "", body.store_id, body.customer_email ?? "",
-              body.amount ?? 0, body.reason ?? "", "open", new Date().toISOString(),
-              category, body.source_platform ?? "manual", body.dispute_type ?? "dispute").run();
+              body.amount ?? 0, body.reason ?? "", "pending", new Date().toISOString(),
+              category, body.source_platform ?? "manual", body.dispute_type ?? "refund").run();
       return json({ ok: true, id });
     }
 
