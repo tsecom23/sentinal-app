@@ -294,32 +294,32 @@ function uid(): string {
 // ─── Reason Classification ────────────────────────────────────────────────────
 
 const REASON_RULES: Array<{ keywords: string[]; category: string }> = [
-  { keywords: ["taille","size","petit","grand","small","big","tight","loose","fit","sizing","too small","too big","too large","too tight","maat","pas","kleiner","größe","zu klein","zu groß"], category: "Maat / Pasvorm" },
-  { keywords: ["quality","qualité","cheap","thin","poor","flimsy","badly made","poorly made","sewn","stitching","kwaliteit","goedkoop","kwalité","niet goed","slecht"], category: "Productkwaliteit" },
-  { keywords: ["defect","broken","damaged","cassé","endommagé","ripped","torn","déchiré","défectueux","broken on arrival","arrivé cassé","ne fonctionne pas","kapot","stuk","beschadigd"], category: "Defect / Beschadigd" },
-  { keywords: ["wrong item","wrong product","mauvais produit","pas commandé","not what i ordered","different product","verkeerd product","wrong order","faux article"], category: "Verkeerd product ontvangen" },
-  { keywords: ["color","colour","couleur","different color","not matching","nuance","teinte","different colour","kleurverschil","verkeerde kleur","autre couleur"], category: "Kleurverschil" },
-  { keywords: ["not received","not arrived","missing","pas reçu","perdu","lost","never arrived","jamais reçu","niet ontvangen","nooit aangekomen","non livré"], category: "Niet ontvangen" },
-  { keywords: ["late","delay","livraison","retard","slow delivery","trop long","te laat","te traag","vertraging","trop de temps"], category: "Leveringsvertraging" },
-  { keywords: ["not as expected","not as described","different","pas comme","misleading","not what i expected","trompeur","anders dan verwacht","niet zoals","niet conform","photo","image","photo differ"], category: "Niet zoals verwacht" },
-  { keywords: ["changed mind","no longer want","don't want","plus envie","changer d'avis","i changed my mind","bedacht","wil niet meer","me ravise"], category: "Klant bedacht" },
-  { keywords: ["fraud","unauthorized","not authorized","frauduleux","non autorisé","didn't order","i didn't order","ongeautoriseerd","fraude","oplichting"], category: "Ongeautoriseerde transactie" },
-  { keywords: ["duplicate","double order","ordered twice","deux fois","en double","dubbel","deux commandes"], category: "Dubbele bestelling" },
-  { keywords: ["packaging","package damaged","emballage","box damaged","colis abîmé","verpakking","doos beschadigd","emballage abîmé"], category: "Verpakking beschadigd" },
-  { keywords: ["material","matière","fabric","tissu","texture","scratchy","rough","synthetic","matériaux","stof","materiaal"], category: "Materiaalprobleem" },
-  { keywords: ["uncomfortable","comfort","inconfort","gêne","oncomfortabel","niet comfortabel","inconfortable"], category: "Comfortprobleem" },
+  { keywords: ["taille","size","petit","grand","small","big","tight","loose","fit","sizing","too small","too big","too large","too tight","maat","pas","kleiner","größe","zu klein","zu groß"], category: "Size / Fit" },
+  { keywords: ["quality","qualité","cheap","thin","poor","flimsy","badly made","poorly made","sewn","stitching","kwaliteit","goedkoop","slecht"], category: "Product Quality" },
+  { keywords: ["defect","broken","damaged","cassé","endommagé","ripped","torn","déchiré","défectueux","broken on arrival","arrivé cassé","ne fonctionne pas","kapot","stuk","beschadigd"], category: "Defect / Damaged" },
+  { keywords: ["wrong item","wrong product","mauvais produit","pas commandé","not what i ordered","different product","verkeerd product","wrong order","faux article"], category: "Wrong Item" },
+  { keywords: ["color","colour","couleur","different color","not matching","nuance","teinte","different colour","kleurverschil","verkeerde kleur","autre couleur"], category: "Color Mismatch" },
+  { keywords: ["not received","not arrived","missing","pas reçu","perdu","lost","never arrived","jamais reçu","niet ontvangen","nooit aangekomen","non livré"], category: "Not Received" },
+  { keywords: ["late","delay","livraison","retard","slow delivery","trop long","te laat","te traag","vertraging","trop de temps"], category: "Delivery Delay" },
+  { keywords: ["not as expected","not as described","pas comme","misleading","not what i expected","trompeur","anders dan verwacht","niet zoals","niet conform","photo","image","photo differ"], category: "Not As Expected" },
+  { keywords: ["changed mind","no longer want","don't want","plus envie","changer d'avis","i changed my mind","bedacht","wil niet meer","me ravise"], category: "Changed Mind" },
+  { keywords: ["fraud","unauthorized","not authorized","frauduleux","non autorisé","didn't order","i didn't order","ongeautoriseerd","fraude","oplichting"], category: "Unauthorized" },
+  { keywords: ["duplicate","double order","ordered twice","deux fois","en double","dubbel","deux commandes"], category: "Duplicate Order" },
+  { keywords: ["packaging","package damaged","emballage","box damaged","colis abîmé","verpakking","doos beschadigd","emballage abîmé"], category: "Damaged Packaging" },
+  { keywords: ["material","matière","fabric","tissu","texture","scratchy","rough","synthetic","matériaux","stof","materiaal"], category: "Material Issue" },
+  { keywords: ["uncomfortable","comfort","inconfort","gêne","oncomfortabel","niet comfortabel","inconfortable"], category: "Comfort Issue" },
   { keywords: ["chargeback","charge back","bankboeking","bank dispute","payment dispute"], category: "Chargeback" },
 ];
 
 function classifyReason(reason: string): string {
-  if (!reason) return "Onbekend";
+  if (!reason) return "Unknown";
   const lower = reason.toLowerCase();
   for (const rule of REASON_RULES) {
     for (const kw of rule.keywords) {
       if (lower.includes(kw)) return rule.category;
     }
   }
-  return "Anders";
+  return "Other";
 }
 
 async function refreshOAuthToken(provider: string, refreshToken: string, env: Env): Promise<{ accessToken: string; expiry: string }> {
@@ -1611,13 +1611,13 @@ export default {
 
       // Map Shopify dispute reason codes to our categories
       const SHOPIFY_REASON_MAP: Record<string, string> = {
-        fraudulent:               "Ongeautoriseerde transactie",
-        product_not_received:     "Niet ontvangen",
-        product_unacceptable:     "Productkwaliteit",
-        duplicate:                "Dubbele bestelling",
-        subscription_cancelled:   "Klant bedacht",
-        credit_not_processed:     "Ongeautoriseerde transactie",
-        general:                  "Anders",
+        fraudulent:               "Unauthorized",
+        product_not_received:     "Not Received",
+        product_unacceptable:     "Product Quality",
+        duplicate:                "Duplicate Order",
+        subscription_cancelled:   "Changed Mind",
+        credit_not_processed:     "Unauthorized",
+        general:                  "Other",
       };
       const category = SHOPIFY_REASON_MAP[body.reason] ?? classifyReason(body.reason ?? "");
 

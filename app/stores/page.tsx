@@ -190,7 +190,7 @@ export default function StoresPage() {
                     type="password"
                     className="w-full bg-black/5 border border-black/10 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-blue-500/50"
                     value={editDraft.shopify_access_token}
-                    placeholder="Access token (leeg = niet wijzigen)"
+                    placeholder="Access token (leave empty = keep current)"
                     onChange={e => setEditDraft(p => ({ ...p, shopify_access_token: e.target.value }))}
                   />
                   <input

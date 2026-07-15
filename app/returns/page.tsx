@@ -15,23 +15,23 @@ import { useStores } from "../hooks/useStores";
 const API = "https://sentinel-api.tssheets1.workers.dev";
 
 const CATEGORY_COLORS: Record<string, string> = {
-  "Maat / Pasvorm":              "#3b82f6",
-  "Productkwaliteit":            "#ef4444",
-  "Defect / Beschadigd":         "#f97316",
-  "Verkeerd product ontvangen":  "#8b5cf6",
-  "Kleurverschil":               "#eab308",
-  "Niet ontvangen":              "#06b6d4",
-  "Leveringsvertraging":         "#10b981",
-  "Niet zoals verwacht":         "#f43f5e",
-  "Klant bedacht":               "#6b7280",
-  "Ongeautoriseerde transactie": "#dc2626",
-  "Dubbele bestelling":          "#0ea5e9",
-  "Verpakking beschadigd":       "#a78bfa",
-  "Materiaalprobleem":           "#fb923c",
-  "Comfortprobleem":             "#4ade80",
-  "Chargeback":                  "#dc2626",
-  "Anders":                      "#9ca3af",
-  "Onbekend":                    "#d1d5db",
+  "Size / Fit":              "#3b82f6",
+  "Product Quality":         "#ef4444",
+  "Defect / Damaged":        "#f97316",
+  "Wrong Item":              "#8b5cf6",
+  "Color Mismatch":          "#eab308",
+  "Not Received":            "#06b6d4",
+  "Delivery Delay":          "#10b981",
+  "Not As Expected":         "#f43f5e",
+  "Changed Mind":            "#6b7280",
+  "Unauthorized":            "#dc2626",
+  "Duplicate Order":         "#0ea5e9",
+  "Damaged Packaging":       "#a78bfa",
+  "Material Issue":          "#fb923c",
+  "Comfort Issue":           "#4ade80",
+  "Chargeback":              "#dc2626",
+  "Other":                   "#9ca3af",
+  "Unknown":                 "#d1d5db",
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -46,21 +46,21 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const ACTION_SUGGESTIONS: Record<string, string> = {
-  "Maat / Pasvorm":              "Maattabel controleren, modelmaten toevoegen aan productpagina",
-  "Productkwaliteit":            "Leverancier aanspreken, steekproefinspectie verhogen",
-  "Defect / Beschadigd":         "Verpakking aanpassen, leveringsproces controleren",
-  "Verkeerd product ontvangen":  "Fulfilmentproces & barcodes controleren",
-  "Kleurverschil":               "Productfoto's & kleuromschrijving verbeteren",
-  "Niet ontvangen":              "Tracking & vervoerder analyseren",
-  "Leveringsvertraging":         "Levertijden op productpagina bijwerken",
-  "Niet zoals verwacht":         "Advertentie & productpagina vergelijken met klantverwachting",
-  "Klant bedacht":               "Retourproces vereenvoudigen, check prijsstrategie",
-  "Ongeautoriseerde transactie": "Fraudefilters & betaalverificatie verbeteren",
-  "Dubbele bestelling":          "Betaalbevestiging duidelijker maken",
-  "Verpakking beschadigd":       "Verpakkingstest uitvoeren, stevigere verpakking",
-  "Materiaalprobleem":           "Materiaalkeuze herzien, productbeschrijving aanpassen",
-  "Comfortprobleem":             "Productbeschrijving & pasvorm-informatie verbeteren",
-  "Chargeback":                  "Bewijsvoering verbeteren, betaalomschrijving verduidelijken",
+  "Size / Fit":              "Review size guide, add model measurements to product page",
+  "Product Quality":         "Contact supplier, increase spot-check inspections",
+  "Defect / Damaged":        "Improve packaging, audit fulfillment process",
+  "Wrong Item":              "Audit fulfillment process & barcode scanning",
+  "Color Mismatch":          "Improve product photos & color descriptions",
+  "Not Received":            "Investigate tracking & carrier performance",
+  "Delivery Delay":          "Update delivery estimates on product pages",
+  "Not As Expected":         "Compare ads & product page against customer expectations",
+  "Changed Mind":            "Simplify return process, review pricing strategy",
+  "Unauthorized":            "Improve fraud filters & payment verification",
+  "Duplicate Order":         "Clarify order confirmation flow",
+  "Damaged Packaging":       "Run packaging stress test, use sturdier materials",
+  "Material Issue":          "Reconsider material choice, update product description",
+  "Comfort Issue":           "Improve product description & fit information",
+  "Chargeback":              "Strengthen evidence gathering, clarify payment descriptor",
 };
 
 type Analytics = {
@@ -164,7 +164,7 @@ export default function ReturnsPage() {
           </a>
           <div className="flex-1">
             <h1 className="text-lg font-black leading-none">Returns & Chargebacks</h1>
-            <p className="text-xs text-gray-400 mt-0.5">Returns, refunds, disputes en chargebacks</p>
+            <p className="text-xs text-gray-400 mt-0.5">Returns, refunds, disputes and chargebacks</p>
           </div>
 
           {/* Store selector */}
@@ -180,10 +180,10 @@ export default function ReturnsPage() {
           {/* Period */}
           <select value={days} onChange={e => setDays(Number(e.target.value))}
             className="h-9 px-3 rounded-xl bg-white border border-black/8 text-sm text-gray-700 font-medium outline-none">
-            <option value={30}>30 dagen</option>
-            <option value={60}>60 dagen</option>
-            <option value={90}>90 dagen</option>
-            <option value={180}>180 dagen</option>
+            <option value={30}>30 days</option>
+            <option value={60}>60 days</option>
+            <option value={90}>90 days</option>
+            <option value={180}>180 days</option>
           </select>
 
           <button onClick={load} className="h-9 w-9 rounded-xl bg-white border border-black/8 flex items-center justify-center text-gray-400 hover:text-gray-900 transition">
@@ -193,7 +193,7 @@ export default function ReturnsPage() {
             <Upload size={13} /> Import CSV
           </button>
           <button onClick={() => setShowAdd(true)} className="h-9 px-4 rounded-xl bg-blue-600 text-white text-sm font-semibold flex items-center gap-1.5 hover:bg-blue-500 transition">
-            <Plus size={13} /> Toevoegen
+            <Plus size={13} /> Add
           </button>
         </div>
 
@@ -202,7 +202,7 @@ export default function ReturnsPage() {
           {(["overview", "products", "reasons", "events"] as Tab[]).map(t => (
             <button key={t} onClick={() => setTab(t)}
               className={`px-4 py-2 rounded-xl text-sm font-semibold transition capitalize ${tab === t ? "bg-blue-600 text-white" : "text-gray-500 hover:text-gray-700 bg-white/70"}`}>
-              {t === "overview" ? "Overzicht" : t === "products" ? "Producten" : t === "reasons" ? "Redenen" : "Alle Events"}
+              {t === "overview" ? "Overview" : t === "products" ? "Products" : t === "reasons" ? "Reasons" : "All Events"}
             </button>
           ))}
         </div>
@@ -215,16 +215,16 @@ export default function ReturnsPage() {
           <div className="space-y-6">
             {/* KPI row */}
             <div className="grid grid-cols-5 gap-4">
-              <KpiCard label="Returns / Refunds" value={t?.returns ?? 0} sub={`€${(t?.refund_total ?? 0).toFixed(0)} terugbetaald`} color="blue" />
+              <KpiCard label="Returns / Refunds" value={t?.returns ?? 0} sub={`€${(t?.refund_total ?? 0).toFixed(0)} refunded`} color="blue" />
               <KpiCard label="Open disputes" value={t?.dispute_open ?? 0} sub={`€${(t?.dispute_at_risk ?? 0).toFixed(0)} at risk`} color="amber" />
-              <KpiCard label="Chargebacks" value={t?.chargebacks ?? 0} sub={`€${(t?.chargeback_amount ?? 0).toFixed(0)} verlies`} color="red" />
+              <KpiCard label="Chargebacks" value={t?.chargebacks ?? 0} sub={`€${(t?.chargeback_amount ?? 0).toFixed(0)} loss`} color="red" />
               <KpiCard
-                label="Win rate disputes"
+                label="Dispute win rate"
                 value={t?.win_rate != null ? `${t.win_rate}%` : "—"}
                 sub={`${t?.won ?? 0} won · ${t?.lost ?? 0} lost`}
                 color={t?.win_rate != null && t.win_rate >= 50 ? "green" : "red"}
               />
-              <KpiCard label="Totale financiële impact" value={`€${totalFinancial.toFixed(0)}`} sub={`${totalIssues} events totaal`} color="purple" />
+              <KpiCard label="Total financial impact" value={`€${totalFinancial.toFixed(0)}`} sub={`${totalIssues} total events`} color="purple" />
             </div>
 
             {/* Alert cards */}
@@ -233,7 +233,7 @@ export default function ReturnsPage() {
                 {topProduct && (
                   <div className="rounded-2xl bg-red-50 border border-red-100 p-5">
                     <p className="text-[10px] text-red-400 uppercase tracking-widest font-semibold mb-2 flex items-center gap-1.5">
-                      <AlertTriangle size={11} /> Meeste problemen
+                      <AlertTriangle size={11} /> Most issues
                     </p>
                     <p className="font-bold text-sm text-gray-900 line-clamp-2">{topProduct.product_title}</p>
                     <p className="text-xs text-gray-500 mt-1">{topProduct.return_count}x · €{topProduct.refund_total.toFixed(0)} · {topProduct.top_category}</p>
@@ -242,7 +242,7 @@ export default function ReturnsPage() {
                 {topReason && (
                   <div className="rounded-2xl bg-amber-50 border border-amber-100 p-5">
                     <p className="text-[10px] text-amber-500 uppercase tracking-widest font-semibold mb-2 flex items-center gap-1.5">
-                      <AlertCircle size={11} /> Meest voorkomende reden
+                      <AlertCircle size={11} /> Most common reason
                     </p>
                     <p className="font-bold text-sm text-gray-900">{topReason.category}</p>
                     <p className="text-xs text-gray-500 mt-1">{topReason.count}x · €{topReason.total_amount.toFixed(0)} · {ACTION_SUGGESTIONS[topReason.category] ?? ""}</p>
@@ -255,9 +255,9 @@ export default function ReturnsPage() {
             <div className="grid grid-cols-2 gap-4">
               {/* Reason distribution */}
               <div className="rounded-2xl bg-white border border-black/8 p-5">
-                <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-4">Verdeling redenen</p>
+                <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-4">Reason breakdown</p>
                 {(analytics?.reason_breakdown?.length ?? 0) === 0 ? (
-                  <div className="h-48 flex items-center justify-center text-sm text-gray-300">Geen data</div>
+                  <div className="h-48 flex items-center justify-center text-sm text-gray-300">No data</div>
                 ) : (
                   <ResponsiveContainer width="100%" height={220}>
                     <BarChart data={analytics?.reason_breakdown ?? []} layout="vertical" margin={{ left: 0, right: 32 }}>
@@ -280,9 +280,9 @@ export default function ReturnsPage() {
 
               {/* Weekly trend */}
               <div className="rounded-2xl bg-white border border-black/8 p-5">
-                <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-4">Trend per week</p>
+                <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-4">Weekly trend</p>
                 {(analytics?.weekly_trends?.length ?? 0) < 2 ? (
-                  <div className="h-48 flex items-center justify-center text-sm text-gray-300">Nog niet genoeg data</div>
+                  <div className="h-48 flex items-center justify-center text-sm text-gray-300">Not enough data yet</div>
                 ) : (
                   <ResponsiveContainer width="100%" height={220}>
                     <LineChart data={analytics?.weekly_trends ?? []} margin={{ left: 0, right: 8 }}>
@@ -291,9 +291,9 @@ export default function ReturnsPage() {
                       <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={false} allowDecimals={false} />
                       <Tooltip
                         contentStyle={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 11 }}
-                        formatter={(v: number, name: string) => [name === "count" ? `${v} events` : `€${v.toFixed(0)}`, name === "count" ? "Aantal" : "Bedrag"]}
+                        formatter={(v: number, name: string) => [name === "count" ? `${v} events` : `€${v.toFixed(0)}`, name === "count" ? "Count" : "Amount"]}
                       />
-                      <Legend formatter={(v) => v === "count" ? "Aantal events" : "Bedrag (€)"} />
+                      <Legend formatter={(v) => v === "count" ? "Event count" : "Amount (€)"} />
                       <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={2} dot={false} />
                       <Line type="monotone" dataKey="amount" stroke="#ef4444" strokeWidth={2} dot={false} />
                     </LineChart>
@@ -305,7 +305,7 @@ export default function ReturnsPage() {
             {/* Pending actions */}
             {(t?.pending ?? 0) > 0 && (
               <div className="rounded-2xl bg-white border border-black/8 p-5">
-                <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-4">Wachten op actie ({t?.pending})</p>
+                <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-4">Pending action ({t?.pending})</p>
                 <div className="space-y-2">
                   {returns.filter(r => r.status === "pending").slice(0, 5).map(r => (
                     <div key={r.id} className="flex items-center gap-3 p-3 rounded-xl bg-amber-50 border border-amber-100">
@@ -332,13 +332,13 @@ export default function ReturnsPage() {
           <div className="space-y-4">
             <div className="rounded-2xl bg-white border border-black/8 overflow-hidden">
               <div className="px-5 py-4 border-b border-black/5 flex items-center justify-between">
-                <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold">Product ranking — meeste problemen bovenaan</p>
-                <p className="text-xs text-gray-400">{analytics?.product_stats?.length ?? 0} producten met events</p>
+                <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold">Product ranking — most issues first</p>
+                <p className="text-xs text-gray-400">{analytics?.product_stats?.length ?? 0} products with events</p>
               </div>
               {(analytics?.product_stats?.length ?? 0) === 0 ? (
                 <div className="p-12 flex flex-col items-center text-gray-400">
                   <CheckCircle size={28} className="mb-2 text-emerald-400 opacity-50" />
-                  <p className="text-sm">Geen returns of refunds in deze periode</p>
+                  <p className="text-sm">No returns or refunds in this period</p>
                 </div>
               ) : (
                 <table className="w-full text-sm">
@@ -347,8 +347,8 @@ export default function ReturnsPage() {
                       <th className="text-left px-5 py-3 text-[10px] text-gray-400 uppercase tracking-widest font-semibold">#</th>
                       <th className="text-left px-5 py-3 text-[10px] text-gray-400 uppercase tracking-widest font-semibold">Product</th>
                       <th className="text-left px-5 py-3 text-[10px] text-gray-400 uppercase tracking-widest font-semibold">Events</th>
-                      <th className="text-left px-5 py-3 text-[10px] text-gray-400 uppercase tracking-widest font-semibold">Financieel</th>
-                      <th className="text-left px-5 py-3 text-[10px] text-gray-400 uppercase tracking-widest font-semibold">Redenen (top 3)</th>
+                      <th className="text-left px-5 py-3 text-[10px] text-gray-400 uppercase tracking-widest font-semibold">Financial</th>
+                      <th className="text-left px-5 py-3 text-[10px] text-gray-400 uppercase tracking-widest font-semibold">Reasons (top 3)</th>
                       <th className="text-left px-5 py-3 text-[10px] text-gray-400 uppercase tracking-widest font-semibold">Fix</th>
                     </tr>
                   </thead>
@@ -412,7 +412,7 @@ export default function ReturnsPage() {
                     <Tooltip
                       contentStyle={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 11 }}
                       cursor={{ fill: "rgba(0,0,0,0.03)" }}
-                      formatter={(v: number, name: string) => [name === "count" ? `${v} events` : `€${v.toFixed(0)}`, name === "count" ? "Aantal" : "Bedrag"]}
+                      formatter={(v: number, name: string) => [name === "count" ? `${v} events` : `€${v.toFixed(0)}`, name === "count" ? "Count" : "Amount"]}
                     />
                     <Bar dataKey="count" fill="#ef4444" radius={[0, 4, 4, 0]} />
                   </BarChart>
@@ -428,10 +428,10 @@ export default function ReturnsPage() {
             {/* Reason table */}
             <div className="rounded-2xl bg-white border border-black/8 overflow-hidden">
               <div className="px-5 py-4 border-b border-black/5">
-                <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold">Redenen — gesorteerd op aantal</p>
+                <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold">Reasons — sorted by count</p>
               </div>
               {(analytics?.reason_breakdown?.length ?? 0) === 0 ? (
-                <div className="p-12 text-center text-sm text-gray-400">Geen data</div>
+                <div className="p-12 text-center text-sm text-gray-400">No data</div>
               ) : (() => {
                 const total = analytics!.reason_breakdown.reduce((s, r) => s + r.count, 0);
                 let cumulative = 0;
@@ -439,7 +439,7 @@ export default function ReturnsPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-black/5">
-                        {["Categorie", "Aantal", "% van totaal", "Cumulatief", "Financieel", "Actie"].map(h => (
+                        {["Category", "Count", "% of total", "Cumulative", "Financial", "Action"].map(h => (
                           <th key={h} className="text-left px-5 py-3 text-[10px] text-gray-400 uppercase tracking-widest font-semibold">{h}</th>
                         ))}
                       </tr>
@@ -482,13 +482,13 @@ export default function ReturnsPage() {
             </div>
 
             <div className="rounded-2xl bg-blue-50 border border-blue-100 p-4 text-xs text-blue-700">
-              <strong>Pareto:</strong> oranje percentages = de categorieën die samen 80% van de problemen veroorzaken. Focus daar eerst op.
+              <strong>Pareto:</strong> orange percentages = categories that together cause 80% of issues. Focus there first.
             </div>
 
             {/* Category bar chart */}
             {(analytics?.reason_breakdown?.length ?? 0) > 0 && (
               <div className="rounded-2xl bg-white border border-black/8 p-5">
-                <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-4">Financiële impact per categorie</p>
+                <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-4">Financial impact by category</p>
                 <ResponsiveContainer width="100%" height={220}>
                   <BarChart data={analytics?.reason_breakdown ?? []} layout="vertical" margin={{ left: 0, right: 32 }}>
                     <XAxis type="number" tick={{ fontSize: 10, fill: "#9ca3af" }} tickLine={false} axisLine={false}
@@ -497,7 +497,7 @@ export default function ReturnsPage() {
                     <Tooltip
                       contentStyle={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 11 }}
                       cursor={{ fill: "rgba(0,0,0,0.03)" }}
-                      formatter={(v: number) => [`€${v.toFixed(0)}`, "Financieel"]}
+                      formatter={(v: number) => [`€${v.toFixed(0)}`, "Financial"]}
                     />
                     <Bar dataKey="total_amount" radius={[0, 4, 4, 0]}>
                       {(analytics?.reason_breakdown ?? []).map((r, i) => (
@@ -522,12 +522,12 @@ export default function ReturnsPage() {
                 </p>
               </div>
               {returns.length === 0 ? (
-                <div className="p-10 text-center text-sm text-gray-400">Geen returns</div>
+                <div className="p-10 text-center text-sm text-gray-400">No returns</div>
               ) : (
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-black/5">
-                      {["Order", "Product", "Reden", "Categorie", "Bedrag", "Status", "Datum", "Actie"].map(h => (
+                      {["Order", "Product", "Reason", "Category", "Amount", "Status", "Date", "Action"].map(h => (
                         <th key={h} className="text-left px-4 py-3 text-[10px] text-gray-400 uppercase tracking-widest font-semibold">{h}</th>
                       ))}
                     </tr>
@@ -580,12 +580,12 @@ export default function ReturnsPage() {
                 </p>
               </div>
               {disputes.length === 0 ? (
-                <div className="p-10 text-center text-sm text-gray-400">Geen disputes</div>
+                <div className="p-10 text-center text-sm text-gray-400">No disputes</div>
               ) : (
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-black/5">
-                      {["Order", "Klant", "Reden", "Categorie", "Type", "Bedrag", "Status", "Datum", "Actie"].map(h => (
+                      {["Order", "Customer", "Reason", "Category", "Type", "Amount", "Status", "Date", "Action"].map(h => (
                         <th key={h} className="text-left px-4 py-3 text-[10px] text-gray-400 uppercase tracking-widest font-semibold">{h}</th>
                       ))}
                     </tr>
@@ -635,7 +635,7 @@ export default function ReturnsPage() {
             {/* Reclassify button */}
             <div className="flex justify-end">
               <button onClick={reclassify} className="text-xs text-gray-400 hover:text-gray-600 transition flex items-center gap-1.5">
-                <RefreshCw size={11} /> Redenen herclassificeren
+                <RefreshCw size={11} /> Reclassify reasons
               </button>
             </div>
           </div>
@@ -653,14 +653,14 @@ export default function ReturnsPage() {
             { label: "Order ID", value: selectedReturn.order_id },
             { label: "Product", value: selectedReturn.product_title },
             { label: "Variant", value: selectedReturn.variant_title || "—" },
-            { label: "Reden", value: selectedReturn.reason || "—" },
-            { label: "Categorie", value: selectedReturn.reason_category || "—" },
-            { label: "Bedrag", value: `€${selectedReturn.amount.toFixed(2)}` },
+            { label: "Reason", value: selectedReturn.reason || "—" },
+            { label: "Category", value: selectedReturn.reason_category || "—" },
+            { label: "Amount", value: `€${selectedReturn.amount.toFixed(2)}` },
             { label: "Status", value: selectedReturn.status },
             { label: "Type", value: selectedReturn.event_type || "return" },
             { label: "Platform", value: selectedReturn.source_platform || "—" },
-            { label: "Aanbeveling", value: ACTION_SUGGESTIONS[selectedReturn.reason_category] ?? "—" },
-            { label: "Datum", value: selectedReturn.created_at?.slice(0, 10) },
+            { label: "Recommendation", value: ACTION_SUGGESTIONS[selectedReturn.reason_category] ?? "—" },
+            { label: "Date", value: selectedReturn.created_at?.slice(0, 10) },
           ]} />
           {selectedReturn.status === "pending" && (
             <div className="flex gap-2 mt-5">
@@ -677,15 +677,15 @@ export default function ReturnsPage() {
         <DetailModal title="Dispute detail" icon={<ShieldAlert size={16} className="text-red-500" />} onClose={() => setSelectedDispute(null)}>
           <Fields items={[
             { label: "Order ID", value: selectedDispute.order_id },
-            { label: "Klant", value: selectedDispute.customer_email || "—" },
-            { label: "Reden", value: selectedDispute.reason || "—" },
-            { label: "Categorie", value: selectedDispute.reason_category || "—" },
+            { label: "Customer", value: selectedDispute.customer_email || "—" },
+            { label: "Reason", value: selectedDispute.reason || "—" },
+            { label: "Category", value: selectedDispute.reason_category || "—" },
             { label: "Type", value: selectedDispute.dispute_type || "dispute" },
-            { label: "Bedrag", value: `€${selectedDispute.amount.toFixed(2)}` },
+            { label: "Amount", value: `€${selectedDispute.amount.toFixed(2)}` },
             { label: "Status", value: selectedDispute.status },
             { label: "Platform", value: selectedDispute.source_platform || "—" },
-            { label: "Aanbeveling", value: ACTION_SUGGESTIONS[selectedDispute.reason_category] ?? "—" },
-            { label: "Datum", value: selectedDispute.created_at?.slice(0, 10) },
+            { label: "Recommendation", value: ACTION_SUGGESTIONS[selectedDispute.reason_category] ?? "—" },
+            { label: "Date", value: selectedDispute.created_at?.slice(0, 10) },
           ]} />
           {selectedDispute.status === "open" && (
             <div className="flex gap-2 mt-5">
@@ -771,7 +771,7 @@ function AddEventModal({ storeId, onClose }: { storeId: string; onClose: () => v
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
       <div className="bg-white border border-black/10 rounded-3xl p-6 w-full max-w-md">
         <div className="flex items-center justify-between mb-5">
-          <h2 className="font-black text-lg">Nieuw event</h2>
+          <h2 className="font-black text-lg">New event</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-900"><X size={18} /></button>
         </div>
         <div className="flex gap-1 bg-black/5 rounded-xl p-1 mb-4">
@@ -787,9 +787,9 @@ function AddEventModal({ storeId, onClose }: { storeId: string; onClose: () => v
             { key: "order_id", label: "Order ID", show: true },
             { key: "product_title", label: "Product", show: type === "return" },
             { key: "variant_title", label: "Variant", show: type === "return" },
-            { key: "customer_email", label: "E-mail klant", show: type !== "return" },
-            { key: "reason", label: "Reden", show: true },
-            { key: "amount", label: "Bedrag (€)", show: true },
+            { key: "customer_email", label: "Customer email", show: type !== "return" },
+            { key: "reason", label: "Reason", show: true },
+            { key: "amount", label: "Amount (€)", show: true },
           ].filter(f => f.show).map(f => (
             <div key={f.key}>
               <label className="text-[10px] text-gray-400 uppercase tracking-widest mb-1 block">{f.label}</label>
@@ -803,7 +803,7 @@ function AddEventModal({ storeId, onClose }: { storeId: string; onClose: () => v
         </div>
         <button onClick={save} disabled={saving}
           className="mt-5 w-full h-10 rounded-xl bg-blue-600 text-white hover:bg-blue-500 font-semibold text-sm transition">
-          {saving ? "Opslaan…" : "Toevoegen"}
+          {saving ? "Saving…" : "Add"}
         </button>
       </div>
     </div>
@@ -843,9 +843,9 @@ function CsvImportModal({ storeId, onClose }: { storeId: string; onClose: () => 
         body: JSON.stringify({ store_id: storeId, rows }),
       });
       const data = await res.json() as { ok: boolean; imported: number };
-      setResult(`✅ ${data.imported} records geïmporteerd`);
+      setResult(`✅ ${data.imported} records imported`);
     } catch (e) {
-      setResult("❌ Fout bij importeren");
+      setResult("❌ Import error");
     } finally {
       setSaving(false);
     }
@@ -872,13 +872,13 @@ function CsvImportModal({ storeId, onClose }: { storeId: string; onClose: () => 
         {result && <p className="text-sm mt-2 font-medium">{result}</p>}
         <div className="flex gap-2 mt-4">
           {result ? (
-            <button onClick={onClose} className="flex-1 h-10 rounded-xl bg-emerald-600 text-white font-semibold text-sm transition">Sluiten</button>
+            <button onClick={onClose} className="flex-1 h-10 rounded-xl bg-emerald-600 text-white font-semibold text-sm transition">Close</button>
           ) : (
             <>
-              <button onClick={onClose} className="flex-1 h-10 rounded-xl bg-black/5 text-gray-600 font-semibold text-sm transition">Annuleren</button>
+              <button onClick={onClose} className="flex-1 h-10 rounded-xl bg-black/5 text-gray-600 font-semibold text-sm transition">Cancel</button>
               <button onClick={doImport} disabled={saving || !csv.trim()}
                 className="flex-1 h-10 rounded-xl bg-blue-600 text-white hover:bg-blue-500 font-semibold text-sm transition disabled:opacity-50">
-                {saving ? "Importeren…" : "Importeren"}
+                {saving ? "Importing…" : "Import"}
               </button>
             </>
           )}

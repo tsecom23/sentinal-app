@@ -154,28 +154,28 @@ export default function StockPage() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setEditing(null)}>
           <div className="bg-white border border-black/10 rounded-3xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
-              <h2 className="font-black text-lg">Voorraad aanpassen</h2>
+              <h2 className="font-black text-lg">Adjust stock</h2>
               <button onClick={() => setEditing(null)}><X size={18} className="text-gray-400 hover:text-gray-900" /></button>
             </div>
             <p className="text-sm text-gray-500 mb-4 break-words">{editing.product_title}</p>
             <div className="space-y-3">
               <div>
-                <label className="text-[10px] text-gray-400 uppercase tracking-widest mb-1 block">Ingekocht (totaal)</label>
+                <label className="text-[10px] text-gray-400 uppercase tracking-widest mb-1 block">Purchased (total)</label>
                 <input type="number" value={editing.purchased_qty}
                   onChange={e => setEditing(p => p ? { ...p, purchased_qty: parseInt(e.target.value) || 0 } : p)}
                   className="w-full bg-gray-50 border border-black/8 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-500/50" />
               </div>
               <div>
-                <label className="text-[10px] text-gray-400 uppercase tracking-widest mb-1 block">Alert bij (units)</label>
+                <label className="text-[10px] text-gray-400 uppercase tracking-widest mb-1 block">Alert at (units)</label>
                 <input type="number" value={editing.low_stock_alert}
                   onChange={e => setEditing(p => p ? { ...p, low_stock_alert: parseInt(e.target.value) || 0 } : p)}
                   className="w-full bg-gray-50 border border-black/8 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-500/50" />
               </div>
               <div>
-                <label className="text-[10px] text-gray-400 uppercase tracking-widest mb-1 block">Notitie</label>
+                <label className="text-[10px] text-gray-400 uppercase tracking-widest mb-1 block">Note</label>
                 <input type="text" value={editing.notes ?? ""}
                   onChange={e => setEditing(p => p ? { ...p, notes: e.target.value } : p)}
-                  placeholder="Bijv. batch 1, leverancier X"
+                  placeholder="E.g. batch 1, supplier X"
                   className="w-full bg-gray-50 border border-black/8 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-500/50" />
               </div>
             </div>
@@ -186,7 +186,7 @@ export default function StockPage() {
               });
               setEditing(null); load();
             }} className="mt-5 w-full h-10 rounded-xl bg-blue-600 text-white hover:bg-blue-500 font-semibold text-sm transition">
-              Opslaan
+              Save
             </button>
           </div>
         </div>
@@ -216,15 +216,15 @@ function AddStockModal({ onClose }: { onClose: () => void }) {
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
       <div className="bg-white border border-black/10 rounded-3xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5">
-          <h2 className="font-black text-lg flex items-center gap-2"><Package size={18} className="text-blue-400" /> Nieuw product</h2>
+          <h2 className="font-black text-lg flex items-center gap-2"><Package size={18} className="text-blue-400" /> New product</h2>
           <button onClick={onClose}><X size={18} className="text-gray-400" /></button>
         </div>
         <div className="space-y-3">
           {[
-            { label: "Product titel", key: "product_title", placeholder: "Exact zelfde als in Shopify" },
-            { label: "Ingekocht (stuks)", key: "purchased_qty", placeholder: "50" },
-            { label: "Alert bij (stuks)", key: "low_stock_alert", placeholder: "5" },
-            { label: "Notitie", key: "notes", placeholder: "Optioneel" },
+            { label: "Product title", key: "product_title", placeholder: "Exact same as in Shopify" },
+            { label: "Purchased (units)", key: "purchased_qty", placeholder: "50" },
+            { label: "Alert at (units)", key: "low_stock_alert", placeholder: "5" },
+            { label: "Note", key: "notes", placeholder: "Optional" },
           ].map(f => (
             <div key={f.key}>
               <label className="text-[10px] text-gray-400 uppercase tracking-widest mb-1 block">{f.label}</label>
@@ -236,7 +236,7 @@ function AddStockModal({ onClose }: { onClose: () => void }) {
           ))}
         </div>
         <button onClick={save} disabled={saving} className="mt-5 w-full h-10 rounded-xl bg-blue-600 text-white hover:bg-blue-500 font-semibold text-sm transition">
-          {saving ? "Opslaan..." : "Toevoegen"}
+          {saving ? "Saving..." : "Add"}
         </button>
       </div>
     </div>
