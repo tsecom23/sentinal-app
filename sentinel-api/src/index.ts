@@ -1061,15 +1061,20 @@ export default {
         `).bind(storeId).all(),
       ]);
 
-      // Compute top category per product
+      // Compute top 3 categories per product
       const productStats = await Promise.all(
         (productRows.results ?? []).slice(0, 15).map(async (p: any) => {
-          const topCat = await env.DB.prepare(`
+          const cats = await env.DB.prepare(`
             SELECT COALESCE(NULLIF(reason_category,''),'Onbekend') as category, COUNT(*) as cnt
             FROM returns WHERE store_id=? AND product_title=? AND created_at>=?
-            GROUP BY category ORDER BY cnt DESC LIMIT 1
-          `).bind(storeId, p.product_title, since).first();
-          return { ...p, top_category: (topCat as any)?.category ?? "Onbekend" };
+            GROUP BY category ORDER BY cnt DESC LIMIT 3
+          `).bind(storeId, p.product_title, since).all();
+          const topCats = (cats.results ?? []) as Array<{ category: string; cnt: number }>;
+          return {
+            ...p,
+            top_category: topCats[0]?.category ?? "Onbekend",
+            top_categories: topCats,
+          };
         })
       );
 
@@ -1591,6 +1596,70 @@ export default {
               refundCategory, "shopify", "refund").run();
 
       return json({ ok: true, id });
+    }
+
+    // ── POST /api/webhooks/shopify/disputes-create ────────────────────────────
+    // Fires when a Shopify Payments chargeback/dispute is opened
+    if (path === "/api/webhooks/shopify/disputes-create" && method === "POST") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const body = await request.json() as any;
+      const storeId = url.searchParams.get("store_id");
+      if (!storeId) return json({ error: "Missing store_id" }, 400);
+
+      const id = `dis-shopify-${body.id}`;
+      const amount = parseFloat(body.amount ?? "0");
+
+      // Map Shopify dispute reason codes to our categories
+      const SHOPIFY_REASON_MAP: Record<string, string> = {
+        fraudulent:               "Ongeautoriseerde transactie",
+        product_not_received:     "Niet ontvangen",
+        product_unacceptable:     "Productkwaliteit",
+        duplicate:                "Dubbele bestelling",
+        subscription_cancelled:   "Klant bedacht",
+        credit_not_processed:     "Ongeautoriseerde transactie",
+        general:                  "Anders",
+      };
+      const category = SHOPIFY_REASON_MAP[body.reason] ?? classifyReason(body.reason ?? "");
+
+      await env.DB.prepare(`
+        INSERT OR REPLACE INTO disputes
+          (id,order_id,store_id,customer_email,amount,reason,status,created_at,reason_category,source_platform,dispute_type)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)
+      `).bind(
+        id,
+        String(body.order_id ?? ""),
+        storeId,
+        body.customer_email ?? "",
+        amount,
+        body.reason ?? "chargeback",
+        body.status ?? "open",
+        body.created_at ?? new Date().toISOString(),
+        category,
+        "shopify_payments",
+        "chargeback"
+      ).run();
+
+      return json({ ok: true, id });
+    }
+
+    // ── POST /api/webhooks/shopify/disputes-update ────────────────────────────
+    if (path === "/api/webhooks/shopify/disputes-update" && method === "POST") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const body = await request.json() as any;
+      const id = `dis-shopify-${body.id}`;
+      // won / lost / charge_refunded → map to our status
+      const STATUS_MAP: Record<string, string> = {
+        won: "won", lost: "lost",
+        charge_refunded: "lost",
+        under_review: "open",
+        needs_response: "open",
+        accepted: "lost",
+      };
+      const status = STATUS_MAP[body.status] ?? body.status ?? "open";
+      await env.DB.prepare(
+        `UPDATE disputes SET status=?, resolved_at=? WHERE id=?`
+      ).bind(status, new Date().toISOString(), id).run();
+      return json({ ok: true });
     }
 
     // ── GET /api/product-costs ────────────────────────────────────────────────

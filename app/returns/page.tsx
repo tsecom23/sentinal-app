@@ -71,7 +71,9 @@ type Analytics = {
     won: number; lost: number; win_rate: number | null;
   };
   product_stats: Array<{
-    product_title: string; return_count: number; refund_total: number; top_category: string;
+    product_title: string; return_count: number; refund_total: number;
+    top_category: string;
+    top_categories: Array<{ category: string; cnt: number }>;
   }>;
   reason_breakdown: Array<{ category: string; count: number; total_amount: number }>;
   weekly_trends: Array<{ week: string; count: number; amount: number }>;
@@ -346,8 +348,8 @@ export default function ReturnsPage() {
                       <th className="text-left px-5 py-3 text-[10px] text-gray-400 uppercase tracking-widest font-semibold">Product</th>
                       <th className="text-left px-5 py-3 text-[10px] text-gray-400 uppercase tracking-widest font-semibold">Events</th>
                       <th className="text-left px-5 py-3 text-[10px] text-gray-400 uppercase tracking-widest font-semibold">Financieel</th>
-                      <th className="text-left px-5 py-3 text-[10px] text-gray-400 uppercase tracking-widest font-semibold">Top reden</th>
-                      <th className="text-left px-5 py-3 text-[10px] text-gray-400 uppercase tracking-widest font-semibold">Aanbeveling</th>
+                      <th className="text-left px-5 py-3 text-[10px] text-gray-400 uppercase tracking-widest font-semibold">Redenen (top 3)</th>
+                      <th className="text-left px-5 py-3 text-[10px] text-gray-400 uppercase tracking-widest font-semibold">Fix</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -370,15 +372,21 @@ export default function ReturnsPage() {
                             </span>
                           </td>
                           <td className="px-5 py-3 font-semibold text-red-500">€{p.refund_total.toFixed(0)}</td>
-                          <td className="px-5 py-3">
-                            {p.top_category && (
-                              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-semibold bg-black/5"
-                                style={{ color: CATEGORY_COLORS[p.top_category] ?? "#6b7280" }}>
-                                {p.top_category}
-                              </span>
-                            )}
+                          <td className="px-5 py-3 max-w-[240px]">
+                            <div className="flex flex-col gap-1">
+                              {(p.top_categories ?? [{ category: p.top_category, cnt: p.return_count }]).map((cat, ci) => (
+                                <div key={ci} className="flex items-center gap-1.5">
+                                  <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-black/5 whitespace-nowrap"
+                                    style={{ color: CATEGORY_COLORS[cat.category] ?? "#6b7280" }}>
+                                    {cat.category}
+                                  </span>
+                                  <span className="text-[10px] font-bold text-gray-500">{cat.cnt}×</span>
+                                  {ci === 0 && <span className="text-[9px] text-gray-300 font-semibold uppercase tracking-wide">top</span>}
+                                </div>
+                              ))}
+                            </div>
                           </td>
-                          <td className="px-5 py-3 text-xs text-gray-500 max-w-[200px]">
+                          <td className="px-5 py-3 text-xs text-gray-500 max-w-[180px]">
                             {ACTION_SUGGESTIONS[p.top_category] ?? "—"}
                           </td>
                         </tr>
