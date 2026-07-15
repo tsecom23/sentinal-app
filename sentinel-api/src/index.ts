@@ -6,6 +6,69 @@ interface Env {
   OUTLOOK_CLIENT_SECRET?: string;
 }
 
+// ─── FX rate cache (per worker instance, resets on cold start) ───────────────
+const _fxCache: Record<string, { rate: number; ts: number }> = {};
+async function getFxRate(from: string, to: string): Promise<number> {
+  if (!from || from === to) return 1;
+  const key = `${from}_${to}`;
+  const cached = _fxCache[key];
+  if (cached && Date.now() - cached.ts < 3_600_000) return cached.rate;
+  try {
+    const r = await fetch(`https://api.frankfurter.app/latest?from=${from}&to=${to}`, { cf: { cacheTtl: 3600 } } as RequestInit);
+    const d = await r.json() as { rates: Record<string, number> };
+    const rate = d.rates[to];
+    if (rate && rate > 0) { _fxCache[key] = { rate, ts: Date.now() }; return rate; }
+  } catch { /* fall through to hardcoded */ }
+  // Hardcoded fallback rates (updated 2026-06)
+  const FALLBACK: Record<string, number> = { CAD_EUR: 0.67, USD_EUR: 0.92, GBP_EUR: 1.17, AUD_EUR: 0.59 };
+  return FALLBACK[key] ?? 1;
+}
+
+// ─── Cancel-sync: pull cancelled Shopify orders → mark 'cancelled' in D1 ────────
+// A cancelled Shopify order has `cancelled_at` set while its financial_status
+// stays paid/refunded, so cancellations never reached D1 and kept counting as
+// sold. This backfills them; the stock calc already excludes 'cancelled'.
+// Runs on demand (POST /api/sync/cancellations) and on a cron (scheduled).
+async function syncCancellations(env: Env, storeId?: string): Promise<number> {
+  const q = storeId
+    ? env.DB.prepare(`SELECT id, shopify_domain, shopify_access_token FROM stores WHERE id=?`).bind(storeId)
+    : env.DB.prepare(`SELECT id, shopify_domain, shopify_access_token FROM stores`);
+  const stores = (await q.all()).results as Array<{ id: string; shopify_domain: string; shopify_access_token: string }>;
+
+  let marked = 0;
+  for (const store of stores) {
+    if (!store.shopify_domain || !store.shopify_access_token) continue;
+    const base = `https://${store.shopify_domain}/admin/api/2024-01`;
+    const headers = { "X-Shopify-Access-Token": store.shopify_access_token };
+
+    let pageInfo: string | null = null;
+    for (let page = 0; page < 10; page++) {
+      // page_info can't be combined with other filters (only limit)
+      const qs = pageInfo
+        ? `page_info=${pageInfo}&limit=250`
+        : `status=cancelled&limit=250&created_at_min=2024-01-01T00:00:00Z&fields=id,cancelled_at`;
+      const res = await fetch(`${base}/orders.json?${qs}`, { headers });
+      if (!res.ok) break;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = await res.json() as any;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const orders: any[] = data.orders ?? [];
+      if (orders.length === 0) break;
+      for (const o of orders) {
+        if (!o.cancelled_at) continue;
+        const r = await env.DB.prepare(
+          `UPDATE orders SET financial_status='cancelled' WHERE shopify_order_id=? AND store_id=?`
+        ).bind(String(o.id), store.id).run();
+        marked += (r.meta?.changes as number) ?? 0;
+      }
+      const link = res.headers.get("Link") ?? "";
+      const next = link.match(/page_info=([^&>]+)[^>]*>;\s*rel="next"/);
+      if (next) { pageInfo = next[1]; } else { break; }
+    }
+  }
+  return marked;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getAmsterdamDate(offsetDays = 0): string {
@@ -145,8 +208,10 @@ const MIGRATIONS = [
     created_at TEXT)`,
   `INSERT OR IGNORE INTO stores (id,name,shopify_domain,currency,created_at) VALUES ('ceofo','CEOFO','','EUR','2024-01-01')`,
   `INSERT OR IGNORE INTO stores (id,name,shopify_domain,currency,created_at) VALUES ('martaline','Martaline','','EUR','2024-01-01')`,
-  // Add google_ads_customer_id to stores if it doesn't exist yet
+  `INSERT OR IGNORE INTO stores (id,name,shopify_domain,created_at) VALUES ('dorevy','Dorevy','gfauyv-wi.myshopify.com','2024-01-01')`,
+  // Add google_ads_customer_id and shopify_access_token to stores if they don't exist yet
   `ALTER TABLE stores ADD COLUMN google_ads_customer_id TEXT DEFAULT ''`,
+  `ALTER TABLE stores ADD COLUMN shopify_access_token TEXT DEFAULT ''`,
   // Tags on CS tickets
   `ALTER TABLE cs_tickets ADD COLUMN tags TEXT DEFAULT ''`,
   `ALTER TABLE cs_tickets ADD COLUMN source TEXT DEFAULT 'manual'`,
@@ -160,6 +225,56 @@ const MIGRATIONS = [
   `ALTER TABLE orders ADD COLUMN customer_phone TEXT DEFAULT ''`,
   `ALTER TABLE orders ADD COLUMN customer_city TEXT DEFAULT ''`,
   `ALTER TABLE orders ADD COLUMN customer_country TEXT DEFAULT ''`,
+  // ROAS Tracker — daily editable sheet per store
+  `CREATE TABLE IF NOT EXISTS roas_tracker (
+    id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    ad_spend REAL DEFAULT 0,
+    revenue REAL DEFAULT 0,
+    orders INTEGER DEFAULT 0,
+    clicks INTEGER DEFAULT 0,
+    impressions INTEGER DEFAULT 0,
+    notes TEXT DEFAULT '',
+    is_manual INTEGER DEFAULT 1,
+    created_at TEXT,
+    updated_at TEXT,
+    UNIQUE(store_id, date)
+  )`,
+  // ROAS Tracker — per country (multifeed stores)
+  `CREATE TABLE IF NOT EXISTS roas_tracker_country (
+    id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    country TEXT NOT NULL DEFAULT '',
+    ad_spend REAL DEFAULT 0,
+    revenue REAL DEFAULT 0,
+    orders INTEGER DEFAULT 0,
+    clicks INTEGER DEFAULT 0,
+    impressions INTEGER DEFAULT 0,
+    notes TEXT DEFAULT '',
+    is_manual INTEGER DEFAULT 1,
+    created_at TEXT,
+    updated_at TEXT,
+    UNIQUE(store_id, date, country)
+  )`,
+  `ALTER TABLE google_ads_daily ADD COLUMN country TEXT DEFAULT ''`,
+  // Returns enrichment — reason classification + extra fields
+  `ALTER TABLE returns ADD COLUMN event_type TEXT DEFAULT 'return'`,
+  `ALTER TABLE returns ADD COLUMN sku TEXT DEFAULT ''`,
+  `ALTER TABLE returns ADD COLUMN quantity INTEGER DEFAULT 1`,
+  `ALTER TABLE returns ADD COLUMN sale_price REAL DEFAULT 0`,
+  `ALTER TABLE returns ADD COLUMN currency TEXT DEFAULT 'EUR'`,
+  `ALTER TABLE returns ADD COLUMN country TEXT DEFAULT ''`,
+  `ALTER TABLE returns ADD COLUMN reason_category TEXT DEFAULT ''`,
+  `ALTER TABLE returns ADD COLUMN source_platform TEXT DEFAULT 'shopify'`,
+  // Disputes enrichment
+  `ALTER TABLE disputes ADD COLUMN reason_category TEXT DEFAULT ''`,
+  `ALTER TABLE disputes ADD COLUMN outcome TEXT DEFAULT ''`,
+  `ALTER TABLE disputes ADD COLUMN currency TEXT DEFAULT 'EUR'`,
+  `ALTER TABLE disputes ADD COLUMN country TEXT DEFAULT ''`,
+  `ALTER TABLE disputes ADD COLUMN source_platform TEXT DEFAULT 'stripe'`,
+  `ALTER TABLE disputes ADD COLUMN dispute_type TEXT DEFAULT 'dispute'`,
 ];
 
 async function runMigrations(db: D1Database) {
@@ -174,6 +289,37 @@ let migrated = false;
 
 function uid(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+// ─── Reason Classification ────────────────────────────────────────────────────
+
+const REASON_RULES: Array<{ keywords: string[]; category: string }> = [
+  { keywords: ["taille","size","petit","grand","small","big","tight","loose","fit","sizing","too small","too big","too large","too tight","maat","pas","kleiner","größe","zu klein","zu groß"], category: "Maat / Pasvorm" },
+  { keywords: ["quality","qualité","cheap","thin","poor","flimsy","badly made","poorly made","sewn","stitching","kwaliteit","goedkoop","kwalité","niet goed","slecht"], category: "Productkwaliteit" },
+  { keywords: ["defect","broken","damaged","cassé","endommagé","ripped","torn","déchiré","défectueux","broken on arrival","arrivé cassé","ne fonctionne pas","kapot","stuk","beschadigd"], category: "Defect / Beschadigd" },
+  { keywords: ["wrong item","wrong product","mauvais produit","pas commandé","not what i ordered","different product","verkeerd product","wrong order","faux article"], category: "Verkeerd product ontvangen" },
+  { keywords: ["color","colour","couleur","different color","not matching","nuance","teinte","different colour","kleurverschil","verkeerde kleur","autre couleur"], category: "Kleurverschil" },
+  { keywords: ["not received","not arrived","missing","pas reçu","perdu","lost","never arrived","jamais reçu","niet ontvangen","nooit aangekomen","non livré"], category: "Niet ontvangen" },
+  { keywords: ["late","delay","livraison","retard","slow delivery","trop long","te laat","te traag","vertraging","trop de temps"], category: "Leveringsvertraging" },
+  { keywords: ["not as expected","not as described","different","pas comme","misleading","not what i expected","trompeur","anders dan verwacht","niet zoals","niet conform","photo","image","photo differ"], category: "Niet zoals verwacht" },
+  { keywords: ["changed mind","no longer want","don't want","plus envie","changer d'avis","i changed my mind","bedacht","wil niet meer","me ravise"], category: "Klant bedacht" },
+  { keywords: ["fraud","unauthorized","not authorized","frauduleux","non autorisé","didn't order","i didn't order","ongeautoriseerd","fraude","oplichting"], category: "Ongeautoriseerde transactie" },
+  { keywords: ["duplicate","double order","ordered twice","deux fois","en double","dubbel","deux commandes"], category: "Dubbele bestelling" },
+  { keywords: ["packaging","package damaged","emballage","box damaged","colis abîmé","verpakking","doos beschadigd","emballage abîmé"], category: "Verpakking beschadigd" },
+  { keywords: ["material","matière","fabric","tissu","texture","scratchy","rough","synthetic","matériaux","stof","materiaal"], category: "Materiaalprobleem" },
+  { keywords: ["uncomfortable","comfort","inconfort","gêne","oncomfortabel","niet comfortabel","inconfortable"], category: "Comfortprobleem" },
+  { keywords: ["chargeback","charge back","bankboeking","bank dispute","payment dispute"], category: "Chargeback" },
+];
+
+function classifyReason(reason: string): string {
+  if (!reason) return "Onbekend";
+  const lower = reason.toLowerCase();
+  for (const rule of REASON_RULES) {
+    for (const kw of rule.keywords) {
+      if (lower.includes(kw)) return rule.category;
+    }
+  }
+  return "Anders";
 }
 
 async function refreshOAuthToken(provider: string, refreshToken: string, env: Env): Promise<{ accessToken: string; expiry: string }> {
@@ -399,6 +545,7 @@ export default {
       // First ensure google_ads_customer_id column exists (idempotent, safe to run every time)
       try { await env.DB.prepare(`ALTER TABLE stores ADD COLUMN google_ads_customer_id TEXT DEFAULT ''`).run(); } catch { /* already exists */ }
       try { await env.DB.prepare(`ALTER TABLE stores ADD COLUMN shopify_access_token TEXT DEFAULT ''`).run(); } catch { /* already exists */ }
+      try { await env.DB.prepare(`ALTER TABLE stores ADD COLUMN currency TEXT DEFAULT 'EUR'`).run(); } catch { /* already exists */ }
       const rows = await env.DB.prepare(`SELECT id,name,shopify_domain,google_ads_customer_id,currency,created_at FROM stores ORDER BY created_at ASC`).all();
       return json({ stores: rows.results });
     }
@@ -439,7 +586,20 @@ export default {
       if (!storeId) return json({ error: "Missing store_id" }, 400);
       const { start, end } = getDateFilter(url);
 
-      const [overview, costRow, adsRow, returnsRow, disputesRow, trend, returnsTrend] = await Promise.all([
+      // FX: get store currency and fetch conversion rate to EUR
+      const storeRow = await env.DB.prepare(`SELECT currency FROM stores WHERE id=?`).bind(storeId).first();
+      const storeCurrency = (storeRow?.currency as string | null) ?? "EUR";
+      const fxRate = await getFxRate(storeCurrency, "EUR");
+      const fx = (v: number) => Math.round(v * fxRate * 100) / 100;
+
+      // Optional per-country filter (e.g. ?country=FR for CEOFO)
+      const country = url.searchParams.get("country") || "";
+      const orderCC   = country ? "AND customer_country=?" : "";
+      const adsCC     = country ? "AND country=?" : "AND (country='' OR country IS NULL)";
+      const ob  = <T extends unknown[]>(base: T) => (country ? [...base, country] : base) as unknown[];
+      const ab  = <T extends unknown[]>(base: T) => (country ? [...base, country] : base) as unknown[];
+
+      const [overview, costRow, adsRow, returnsRow, disputesRow, trend, returnsTrend, adsTrend] = await Promise.all([
         env.DB.prepare(`
           SELECT COUNT(*) as orders,
                  COALESCE(SUM(revenue),0) as revenue,
@@ -448,9 +608,10 @@ export default {
             SELECT MAX(revenue) as revenue, MAX(net_revenue) as net_revenue
             FROM orders
             WHERE store_id=? AND substr(created_at,1,10)>=? AND substr(created_at,1,10)<=?
+            ${orderCC}
             GROUP BY COALESCE(shopify_order_id, id)
           )
-        `).bind(storeId, start, end).first(),
+        `).bind(...ob([storeId, start, end])).first(),
 
         env.DB.prepare(`
           SELECT COALESCE(SUM(
@@ -461,6 +622,8 @@ export default {
           LEFT JOIN product_costs pc
             ON pc.product_title = oi.product_title AND pc.store_id = o.store_id
           WHERE o.store_id=? AND substr(o.created_at,1,10)>=? AND substr(o.created_at,1,10)<=?
+            ${orderCC}
+            AND o.revenue > 0
             AND NOT EXISTS (
               SELECT 1 FROM orders o2
               WHERE o2.shopify_order_id = o.shopify_order_id
@@ -469,7 +632,7 @@ export default {
                 AND o.shopify_order_id IS NOT NULL
                 AND o.shopify_order_id != ''
             )
-        `).bind(storeId, start, end).first(),
+        `).bind(...ob([storeId, start, end])).first(),
 
         env.DB.prepare(`
           SELECT COALESCE(SUM(spend),0) as adSpend,
@@ -479,8 +642,8 @@ export default {
                  CASE WHEN SUM(clicks)>0 THEN SUM(spend)/SUM(clicks) ELSE 0 END as cpc,
                  CASE WHEN SUM(impressions)>0 THEN CAST(SUM(clicks) AS REAL)/SUM(impressions)*100 ELSE 0 END as ctr
           FROM google_ads_daily
-          WHERE store_id=? AND date>=? AND date<=?
-        `).bind(storeId, start, end).first(),
+          WHERE store_id=? AND date>=? AND date<=? ${adsCC}
+        `).bind(...ab([storeId, start, end])).first(),
 
         env.DB.prepare(`
           SELECT COALESCE(SUM(amount),0) as returnAmount, COUNT(*) as returnCount
@@ -499,9 +662,10 @@ export default {
             SELECT substr(created_at,1,10) as day, MAX(revenue) as revenue
             FROM orders
             WHERE store_id=? AND substr(created_at,1,10)>=? AND substr(created_at,1,10)<=?
+            ${orderCC}
             GROUP BY COALESCE(shopify_order_id, id)
           ) GROUP BY day ORDER BY day ASC
-        `).bind(storeId, start, end).all(),
+        `).bind(...ob([storeId, start, end])).all(),
 
         env.DB.prepare(`
           SELECT substr(created_at,1,10) as day, COALESCE(SUM(amount),0) as returnAmount
@@ -509,15 +673,24 @@ export default {
           WHERE store_id=? AND substr(created_at,1,10)>=? AND substr(created_at,1,10)<=?
           GROUP BY day
         `).bind(storeId, start, end).all(),
+
+        // Daily ad spend for profit trend (country-aware)
+        env.DB.prepare(`
+          SELECT date as day, COALESCE(SUM(spend),0) as adSpend
+          FROM google_ads_daily
+          WHERE store_id=? AND date>=? AND date<=? ${adsCC}
+          GROUP BY date
+        `).bind(...ab([storeId, start, end])).all(),
       ]);
 
-      const grossRevenue = (overview?.revenue as number) ?? 0;
+      // Revenue values come from orders stored in store's local currency — apply FX to get EUR
+      const grossRevenue = fx((overview?.revenue as number) ?? 0);
       const orders = (overview?.orders as number) ?? 0;
-      const adSpend = (adsRow?.adSpend as number) ?? 0;
-      const productCost = (costRow?.productCost as number) ?? 0;
-      const returnAmount = (returnsRow?.returnAmount as number) ?? 0;
+      const adSpend = (adsRow?.adSpend as number) ?? 0;          // ad spend is already in EUR
+      const productCost = fx((costRow?.productCost as number) ?? 0); // COGs entered in store currency
+      const returnAmount = fx((returnsRow?.returnAmount as number) ?? 0);
       const returnCount = (returnsRow?.returnCount as number) ?? 0;
-      const disputeAmount = (disputesRow?.disputeAmount as number) ?? 0;
+      const disputeAmount = fx((disputesRow?.disputeAmount as number) ?? 0);
       const disputeCount = (disputesRow?.disputeCount as number) ?? 0;
       const netRevenue = Math.max(0, grossRevenue - returnAmount);
       const profit = netRevenue - adSpend - productCost;
@@ -529,14 +702,34 @@ export default {
       const clicks = (adsRow?.clicks as number) ?? 0;
       const impressions = (adsRow?.impressions as number) ?? 0;
 
-      // Build net revenue trend (gross per day minus returns that day)
+      // Break-even ROAS: the minimum ROAS needed to cover product costs
+      // Formula: breakEven = revenue / (revenue - productCost) = 1 / gross_margin
+      const grossMargin = grossRevenue > 0 && productCost > 0
+        ? (grossRevenue - productCost) / grossRevenue : null;
+      const breakEvenRoas = grossMargin && grossMargin > 0
+        ? Math.round((1 / grossMargin) * 100) / 100 : null;
+
+      // Cost ratio for estimating daily product cost
+      const costRatio = grossRevenue > 0 && productCost > 0 ? productCost / grossRevenue : 0;
+
+      // Build daily maps
       const returnsMap = new Map<string, number>();
       for (const r of (returnsTrend.results ?? []) as { day: string; returnAmount: number }[]) {
         returnsMap.set(r.day, r.returnAmount);
       }
+      const adsMap = new Map<string, number>();
+      for (const r of (adsTrend.results ?? []) as { day: string; adSpend: number }[]) {
+        adsMap.set(r.day, r.adSpend);
+      }
+
+      // Build trend with both revenue and daily profit estimate (revenue converted to EUR)
       const netRevenueTrend = (trend.results ?? []).map((r) => {
         const row = r as { day: string; revenue: number };
-        return { day: row.day, revenue: Math.max(0, row.revenue - (returnsMap.get(row.day) ?? 0)) };
+        const dayRevenue = Math.max(0, fx(row.revenue) - (returnsMap.get(row.day) ?? 0));
+        const dayAdSpend = adsMap.get(row.day) ?? 0;
+        const dayProductCost = dayRevenue * costRatio;
+        const dayProfit = Math.round((dayRevenue - dayAdSpend - dayProductCost) * 100) / 100;
+        return { day: row.day, revenue: dayRevenue, profit: dayProfit };
       });
 
       return json({
@@ -545,9 +738,10 @@ export default {
         netRevenue,
         orders, adSpend, productCost,
         returnAmount, returnCount, disputeAmount, disputeCount,
-        profit, aov, roas, returnRate, cpc, ctr, clicks, impressions,
+        profit, aov, roas, breakEvenRoas, returnRate, cpc, ctr, clicks, impressions,
         sessions: 0, cvr: 0,
         revenueTrend: netRevenueTrend,
+        currency: "EUR", storeCurrency, fxRate,
       });
     }
 
@@ -556,6 +750,8 @@ export default {
       const storeId = url.searchParams.get("store_id");
       if (!storeId) return json({ error: "Missing store_id" }, 400);
       const { start, end } = getDateFilter(url);
+      const country = url.searchParams.get("country") || "";
+      const cc = country ? "AND o.customer_country=?" : "";
 
       const products = await env.DB.prepare(`
         SELECT oi.product_title, oi.variant_title,
@@ -565,9 +761,10 @@ export default {
                COALESCE(AVG(oi.cost),0) as unit_cost
         FROM order_items oi JOIN orders o ON oi.order_id=o.id
         WHERE o.store_id=? AND substr(o.created_at,1,10)>=? AND substr(o.created_at,1,10)<=?
+        ${cc}
         GROUP BY oi.product_title, oi.variant_title
         ORDER BY revenue DESC LIMIT 20
-      `).bind(storeId, start, end).all();
+      `).bind(...(country ? [storeId, start, end, country] : [storeId, start, end])).all();
 
       return json({ products: products.results ?? [] });
     }
@@ -816,12 +1013,167 @@ export default {
       return json({ totalThisMonth, reached, next, milestones: allReached.results ?? [] });
     }
 
+    // ── GET /api/returns/analytics ────────────────────────────────────────────
+    if (path === "/api/returns/analytics" && method === "GET") {
+      const storeId = url.searchParams.get("store_id");
+      if (!storeId) return json({ error: "Missing store_id" }, 400);
+      const days = parseInt(url.searchParams.get("days") ?? "90");
+      const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+
+      const [totalsRow, productRows, reasonRows, weeklyRows, disputeRows, chargebackRows] = await Promise.all([
+        env.DB.prepare(`
+          SELECT
+            COUNT(*) as return_count,
+            COALESCE(SUM(amount),0) as refund_total,
+            SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) as pending
+          FROM returns WHERE store_id=? AND created_at>=?
+        `).bind(storeId, since).first(),
+        env.DB.prepare(`
+          SELECT product_title,
+            COUNT(*) as return_count,
+            COALESCE(SUM(amount),0) as refund_total,
+            reason_category
+          FROM returns WHERE store_id=? AND created_at>=?
+          GROUP BY product_title
+          ORDER BY return_count DESC LIMIT 30
+        `).bind(storeId, since).all(),
+        env.DB.prepare(`
+          SELECT COALESCE(NULLIF(reason_category,''),'Onbekend') as category,
+            COUNT(*) as count, COALESCE(SUM(amount),0) as total_amount
+          FROM returns WHERE store_id=? AND created_at>=?
+          GROUP BY category ORDER BY count DESC
+        `).bind(storeId, since).all(),
+        env.DB.prepare(`
+          SELECT strftime('%Y-W%W', created_at) as week,
+            COUNT(*) as count, COALESCE(SUM(amount),0) as amount
+          FROM returns WHERE store_id=? AND created_at>=?
+          GROUP BY week ORDER BY week ASC LIMIT 13
+        `).bind(storeId, since).all(),
+        env.DB.prepare(`
+          SELECT status, COUNT(*) as count, COALESCE(SUM(amount),0) as amount
+          FROM disputes WHERE store_id=? AND (dispute_type='dispute' OR dispute_type IS NULL OR dispute_type='')
+          GROUP BY status
+        `).bind(storeId).all(),
+        env.DB.prepare(`
+          SELECT status, COUNT(*) as count, COALESCE(SUM(amount),0) as amount
+          FROM disputes WHERE store_id=? AND dispute_type='chargeback'
+          GROUP BY status
+        `).bind(storeId).all(),
+      ]);
+
+      // Compute top category per product
+      const productStats = await Promise.all(
+        (productRows.results ?? []).slice(0, 15).map(async (p: any) => {
+          const topCat = await env.DB.prepare(`
+            SELECT COALESCE(NULLIF(reason_category,''),'Onbekend') as category, COUNT(*) as cnt
+            FROM returns WHERE store_id=? AND product_title=? AND created_at>=?
+            GROUP BY category ORDER BY cnt DESC LIMIT 1
+          `).bind(storeId, p.product_title, since).first();
+          return { ...p, top_category: (topCat as any)?.category ?? "Onbekend" };
+        })
+      );
+
+      const dStats = Object.fromEntries((disputeRows.results ?? []).map((r: any) => [r.status, { count: r.count, amount: r.amount }]));
+      const dTotal = (disputeRows.results ?? []).reduce((s: number, r: any) => s + r.count, 0);
+      const dWon = (dStats["won"]?.count ?? 0);
+      const dLost = (dStats["lost"]?.count ?? 0);
+      const cbTotal = (chargebackRows.results ?? []).reduce((s: number, r: any) => s + r.count, 0);
+      const cbAmount = (chargebackRows.results ?? []).reduce((s: number, r: any) => s + r.amount, 0);
+
+      return json({
+        totals: {
+          returns: (totalsRow as any)?.return_count ?? 0,
+          refund_total: (totalsRow as any)?.refund_total ?? 0,
+          pending: (totalsRow as any)?.pending ?? 0,
+          disputes: dTotal,
+          dispute_open: dStats["open"]?.count ?? 0,
+          dispute_at_risk: dStats["open"]?.amount ?? 0,
+          chargebacks: cbTotal,
+          chargeback_amount: cbAmount,
+          won: dWon,
+          lost: dLost,
+          win_rate: (dWon + dLost) > 0 ? Math.round(dWon / (dWon + dLost) * 100) : null,
+        },
+        product_stats: productStats,
+        reason_breakdown: reasonRows.results ?? [],
+        weekly_trends: weeklyRows.results ?? [],
+      });
+    }
+
+    // ── POST /api/returns/import-csv ──────────────────────────────────────────
+    // CSV format: order_id,product_title,reason,amount,event_type,date,country,source_platform
+    if (path === "/api/returns/import-csv" && method === "POST") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const body = await request.json() as any;
+      const storeId = body.store_id;
+      const rows = body.rows as Array<{
+        order_id?: string; product_title?: string; reason?: string;
+        amount?: number; event_type?: string; date?: string;
+        country?: string; source_platform?: string;
+        customer_email?: string; status?: string; outcome?: string;
+      }>;
+      if (!storeId || !rows?.length) return json({ error: "Missing store_id or rows" }, 400);
+
+      let imported = 0;
+      for (const row of rows) {
+        const eventType = row.event_type ?? "return";
+        const category = classifyReason(row.reason ?? "");
+        const date = row.date ?? new Date().toISOString();
+        if (eventType === "chargeback" || eventType === "dispute") {
+          const id = `dis-csv-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+          await env.DB.prepare(`
+            INSERT OR IGNORE INTO disputes
+              (id,order_id,store_id,customer_email,amount,reason,status,created_at,reason_category,country,source_platform,dispute_type)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+          `).bind(id, row.order_id ?? "", storeId, row.customer_email ?? "",
+                  row.amount ?? 0, row.reason ?? "", row.status ?? "open",
+                  date, category, row.country ?? "", row.source_platform ?? "csv", eventType).run();
+        } else {
+          const id = `ret-csv-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+          await env.DB.prepare(`
+            INSERT OR IGNORE INTO returns
+              (id,order_id,store_id,product_title,reason,amount,status,created_at,reason_category,country,source_platform,event_type)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+          `).bind(id, row.order_id ?? "", storeId, row.product_title ?? "",
+                  row.reason ?? "", row.amount ?? 0, row.status ?? "refunded",
+                  date, category, row.country ?? "", row.source_platform ?? "csv", eventType).run();
+        }
+        imported++;
+      }
+      return json({ ok: true, imported });
+    }
+
+    // ── POST /api/returns/reclassify ──────────────────────────────────────────
+    if (path === "/api/returns/reclassify" && method === "POST") {
+      const body = await request.json() as any;
+      const storeId = body.store_id;
+      if (!storeId) return json({ error: "Missing store_id" }, 400);
+      const rows = await env.DB.prepare(
+        `SELECT id, reason FROM returns WHERE store_id=?`
+      ).bind(storeId).all();
+      let updated = 0;
+      for (const r of (rows.results ?? []) as any[]) {
+        const cat = classifyReason(r.reason ?? "");
+        await env.DB.prepare(`UPDATE returns SET reason_category=? WHERE id=?`).bind(cat, r.id).run();
+        updated++;
+      }
+      const drows = await env.DB.prepare(
+        `SELECT id, reason FROM disputes WHERE store_id=?`
+      ).bind(storeId).all();
+      for (const r of (drows.results ?? []) as any[]) {
+        const cat = classifyReason(r.reason ?? "");
+        await env.DB.prepare(`UPDATE disputes SET reason_category=? WHERE id=?`).bind(cat, r.id).run();
+        updated++;
+      }
+      return json({ ok: true, updated });
+    }
+
     // ── GET /api/returns ──────────────────────────────────────────────────────
     if (path === "/api/returns" && method === "GET") {
       const storeId = url.searchParams.get("store_id");
       if (!storeId) return json({ error: "Missing store_id" }, 400);
       const returns = await env.DB.prepare(
-        `SELECT * FROM returns WHERE store_id=? ORDER BY created_at DESC LIMIT 100`
+        `SELECT * FROM returns WHERE store_id=? ORDER BY created_at DESC LIMIT 200`
       ).bind(storeId).all();
       const stats = await env.DB.prepare(
         `SELECT COALESCE(SUM(amount),0) as total, COUNT(*) as count,
@@ -837,11 +1189,14 @@ export default {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const body = await request.json() as any;
       const id = `ret-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+      const category = classifyReason(body.reason ?? "");
       await env.DB.prepare(`
-        INSERT INTO returns (id,order_id,store_id,product_title,variant_title,reason,amount,status,created_at)
-        VALUES (?,?,?,?,?,?,?,?,?)
-      `).bind(id, body.order_id, body.store_id, body.product_title ?? "", body.variant_title ?? "",
-              body.reason ?? "", body.amount ?? 0, body.status ?? "pending", new Date().toISOString()).run();
+        INSERT INTO returns (id,order_id,store_id,product_title,variant_title,reason,amount,status,created_at,reason_category,source_platform,event_type)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+      `).bind(id, body.order_id ?? "", body.store_id, body.product_title ?? "",
+              body.variant_title ?? "", body.reason ?? "", body.amount ?? 0,
+              body.status ?? "pending", new Date().toISOString(),
+              category, body.source_platform ?? "manual", body.event_type ?? "return").run();
       return json({ ok: true, id });
     }
 
@@ -861,7 +1216,7 @@ export default {
       const storeId = url.searchParams.get("store_id");
       if (!storeId) return json({ error: "Missing store_id" }, 400);
       const disputes = await env.DB.prepare(
-        `SELECT * FROM disputes WHERE store_id=? ORDER BY created_at DESC LIMIT 100`
+        `SELECT * FROM disputes WHERE store_id=? ORDER BY created_at DESC LIMIT 200`
       ).bind(storeId).all();
       const stats = await env.DB.prepare(
         `SELECT COALESCE(SUM(amount),0) as total, COUNT(*) as count,
@@ -876,11 +1231,13 @@ export default {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const body = await request.json() as any;
       const id = `dis-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+      const category = classifyReason(body.reason ?? "");
       await env.DB.prepare(`
-        INSERT INTO disputes (id,order_id,store_id,customer_email,amount,reason,status,created_at)
-        VALUES (?,?,?,?,?,?,?,?)
-      `).bind(id, body.order_id, body.store_id, body.customer_email ?? "", body.amount ?? 0,
-              body.reason ?? "", "open", new Date().toISOString()).run();
+        INSERT INTO disputes (id,order_id,store_id,customer_email,amount,reason,status,created_at,reason_category,source_platform,dispute_type)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)
+      `).bind(id, body.order_id ?? "", body.store_id, body.customer_email ?? "",
+              body.amount ?? 0, body.reason ?? "", "open", new Date().toISOString(),
+              category, body.source_platform ?? "manual", body.dispute_type ?? "dispute").run();
       return json({ ok: true, id });
     }
 
@@ -956,6 +1313,17 @@ export default {
       return json({ ok: true, id });
     }
 
+    // ── GET /api/ads/today ────────────────────────────────────────────────────
+    if (path === "/api/ads/today" && method === "GET") {
+      const storeId = url.searchParams.get("store_id");
+      if (!storeId) return json({ error: "Missing store_id" }, 400);
+      const today = new Date().toISOString().slice(0, 10);
+      const row = await env.DB.prepare(
+        `SELECT COALESCE(SUM(spend),0) as spend FROM google_ads_daily WHERE store_id=? AND date=? AND (country='' OR country IS NULL)`
+      ).bind(storeId, today).first();
+      return json({ date: today, spend: (row?.spend as number) ?? 0 });
+    }
+
     // ── GET /api/ads/import-status ────────────────────────────────────────────
     if (path === "/api/ads/overview" && method === "GET") {
       const storeId = url.searchParams.get("store_id");
@@ -965,7 +1333,7 @@ export default {
       const rows = await env.DB.prepare(`
         SELECT date, spend, clicks, impressions, conversions, cpc, ctr, roas
         FROM google_ads_daily
-        WHERE store_id=? AND date>=? AND date<=?
+        WHERE store_id=? AND date>=? AND date<=? AND (country='' OR country IS NULL)
         ORDER BY date DESC
       `).bind(storeId, start, end).all();
 
@@ -976,7 +1344,7 @@ export default {
                COALESCE(SUM(conversions),0) as conversions,
                CASE WHEN SUM(clicks)>0 THEN SUM(spend)/SUM(clicks) ELSE 0 END as cpc,
                CASE WHEN SUM(impressions)>0 THEN CAST(SUM(clicks) AS REAL)/SUM(impressions)*100 ELSE 0 END as ctr
-        FROM google_ads_daily WHERE store_id=? AND date>=? AND date<=?
+        FROM google_ads_daily WHERE store_id=? AND date>=? AND date<=? AND (country='' OR country IS NULL)
       `).bind(storeId, start, end).first();
 
       return json({ rows: rows.results ?? [], totals });
@@ -986,19 +1354,39 @@ export default {
     if (path === "/api/ads/import" && method === "POST") {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const body = await request.json() as any;
+      const force = body.force === true; // dashboard manual override bypasses protection
       const rows = body.rows as Array<{
         store_id: string; date: string; spend: number; clicks: number;
         impressions: number; conversions: number; cpc: number; ctr: number; roas: number;
+        country?: string;
       }>;
       let count = 0;
       for (const row of rows ?? []) {
-        const id = `${row.store_id}-${row.date}`;
-        await env.DB.prepare(`
-          INSERT OR REPLACE INTO google_ads_daily
-            (id,store_id,date,spend,clicks,impressions,conversions,cpc,ctr,roas)
-          VALUES (?,?,?,?,?,?,?,?,?,?)
-        `).bind(id, row.store_id, row.date, row.spend, row.clicks,
-                row.impressions, row.conversions, row.cpc, row.ctr, row.roas).run();
+        const country = row.country ?? "";
+        const id = country ? `${row.store_id}-${row.date}-${country}` : `${row.store_id}-${row.date}`;
+        if (force) {
+          await env.DB.prepare(`
+            INSERT OR REPLACE INTO google_ads_daily
+              (id,store_id,date,country,spend,clicks,impressions,conversions,cpc,ctr,roas)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+          `).bind(id, row.store_id, row.date, country, row.spend, row.clicks,
+                  row.impressions, row.conversions, row.cpc, row.ctr, row.roas).run();
+        } else {
+          await env.DB.prepare(`
+            INSERT INTO google_ads_daily
+              (id,store_id,date,country,spend,clicks,impressions,conversions,cpc,ctr,roas)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(id) DO UPDATE SET
+              spend       = CASE WHEN excluded.spend > spend THEN excluded.spend ELSE spend END,
+              clicks      = excluded.clicks,
+              impressions = excluded.impressions,
+              conversions = excluded.conversions,
+              cpc         = excluded.cpc,
+              ctr         = excluded.ctr,
+              roas        = excluded.roas
+          `).bind(id, row.store_id, row.date, country, row.spend, row.clicks,
+                  row.impressions, row.conversions, row.cpc, row.ctr, row.roas).run();
+        }
         count++;
       }
       return json({ ok: true, imported: count });
@@ -1114,7 +1502,7 @@ export default {
                   o.currency ?? "EUR", revenue, netRevenue,
                   o.created_at ?? new Date().toISOString(), store_id,
                   customerName, customerPhone, customerCity, customerCountry,
-                  o.financial_status ?? "paid", o.fulfillment_status ?? "unfulfilled",
+                  o.cancelled_at ? "cancelled" : (o.financial_status ?? "paid"), o.fulfillment_status ?? "unfulfilled",
                   firstFulfillment?.tracking_number ?? "", firstFulfillment?.tracking_url ?? "").run();
 
           for (const item of o.line_items ?? []) {
@@ -1189,15 +1577,18 @@ export default {
         .join(", ");
       const firstLine = body.refund_line_items?.[0];
 
+      const refundReason = body.note ?? "Shopify refund";
+      const refundCategory = classifyReason(refundReason);
       await env.DB.prepare(`
         INSERT OR REPLACE INTO returns
-          (id,order_id,store_id,product_title,variant_title,reason,amount,status,created_at)
-        VALUES (?,?,?,?,?,?,?,?,?)
+          (id,order_id,store_id,product_title,variant_title,reason,amount,status,created_at,reason_category,source_platform,event_type)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
       `).bind(id, orderId, storeId,
               refundedTitles || firstLine?.line_item?.title || "Unknown",
               firstLine?.line_item?.variant_title ?? "",
-              body.note ?? "Shopify refund", amount, "refunded",
-              body.created_at ?? new Date().toISOString()).run();
+              refundReason, amount, "refunded",
+              body.created_at ?? new Date().toISOString(),
+              refundCategory, "shopify", "refund").run();
 
       return json({ ok: true, id });
     }
@@ -1310,7 +1701,7 @@ export default {
         // Today's ad spend
         env.DB.prepare(`
           SELECT COALESCE(SUM(spend),0) as spend
-          FROM google_ads_daily WHERE store_id=? AND date=?
+          FROM google_ads_daily WHERE store_id=? AND date=? AND (country='' OR country IS NULL)
         `).bind(storeId, getAmsterdamDate(0)).first(),
       ]);
 
@@ -1353,30 +1744,32 @@ export default {
       if (!storeId) return json({ error: "Missing store_id" }, 400);
       const { start, end } = getDateFilter(url);
 
-      const [orderStats, returnStats, adStats, costData] = await Promise.all([
+      // Previous period — same duration, ending the day before `start`
+      const startMs   = new Date(start + "T12:00:00Z").getTime();
+      const durMs     = new Date(end   + "T12:00:00Z").getTime() - startMs;
+      const prevEnd   = new Date(startMs - 86_400_000).toISOString().slice(0, 10);
+      const prevStart = new Date(startMs - 86_400_000 - durMs).toISOString().slice(0, 10);
+
+      const dedupeWhere = `AND NOT EXISTS (
+            SELECT 1 FROM orders o2
+            WHERE o2.shopify_order_id = o.shopify_order_id
+              AND o2.store_id = o.store_id
+              AND o2.rowid < o.rowid
+              AND o.shopify_order_id IS NOT NULL
+              AND o.shopify_order_id != ''
+          )`;
+
+      const [orderStats, returnStats, adStats, costData, prevOrderStats, prevAdStats] = await Promise.all([
         env.DB.prepare(`
-          SELECT oi.product_title,
-                 SUM(oi.quantity) as sold,
-                 SUM(oi.revenue) as revenue
-          FROM order_items oi
-          JOIN orders o ON oi.order_id = o.id
+          SELECT oi.product_title, SUM(oi.quantity) as sold, SUM(oi.revenue) as revenue
+          FROM order_items oi JOIN orders o ON oi.order_id = o.id
           WHERE o.store_id=? AND substr(o.created_at,1,10)>=? AND substr(o.created_at,1,10)<=?
-            AND NOT EXISTS (
-              SELECT 1 FROM orders o2
-              WHERE o2.shopify_order_id = o.shopify_order_id
-                AND o2.store_id = o.store_id
-                AND o2.rowid < o.rowid
-                AND o.shopify_order_id IS NOT NULL
-                AND o.shopify_order_id != ''
-            )
-          GROUP BY oi.product_title
-          ORDER BY revenue DESC
+          ${dedupeWhere}
+          GROUP BY oi.product_title ORDER BY revenue DESC
         `).bind(storeId, start, end).all(),
 
         env.DB.prepare(`
-          SELECT product_title,
-                 COUNT(*) as return_count,
-                 COALESCE(SUM(amount), 0) as return_amount
+          SELECT product_title, COUNT(*) as return_count, COALESCE(SUM(amount),0) as return_amount
           FROM returns
           WHERE store_id=? AND substr(created_at,1,10)>=? AND substr(created_at,1,10)<=?
           GROUP BY product_title
@@ -1384,18 +1777,34 @@ export default {
 
         env.DB.prepare(`
           SELECT product_title,
-                 COALESCE(SUM(spend), 0) as ad_spend,
-                 COALESCE(SUM(clicks), 0) as ad_clicks,
-                 COALESCE(SUM(impressions), 0) as ad_impressions
+                 COALESCE(SUM(spend),0)       as ad_spend,
+                 COALESCE(SUM(clicks),0)      as ad_clicks,
+                 COALESCE(SUM(impressions),0) as ad_impressions
           FROM google_ads_products
           WHERE store_id=? AND date>=? AND date<=?
           GROUP BY product_title
         `).bind(storeId, start, end).all(),
 
         env.DB.prepare(`
-          SELECT product_title, cost, updated_at
-          FROM product_costs WHERE store_id=?
+          SELECT product_title, cost, updated_at FROM product_costs WHERE store_id=?
         `).bind(storeId).all(),
+
+        // Previous period orders (for WoW trend)
+        env.DB.prepare(`
+          SELECT oi.product_title, SUM(oi.quantity) as sold, SUM(oi.revenue) as revenue
+          FROM order_items oi JOIN orders o ON oi.order_id = o.id
+          WHERE o.store_id=? AND substr(o.created_at,1,10)>=? AND substr(o.created_at,1,10)<=?
+          ${dedupeWhere}
+          GROUP BY oi.product_title
+        `).bind(storeId, prevStart, prevEnd).all(),
+
+        // Previous period ad spend (for ROAS trend)
+        env.DB.prepare(`
+          SELECT product_title, COALESCE(SUM(spend),0) as ad_spend
+          FROM google_ads_products
+          WHERE store_id=? AND date>=? AND date<=?
+          GROUP BY product_title
+        `).bind(storeId, prevStart, prevEnd).all(),
       ]);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1403,47 +1812,132 @@ export default {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       for (const r of (returnStats.results ?? []) as any[]) returnsMap.set(r.product_title, r);
 
+      // Build aggregated ad map + fuzzy prefix lookup (Google Ads adds variant/brand to titles)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const adsMap = new Map<string, any>();
+      function buildAgg(rows: any[]): Map<string, any> {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const m = new Map<string, any>();
+        for (const r of rows) {
+          const ex = m.get(r.product_title);
+          if (ex) {
+            ex.ad_spend       += r.ad_spend       ?? 0;
+            ex.ad_clicks      += r.ad_clicks      ?? 0;
+            ex.ad_impressions += r.ad_impressions ?? 0;
+          } else {
+            m.set(r.product_title, { ad_spend: r.ad_spend ?? 0, ad_clicks: r.ad_clicks ?? 0, ad_impressions: r.ad_impressions ?? 0 });
+          }
+        }
+        return m;
+      }
+
+      // Track which adsAgg keys are claimed by an order product (for finding ad-only products)
+      const claimedAdTitles = new Set<string>();
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      for (const r of (adStats.results ?? []) as any[]) adsMap.set(r.product_title, r);
+      function fuzzyFind(agg: Map<string, any>, title: string, claimed?: Set<string>): any {
+        if (agg.has(title)) {
+          claimed?.add(title);
+          return agg.get(title);
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const hits: any[] = [];
+        for (const [k, v] of agg) {
+          if (k.startsWith(title) || title.startsWith(k)) {
+            hits.push(v);
+            claimed?.add(k);
+          }
+        }
+        if (!hits.length) return { ad_spend: 0, ad_clicks: 0, ad_impressions: 0 };
+        return hits.reduce((a, c) => ({
+          ad_spend:       a.ad_spend       + c.ad_spend,
+          ad_clicks:      a.ad_clicks      + c.ad_clicks,
+          ad_impressions: a.ad_impressions + c.ad_impressions,
+        }), { ad_spend: 0, ad_clicks: 0, ad_impressions: 0 });
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const adsAgg     = buildAgg((adStats.results     ?? []) as any[]);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const prevAdsAgg = buildAgg((prevAdStats.results ?? []) as any[]);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const costsMap = new Map<string, any>();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       for (const r of (costData.results ?? []) as any[]) costsMap.set(r.product_title, r);
 
+      const prevOrderMap = new Map<string, { sold: number; revenue: number }>();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const r of (prevOrderStats.results ?? []) as any[])
+        prevOrderMap.set(r.product_title, { sold: r.sold ?? 0, revenue: r.revenue ?? 0 });
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const products = ((orderStats.results ?? []) as any[]).map(p => {
-        const ret = returnsMap.get(p.product_title) ?? { return_count: 0, return_amount: 0 };
-        const ads = adsMap.get(p.product_title) ?? { ad_spend: 0, ad_clicks: 0, ad_impressions: 0 };
+        const ret       = returnsMap.get(p.product_title) ?? { return_count: 0, return_amount: 0 };
+        const ads       = fuzzyFind(adsAgg, p.product_title, claimedAdTitles);
+        const prevAds   = fuzzyFind(prevAdsAgg, p.product_title);
         const costEntry = costsMap.get(p.product_title) ?? { cost: 0, updated_at: null };
-        const netRevenue = Math.max(0, (p.revenue ?? 0) - (ret.return_amount ?? 0));
-        const totalCost = (costEntry.cost ?? 0) * (p.sold ?? 0);
+        const prevOrder = prevOrderMap.get(p.product_title) ?? { sold: 0, revenue: 0 };
+
+        const netRevenue  = Math.max(0, (p.revenue ?? 0) - (ret.return_amount ?? 0));
+        const totalCost   = (costEntry.cost ?? 0) * (p.sold ?? 0);
         const grossMargin = netRevenue > 0 && costEntry.cost > 0
           ? ((netRevenue - totalCost) / netRevenue) * 100 : null;
-        const profit = costEntry.cost > 0 ? netRevenue - totalCost - (ads.ad_spend ?? 0) : null;
-        const roas = (ads.ad_spend ?? 0) > 0 ? Math.round((netRevenue / ads.ad_spend) * 100) / 100 : null;
-        const returnRate = (p.sold ?? 0) > 0 ? ((ret.return_count ?? 0) / p.sold) * 100 : 0;
+        const profit      = costEntry.cost > 0 ? netRevenue - totalCost - (ads.ad_spend ?? 0) : null;
+        const roas        = (ads.ad_spend ?? 0) > 0 ? Math.round((netRevenue / ads.ad_spend) * 100) / 100 : null;
+        const returnRate  = (p.sold ?? 0) > 0 ? ((ret.return_count ?? 0) / p.sold) * 100 : 0;
+        const prevRoas    = (prevAds.ad_spend ?? 0) > 0
+          ? Math.round(((prevOrder.revenue ?? 0) / prevAds.ad_spend) * 100) / 100 : null;
+
         return {
-          product_title: p.product_title,
-          sold: p.sold ?? 0,
-          revenue: Math.round((p.revenue ?? 0) * 100) / 100,
-          net_revenue: Math.round(netRevenue * 100) / 100,
-          cost: costEntry.cost ?? 0,
+          product_title:   p.product_title,
+          sold:            p.sold ?? 0,
+          revenue:         Math.round((p.revenue ?? 0) * 100) / 100,
+          net_revenue:     Math.round(netRevenue * 100) / 100,
+          cost:            costEntry.cost ?? 0,
           cost_updated_at: costEntry.updated_at,
-          total_cost: Math.round(totalCost * 100) / 100,
-          gross_margin: grossMargin !== null ? Math.round(grossMargin * 10) / 10 : null,
-          profit: profit !== null ? Math.round(profit * 100) / 100 : null,
-          return_count: ret.return_count ?? 0,
-          return_amount: Math.round((ret.return_amount ?? 0) * 100) / 100,
-          return_rate: Math.round(returnRate * 10) / 10,
-          ad_spend: Math.round((ads.ad_spend ?? 0) * 100) / 100,
-          ad_clicks: ads.ad_clicks ?? 0,
-          ad_impressions: ads.ad_impressions ?? 0,
+          total_cost:      Math.round(totalCost * 100) / 100,
+          gross_margin:    grossMargin !== null ? Math.round(grossMargin * 10) / 10 : null,
+          profit:          profit !== null ? Math.round(profit * 100) / 100 : null,
+          return_count:    ret.return_count ?? 0,
+          return_amount:   Math.round((ret.return_amount ?? 0) * 100) / 100,
+          return_rate:     Math.round(returnRate * 10) / 10,
+          ad_spend:        Math.round((ads.ad_spend ?? 0) * 100) / 100,
+          ad_clicks:       ads.ad_clicks ?? 0,
+          ad_impressions:  ads.ad_impressions ?? 0,
           roas,
+          revenue_prev:    Math.round((prevOrder.revenue ?? 0) * 100) / 100,
+          sold_prev:       prevOrder.sold ?? 0,
+          roas_prev:       prevRoas,
         };
       });
+
+      // Add products that only appear in Google Ads (0 orders) — these are "Burning" budget
+      for (const [adTitle, adData] of adsAgg.entries()) {
+        if (claimedAdTitles.has(adTitle)) continue;
+        if ((adData.ad_spend ?? 0) <= 0) continue;
+        const costEntry = costsMap.get(adTitle) ?? { cost: 0, updated_at: null };
+        products.push({
+          product_title:   adTitle,
+          sold:            0,
+          revenue:         0,
+          net_revenue:     0,
+          cost:            costEntry.cost ?? 0,
+          cost_updated_at: costEntry.updated_at,
+          total_cost:      0,
+          gross_margin:    null,
+          profit:          null,
+          return_count:    0,
+          return_amount:   0,
+          return_rate:     0,
+          ad_spend:        Math.round((adData.ad_spend ?? 0) * 100) / 100,
+          ad_clicks:       adData.ad_clicks ?? 0,
+          ad_impressions:  adData.ad_impressions ?? 0,
+          roas:            null,
+          revenue_prev:    0,
+          sold_prev:       0,
+          roas_prev:       null,
+        });
+      }
 
       return json({ products });
     }
@@ -1505,23 +1999,99 @@ export default {
     if (path === "/api/ads/products/import" && method === "POST") {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const body = await request.json() as any;
-      const rows = body.rows as Array<{
+      const rows = (body.rows ?? []) as Array<{
         store_id: string; date: string; product_title: string;
         spend: number; clicks: number; impressions: number;
         conversions: number; cpc: number; ctr: number;
       }>;
+      const CHUNK = 100;
       let count = 0;
-      for (const row of rows ?? []) {
-        const id = `${row.store_id}-${row.date}-${row.product_title.slice(0, 40)}`;
-        await env.DB.prepare(`
-          INSERT OR REPLACE INTO google_ads_products
-            (id,store_id,date,product_title,spend,clicks,impressions,conversions,cpc,ctr)
-          VALUES (?,?,?,?,?,?,?,?,?,?)
-        `).bind(id, row.store_id, row.date, row.product_title,
-                row.spend, row.clicks, row.impressions, row.conversions, row.cpc, row.ctr).run();
-        count++;
+      for (let i = 0; i < rows.length; i += CHUNK) {
+        const chunk = rows.slice(i, i + CHUNK);
+        const stmts = chunk.map(row => {
+          const id = `${row.store_id}-${row.date}-${row.product_title.slice(0, 40)}`;
+          return env.DB.prepare(`
+            INSERT OR REPLACE INTO google_ads_products
+              (id,store_id,date,product_title,spend,clicks,impressions,conversions,cpc,ctr)
+            VALUES (?,?,?,?,?,?,?,?,?,?)
+          `).bind(id, row.store_id, row.date, row.product_title,
+                  row.spend, row.clicks, row.impressions, row.conversions, row.cpc, row.ctr);
+        });
+        await env.DB.batch(stmts);
+        count += chunk.length;
       }
       return json({ ok: true, imported: count });
+    }
+
+    // ── POST /api/webhooks/shopify/orders-cancelled ──────────────────────────
+    if (path === "/api/webhooks/shopify/orders-cancelled" && method === "POST") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const body = await request.json() as any;
+      const storeId = url.searchParams.get("store_id");
+      if (!storeId) return json({ ok: true });
+      const orderId = String(body.id ?? "");
+      if (orderId) {
+        await env.DB.prepare(
+          `UPDATE orders SET financial_status='cancelled' WHERE shopify_order_id=? AND store_id=?`
+        ).bind(orderId, storeId).run();
+      }
+      return json({ ok: true });
+    }
+
+    // ── POST /api/webhooks/shopify/orders-updated ────────────────────────────
+    // Re-syncs revenue + line_items on every order update (catches AfterSell upsells)
+    if (path === "/api/webhooks/shopify/orders-updated" && method === "POST") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const body = await request.json() as any;
+      const storeId = url.searchParams.get("store_id");
+      if (!storeId) return json({ ok: true });
+      const orderId = String(body.id ?? "");
+      if (!orderId) return json({ ok: true });
+
+      const cancelled = body.cancelled_at || body.financial_status === "voided" || body.financial_status === "refunded";
+
+      if (cancelled) {
+        await env.DB.prepare(
+          `UPDATE orders SET financial_status='cancelled' WHERE shopify_order_id=? AND store_id=?`
+        ).bind(orderId, storeId).run();
+        return json({ ok: true });
+      }
+
+      // Re-sync revenue so AfterSell upsells (added as extra line_items) are counted
+      const revenue = parseFloat(body.current_total_price ?? body.total_price ?? "0");
+      const netRevenue = parseFloat(body.subtotal_price ?? String(revenue));
+      const firstFulfillment = (body.fulfillments ?? [])[0];
+      const trackingNumber = firstFulfillment?.tracking_number ?? "";
+      const trackingUrl    = firstFulfillment?.tracking_url ?? "";
+
+      await env.DB.prepare(`
+        UPDATE orders
+        SET revenue=?, net_revenue=?,
+            financial_status=?, fulfillment_status=?,
+            tracking_number=CASE WHEN ?='' THEN tracking_number ELSE ? END,
+            tracking_url=CASE WHEN ?='' THEN tracking_url ELSE ? END
+        WHERE shopify_order_id=? AND store_id=?
+      `).bind(
+        revenue, netRevenue,
+        body.financial_status ?? "paid", body.fulfillment_status ?? "unfulfilled",
+        trackingNumber, trackingNumber,
+        trackingUrl, trackingUrl,
+        orderId, storeId
+      ).run();
+
+      // Upsert all current line_items (AfterSell adds new ones after order creation)
+      for (const item of body.line_items ?? []) {
+        await env.DB.prepare(`
+          INSERT OR REPLACE INTO order_items
+            (id,order_id,product_id,variant_id,product_title,variant_title,quantity,revenue,cost,store_id)
+          VALUES (?,?,?,?,?,?,?,?,?,?)
+        `).bind(`${orderId}-item-${item.id}`, orderId, String(item.product_id ?? ""),
+                String(item.variant_id ?? ""), item.title ?? "", item.variant_title ?? "",
+                item.quantity ?? 1, parseFloat(item.price ?? "0") * (item.quantity ?? 1),
+                0, storeId).run();
+      }
+
+      return json({ ok: true });
     }
 
     // ── POST /api/webhooks/shopify/fulfillments-create ───────────────────────
@@ -1861,7 +2431,7 @@ export default {
           SELECT product_title, milestone FROM product_milestones WHERE store_id=? AND notified=0 ORDER BY milestone DESC LIMIT 3
         `).bind(storeId).all(),
         env.DB.prepare(`
-          SELECT COALESCE(SUM(spend),0) as spend FROM google_ads_daily WHERE store_id=? AND date=?
+          SELECT COALESCE(SUM(spend),0) as spend FROM google_ads_daily WHERE store_id=? AND date=? AND (country='' OR country IS NULL)
         `).bind(storeId, today).first(),
       ]);
 
@@ -2039,7 +2609,7 @@ export default {
 
         env.DB.prepare(`
           SELECT substr(date,1,7) as month, SUM(spend) as ad_spend
-          FROM google_ads_daily WHERE store_id=? AND substr(date,1,4)=?
+          FROM google_ads_daily WHERE store_id=? AND substr(date,1,4)=? AND (country='' OR country IS NULL)
           GROUP BY month
         `).bind(storeId, year).all(),
 
@@ -2049,6 +2619,7 @@ export default {
           FROM order_items oi JOIN orders o ON oi.order_id=o.id
           LEFT JOIN product_costs pc ON pc.product_title=oi.product_title AND pc.store_id=o.store_id
           WHERE o.store_id=? AND substr(o.created_at,1,4)=?
+            AND o.revenue > 0
             AND NOT EXISTS (SELECT 1 FROM orders o2 WHERE o2.shopify_order_id=o.shopify_order_id AND o2.store_id=o.store_id AND o2.rowid<o.rowid AND o.shopify_order_id IS NOT NULL AND o.shopify_order_id!='')
           GROUP BY month
         `).bind(storeId, year).all(),
@@ -2659,6 +3230,281 @@ export default {
       });
     }
 
+    // ── GET /api/roas-tracker ─────────────────────────────────────────────────
+    // ?country=FR  → filter revenue by country; spend = manual-only (no ads bleed-over)
+    // ?multi=1     → multi-country store; never use total google_ads_daily as auto-spend
+    // ?multi=0     → single-country store; use google_ads_daily as auto-spend fallback
+    if (path === "/api/roas-tracker" && method === "GET") {
+      const storeId = url.searchParams.get("store_id");
+      if (!storeId) return json({ error: "Missing store_id" }, 400);
+      const { start, end } = getDateFilter(url);
+      const country = url.searchParams.get("country") ?? "";
+
+      // FX: convert revenue to EUR
+      const rtStoreRow = await env.DB.prepare(`SELECT currency FROM stores WHERE id=?`).bind(storeId).first();
+      const rtCurrency = (rtStoreRow?.currency as string | null) ?? "EUR";
+      const rtFxRate = await getFxRate(rtCurrency, "EUR");
+      const rtFx = (v: number) => Math.round(v * rtFxRate * 100) / 100;
+
+      type OrderRow = { day: string; revenue: number; orders: number };
+      type AdsRow   = { date: string; spend: number; clicks: number; impressions: number; ctr: number; cpc: number };
+      type ManRow   = { date: string; ad_spend: number; revenue: number; orders: number; clicks: number; impressions: number; notes: string; is_manual: number };
+
+      // Revenue: always filtered by country when country is set
+      const ordersRows = country
+        ? await env.DB.prepare(`
+            SELECT day, SUM(rev) as revenue, SUM(cnt) as orders FROM (
+              SELECT substr(created_at,1,10) as day, MAX(revenue) as rev, 1 as cnt
+              FROM orders
+              WHERE store_id=? AND substr(created_at,1,10)>=? AND substr(created_at,1,10)<=?
+                AND customer_country=?
+              GROUP BY COALESCE(shopify_order_id, id)
+            ) GROUP BY day
+          `).bind(storeId, start, end, country).all()
+        : await env.DB.prepare(`
+            SELECT day, SUM(rev) as revenue, SUM(cnt) as orders FROM (
+              SELECT substr(created_at,1,10) as day, MAX(revenue) as rev, 1 as cnt
+              FROM orders
+              WHERE store_id=? AND substr(created_at,1,10)>=? AND substr(created_at,1,10)<=?
+              GROUP BY COALESCE(shopify_order_id, id)
+            ) GROUP BY day
+          `).bind(storeId, start, end).all();
+
+      // Ad spend:
+      // - country tab active → read per-country rows from google_ads_daily WHERE country=?
+      //   (Google Ads Script must send per-country rows for this to auto-fill)
+      // - no country (global view) → auto-fill from untagged google_ads_daily (country='' or NULL)
+      const adsRows = country
+        ? await env.DB.prepare(`
+            SELECT date, spend, clicks, impressions,
+              CASE WHEN impressions>0 THEN CAST(clicks AS REAL)/impressions*100 ELSE 0 END as ctr,
+              CASE WHEN clicks>0 THEN spend/clicks ELSE 0 END as cpc
+            FROM google_ads_daily
+            WHERE store_id=? AND date>=? AND date<=? AND country=?
+          `).bind(storeId, start, end, country).all()
+        : await env.DB.prepare(`
+            SELECT date, spend, clicks, impressions,
+              CASE WHEN impressions>0 THEN CAST(clicks AS REAL)/impressions*100 ELSE 0 END as ctr,
+              CASE WHEN clicks>0 THEN spend/clicks ELSE 0 END as cpc
+            FROM google_ads_daily
+            WHERE store_id=? AND date>=? AND date<=? AND (country='' OR country IS NULL)
+          `).bind(storeId, start, end).all();
+
+      // Manual overrides
+      const manualRows = country
+        ? await env.DB.prepare(`
+            SELECT * FROM roas_tracker_country
+            WHERE store_id=? AND country=? AND date>=? AND date<=?
+          `).bind(storeId, country, start, end).all()
+        : await env.DB.prepare(`
+            SELECT * FROM roas_tracker WHERE store_id=? AND date>=? AND date<=?
+          `).bind(storeId, start, end).all();
+
+      const ordersMap = new Map<string, OrderRow>();
+      for (const r of (ordersRows.results ?? []) as OrderRow[]) ordersMap.set(r.day, r);
+
+      const adsMap = new Map<string, AdsRow>();
+      for (const r of (adsRows.results ?? []) as AdsRow[]) adsMap.set(r.date, r);
+
+      const manualMap = new Map<string, ManRow>();
+      for (const r of (manualRows.results ?? []) as ManRow[]) manualMap.set(r.date, r);
+
+      const rows: unknown[] = [];
+      const cur = new Date(start + "T00:00:00Z");
+      const endDate = new Date(end + "T00:00:00Z");
+      while (cur <= endDate) {
+        const d = cur.toISOString().slice(0, 10);
+        cur.setUTCDate(cur.getUTCDate() + 1);
+
+        const o = ordersMap.get(d);
+        const a = adsMap.get(d);
+        const m = manualMap.get(d);
+
+        const autoSpend   = a?.spend       ?? 0;
+        const autoRevenue = rtFx(o?.revenue ?? 0);
+        const autoOrders  = o?.orders      ?? 0;
+        const autoClicks  = a?.clicks      ?? 0;
+        const autoImp     = a?.impressions ?? 0;
+        const autoCtr     = a?.ctr         ?? 0;
+        const autoCpc     = a?.cpc         ?? 0;
+
+        const isManual = m ? (m.is_manual === 1) : false;
+        const spend    = m?.ad_spend    != null ? m.ad_spend    : autoSpend;
+        const revenue  = m?.revenue     != null ? rtFx(m.revenue) : autoRevenue;
+        const orders   = m?.orders      != null ? m.orders      : autoOrders;
+        const clicks   = m?.clicks      != null ? m.clicks      : autoClicks;
+        const imp      = m?.impressions != null ? m.impressions : autoImp;
+        const ctr      = imp > 0 ? (clicks / imp) * 100 : autoCtr;
+        const cpc      = clicks > 0 ? spend / clicks : autoCpc;
+        const roas     = spend > 0 ? revenue / spend : 0;
+
+        rows.push({
+          date: d, is_manual: isManual, country,
+          ad_spend: spend, revenue, orders, clicks, impressions: imp,
+          ctr, cpc, roas,
+          notes: m?.notes ?? "",
+          auto_spend: autoSpend, auto_revenue: autoRevenue,
+        });
+      }
+
+      return json({ rows });
+    }
+
+    // ── POST /api/roas-tracker ────────────────────────────────────────────────
+    // Upsert a manual override row for one date. Optional country field for per-country view.
+    if (path === "/api/roas-tracker" && method === "POST") {
+      const body = await request.json() as {
+        store_id: string; date: string; country?: string;
+        ad_spend?: number; revenue?: number; orders?: number;
+        clicks?: number; impressions?: number; notes?: string;
+        is_manual?: boolean;
+      };
+      if (!body.store_id || !body.date) return json({ error: "Missing store_id or date" }, 400);
+      const now = new Date().toISOString();
+      const country = body.country ?? "";
+
+      if (country) {
+        // Per-country upsert
+        const id = `${body.store_id}_${body.date}_${country}`;
+        await env.DB.prepare(`
+          INSERT INTO roas_tracker_country (id, store_id, date, country, ad_spend, revenue, orders, clicks, impressions, notes, is_manual, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(store_id, date, country) DO UPDATE SET
+            ad_spend=excluded.ad_spend, revenue=excluded.revenue, orders=excluded.orders,
+            clicks=excluded.clicks, impressions=excluded.impressions, notes=excluded.notes,
+            is_manual=excluded.is_manual, updated_at=excluded.updated_at
+        `).bind(
+          id, body.store_id, body.date, country,
+          body.ad_spend ?? 0, body.revenue ?? 0, body.orders ?? 0,
+          body.clicks ?? 0, body.impressions ?? 0,
+          body.notes ?? "", body.is_manual === false ? 0 : 1,
+          now, now,
+        ).run();
+      } else {
+        // Global upsert (no country)
+        const id = `${body.store_id}_${body.date}`;
+        await env.DB.prepare(`
+          INSERT INTO roas_tracker (id, store_id, date, ad_spend, revenue, orders, clicks, impressions, notes, is_manual, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(store_id, date) DO UPDATE SET
+            ad_spend=excluded.ad_spend, revenue=excluded.revenue, orders=excluded.orders,
+            clicks=excluded.clicks, impressions=excluded.impressions, notes=excluded.notes,
+            is_manual=excluded.is_manual, updated_at=excluded.updated_at
+        `).bind(
+          id, body.store_id, body.date,
+          body.ad_spend ?? 0, body.revenue ?? 0, body.orders ?? 0,
+          body.clicks ?? 0, body.impressions ?? 0,
+          body.notes ?? "", body.is_manual === false ? 0 : 1,
+          now, now,
+        ).run();
+      }
+      return json({ ok: true });
+    }
+
+    // ── DELETE /api/roas-tracker/:date ────────────────────────────────────────
+    // Remove manual override — reverts to auto data.
+    if (path.startsWith("/api/roas-tracker/") && method === "DELETE") {
+      const storeId = url.searchParams.get("store_id");
+      const country = url.searchParams.get("country") ?? "";
+      const date = path.replace("/api/roas-tracker/", "");
+      if (!storeId || !date) return json({ error: "Missing params" }, 400);
+      if (country) {
+        await env.DB.prepare(`DELETE FROM roas_tracker_country WHERE store_id=? AND date=? AND country=?`).bind(storeId, date, country).run();
+      } else {
+        await env.DB.prepare(`DELETE FROM roas_tracker WHERE store_id=? AND date=?`).bind(storeId, date).run();
+      }
+      return json({ ok: true });
+    }
+
+    // ── GET /api/stock ────────────────────────────────────────────────────────
+    if (path === "/api/stock" && method === "GET") {
+      await env.DB.prepare(`CREATE TABLE IF NOT EXISTS product_stock (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_title TEXT NOT NULL UNIQUE,
+        purchased_qty INTEGER NOT NULL DEFAULT 0,
+        low_stock_alert INTEGER NOT NULL DEFAULT 5,
+        notes TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      )`).run();
+
+      const stocks = await env.DB.prepare(`SELECT * FROM product_stock ORDER BY purchased_qty DESC`).all();
+
+      const result = [];
+      for (const item of (stocks.results as any[])) {
+        // Use product_titles_json if available, otherwise fall back to product_title
+        const titles: string[] = item.product_titles_json
+          ? JSON.parse(item.product_titles_json)
+          : [item.product_title];
+
+        let totalSold = 0;
+        for (const title of titles) {
+          const sold = await env.DB.prepare(`
+            SELECT COALESCE(SUM(oi.quantity),0) as units_sold
+            FROM order_items oi
+            JOIN orders o ON o.id=oi.order_id
+            WHERE oi.product_title=? AND o.financial_status NOT IN ('refunded','voided','cancelled')
+          `).bind(title).first() as any;
+          totalSold += sold?.units_sold ?? 0;
+        }
+        result.push({
+          ...item,
+          linked_titles: titles,
+          units_sold: totalSold,
+          remaining: item.purchased_qty - totalSold,
+        });
+      }
+      return json({ stock: result });
+    }
+
+    // ── POST /api/stock/bulk ──────────────────────────────────────────────────
+    if (path === "/api/stock/bulk" && method === "POST") {
+      await env.DB.prepare(`CREATE TABLE IF NOT EXISTS product_stock (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_title TEXT NOT NULL UNIQUE,
+        purchased_qty INTEGER NOT NULL DEFAULT 0,
+        low_stock_alert INTEGER NOT NULL DEFAULT 5,
+        notes TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+      )`).run();
+
+      const body = await request.json() as any;
+      const items = body.items ?? [];
+      let updated = 0;
+      for (const item of items) {
+        await env.DB.prepare(`
+          INSERT INTO product_stock (product_title, purchased_qty, low_stock_alert, notes)
+          VALUES (?,?,?,?)
+          ON CONFLICT(product_title) DO UPDATE SET
+            purchased_qty=excluded.purchased_qty,
+            low_stock_alert=excluded.low_stock_alert,
+            notes=COALESCE(excluded.notes, product_stock.notes)
+        `).bind(item.product_title, item.purchased_qty, item.low_stock_alert ?? 5, item.notes ?? null).run();
+        updated++;
+      }
+      return json({ ok: true, updated });
+    }
+
+    // ── PUT /api/stock/:id ────────────────────────────────────────────────────
+    if (path.startsWith("/api/stock/") && method === "PUT") {
+      const id = path.split("/api/stock/")[1];
+      const body = await request.json() as any;
+      await env.DB.prepare(`
+        UPDATE product_stock SET purchased_qty=?, low_stock_alert=?, notes=? WHERE id=?
+      `).bind(body.purchased_qty, body.low_stock_alert, body.notes ?? null, id).run();
+      return json({ ok: true });
+    }
+
+    // ── POST /api/sync/cancellations — mark Shopify-cancelled orders in D1 ──
+    if (path === "/api/sync/cancellations" && method === "POST") {
+      const marked = await syncCancellations(env, url.searchParams.get("store_id") || undefined);
+      return json({ ok: true, marked });
+    }
+
     return json({ error: "Not found", path }, 404);
+  },
+
+  // Cron: keep D1 in sync with Shopify cancellations so stock stays correct.
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(syncCancellations(env));
   },
 };
