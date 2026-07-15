@@ -34,7 +34,7 @@ function RenderReply({ text }: { text: string }) {
         const rendered = parts.map((part, j) => {
           if (part.startsWith("**") && part.endsWith("**")) {
             return (
-              <strong key={j} className="text-white font-semibold">
+              <strong key={j} className="text-gray-900 font-semibold">
                 {part.slice(2, -2)}
               </strong>
             );
@@ -45,13 +45,13 @@ function RenderReply({ text }: { text: string }) {
           return (
             <div key={i} className="flex items-start gap-2">
               <span className="mt-1 shrink-0 w-1 h-1 rounded-full bg-zinc-500" />
-              <p className="text-zinc-300">{rendered}</p>
+              <p className="text-gray-600">{rendered}</p>
             </div>
           );
         }
         if (!content.trim()) return <div key={i} className="h-1" />;
         return (
-          <p key={i} className="text-zinc-300">
+          <p key={i} className="text-gray-600">
             {rendered}
           </p>
         );
@@ -120,27 +120,27 @@ export default function AIChatPage() {
   return (
     <div className="flex flex-col min-h-screen" style={{ background: "#08080f" }}>
       {/* Header */}
-      <div className="shrink-0 px-6 pt-6 pb-4 space-y-4 border-b border-white/5">
+      <div className="shrink-0 px-6 pt-6 pb-4 space-y-4 border-b border-black/5">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <h1 className="text-2xl font-black tracking-tight flex items-center gap-2">
               <MessageSquare size={22} className="text-blue-400" />
               AI Chat
             </h1>
-            <p className="text-zinc-500 text-sm mt-0.5">
+            <p className="text-gray-500 text-sm mt-0.5">
               Powered by your real Shopify, product cost and profit data
             </p>
           </div>
           {/* Store selector */}
-          <div className="flex gap-1 bg-white/5 rounded-xl p-1">
+          <div className="flex gap-1 bg-black/5 rounded-xl p-1">
             {STORES.map((s) => (
               <button
                 key={s.key}
                 onClick={() => setStoreId(s.key)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                   storeId === s.key
-                    ? "bg-blue-600 text-white"
-                    : "text-zinc-400 hover:text-white"
+                    ? "bg-blue-600 text-gray-900"
+                    : "text-gray-500 hover:text-gray-900"
                 }`}
               >
                 {s.name}
@@ -156,7 +156,7 @@ export default function AIChatPage() {
               key={s}
               onClick={() => sendMessage(s)}
               disabled={loading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 border border-white/8 text-xs text-zinc-400 hover:text-white hover:bg-white/8 transition-all disabled:opacity-40"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/5 border border-black/8 text-xs text-gray-500 hover:text-gray-900 hover:bg-black/8 transition-all disabled:opacity-40"
             >
               <Sparkles size={10} className="text-blue-400 shrink-0" />
               {s}
@@ -171,9 +171,9 @@ export default function AIChatPage() {
           msg.role === "assistant" ? (
             <div
               key={i}
-              className="max-w-3xl bg-white/3 border border-white/5 rounded-2xl p-4"
+              className="max-w-3xl bg-black/3 border border-black/5 rounded-2xl p-4"
             >
-              <p className="text-[10px] text-zinc-600 uppercase tracking-widest mb-2 font-semibold">
+              <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-2 font-semibold">
                 TSecom AI
               </p>
               <RenderReply text={msg.content} />
@@ -181,7 +181,7 @@ export default function AIChatPage() {
           ) : (
             <div
               key={i}
-              className="bg-blue-600 rounded-2xl p-4 ml-auto max-w-[80%]"
+              className="bg-blue-600 text-white rounded-2xl p-4 ml-auto max-w-[80%]"
             >
               <p className="text-sm leading-relaxed">{msg.content}</p>
             </div>
@@ -190,11 +190,11 @@ export default function AIChatPage() {
 
         {/* Loading bubble */}
         {loading && (
-          <div className="max-w-3xl bg-white/3 border border-white/5 rounded-2xl p-4">
-            <p className="text-[10px] text-zinc-600 uppercase tracking-widest mb-2 font-semibold">
+          <div className="max-w-3xl bg-black/3 border border-black/5 rounded-2xl p-4">
+            <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-2 font-semibold">
               TSecom AI
             </p>
-            <div className="flex items-center gap-2 text-zinc-500 text-sm">
+            <div className="flex items-center gap-2 text-gray-500 text-sm">
               <Loader2 size={14} className="animate-spin text-blue-400" />
               Analysing your store data...
             </div>
@@ -205,7 +205,7 @@ export default function AIChatPage() {
       </div>
 
       {/* Input bar */}
-      <div className="shrink-0 border-t border-white/5 px-6 py-4">
+      <div className="shrink-0 border-t border-black/5 px-6 py-4">
         <div className="flex gap-3">
           <input
             ref={inputRef}
@@ -219,12 +219,12 @@ export default function AIChatPage() {
             }}
             placeholder="Ask anything about your store..."
             disabled={loading}
-            className="flex-1 bg-white/4 border border-white/8 rounded-2xl px-5 py-3 text-sm text-white placeholder-zinc-700 outline-none focus:border-blue-500/50 transition-colors disabled:opacity-50"
+            className="flex-1 bg-black/4 border border-black/8 rounded-2xl px-5 py-3 text-sm text-gray-900 placeholder-zinc-700 outline-none focus:border-blue-500/50 transition-colors disabled:opacity-50"
           />
           <button
             onClick={() => sendMessage()}
             disabled={loading || !input.trim()}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all rounded-2xl px-5 py-3 text-sm font-semibold"
+            className="flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all rounded-2xl px-5 py-3 text-sm font-semibold"
           >
             {loading ? (
               <Loader2 size={16} className="animate-spin" />

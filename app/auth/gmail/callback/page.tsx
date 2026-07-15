@@ -59,7 +59,7 @@ function GmailCallbackInner() {
       )}
       {status === "ok" && <span className="text-4xl">✅</span>}
       {status === "error" && <span className="text-4xl">❌</span>}
-      <p className="text-zinc-300 text-sm max-w-xs">{message}</p>
+      <p className="text-gray-600 text-sm max-w-xs">{message}</p>
       {status === "error" && (
         <a href="/inbox" className="text-blue-400 text-sm underline">← Back to inbox</a>
       )}
@@ -69,11 +69,11 @@ function GmailCallbackInner() {
 
 export default function GmailCallbackPage() {
   return (
-    <div className="min-h-screen bg-[#08080f] text-white flex items-center justify-center">
+    <div className="min-h-screen bg-[#f6f7f9] text-gray-900 flex items-center justify-center">
       <Suspense fallback={
         <div className="text-center space-y-4">
           <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-zinc-500 text-sm">Connecting…</p>
+          <p className="text-gray-500 text-sm">Connecting…</p>
         </div>
       }>
         <GmailCallbackInner />

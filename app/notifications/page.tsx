@@ -153,7 +153,7 @@ export default function NotificationsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white p-8">
+    <div className="min-h-screen bg-[#f6f7f9] text-gray-900 p-8">
       <div className="max-w-3xl mx-auto space-y-8">
 
         {/* ── Header ── */}
@@ -162,14 +162,14 @@ export default function NotificationsPage() {
             <Bell size={22} className="text-yellow-400" />
             <h1 className="text-2xl font-bold tracking-tight">Notifications</h1>
           </div>
-          <p className="text-zinc-400 text-sm">
+          <p className="text-gray-500 text-sm">
             Configure Slack and WhatsApp alerts for key events
           </p>
         </div>
 
         {/* ── Store selector ── */}
         <div className="flex items-center gap-3">
-          <span className="text-sm text-zinc-400">Store:</span>
+          <span className="text-sm text-gray-500">Store:</span>
           <div className="flex gap-2">
             {STORES.map((s) => (
               <button
@@ -177,8 +177,8 @@ export default function NotificationsPage() {
                 onClick={() => setStoreId(s.key)}
                 className={`px-4 py-1.5 rounded-xl text-sm font-medium transition-all ${
                   storeId === s.key
-                    ? "bg-blue-600 text-white"
-                    : "bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white"
+                    ? "bg-blue-600 text-gray-900"
+                    : "bg-black/5 text-gray-500 hover:bg-black/10 hover:text-gray-900"
                 }`}
               >
                 {s.name}
@@ -188,7 +188,7 @@ export default function NotificationsPage() {
         </div>
 
         {loading ? (
-          <p className="text-zinc-500 text-sm">Loading settings…</p>
+          <p className="text-gray-500 text-sm">Loading settings…</p>
         ) : (
           <>
             {/* ── Channel cards ── */}
@@ -198,7 +198,7 @@ export default function NotificationsPage() {
               <div className="bg-[#4A154B]/20 border border-[#4A154B]/40 rounded-2xl p-5 space-y-4">
                 <div className="flex items-center gap-2">
                   <span className="text-lg">💬</span>
-                  <span className="font-semibold text-white">Slack</span>
+                  <span className="font-semibold text-gray-900">Slack</span>
                 </div>
 
                 <div className="space-y-1.5">
@@ -207,9 +207,9 @@ export default function NotificationsPage() {
                     value={settings.slack_webhook}
                     onChange={(e) => patch({ slack_webhook: e.target.value })}
                     placeholder="https://hooks.slack.com/services/..."
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-[#4A154B]/80 transition-colors"
+                    className="w-full bg-black/5 border border-black/10 rounded-xl px-3 py-2 text-sm text-gray-900 placeholder-zinc-600 focus:outline-none focus:border-[#4A154B]/80 transition-colors"
                   />
-                  <p className="text-[11px] text-zinc-500 leading-relaxed">
+                  <p className="text-[11px] text-gray-500 leading-relaxed">
                     Create an Incoming Webhook in your Slack workspace settings
                   </p>
                 </div>
@@ -218,7 +218,7 @@ export default function NotificationsPage() {
                   <button
                     onClick={testSlack}
                     disabled={!settings.slack_webhook || slackTest === "loading"}
-                    className="px-4 py-1.5 rounded-xl bg-[#4A154B]/60 border border-[#4A154B]/60 text-sm font-medium text-white hover:bg-[#4A154B]/80 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                    className="px-4 py-1.5 rounded-xl bg-[#4A154B]/60 border border-[#4A154B]/60 text-sm font-medium text-gray-900 hover:bg-[#4A154B]/80 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                   >
                     {slackTest === "loading" ? "Sending…" : "Test"}
                   </button>
@@ -238,7 +238,7 @@ export default function NotificationsPage() {
               <div className="bg-[#075E54]/20 border border-[#075E54]/40 rounded-2xl p-5 space-y-4">
                 <div className="flex items-center gap-2">
                   <span className="text-lg">📱</span>
-                  <span className="font-semibold text-white">WhatsApp</span>
+                  <span className="font-semibold text-gray-900">WhatsApp</span>
                 </div>
 
                 <div className="space-y-1.5">
@@ -247,9 +247,9 @@ export default function NotificationsPage() {
                     value={settings.whatsapp_phone}
                     onChange={(e) => patch({ whatsapp_phone: e.target.value })}
                     placeholder="+31612345678"
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-[#075E54]/80 transition-colors"
+                    className="w-full bg-black/5 border border-black/10 rounded-xl px-3 py-2 text-sm text-gray-900 placeholder-zinc-600 focus:outline-none focus:border-[#075E54]/80 transition-colors"
                   />
-                  <p className="text-[11px] text-zinc-500 leading-relaxed">
+                  <p className="text-[11px] text-gray-500 leading-relaxed">
                     Uses CallMeBot — first send &ldquo;I allow callmebot to send me messages&rdquo; to
                     +34 644 79 74 14 on WhatsApp to activate
                   </p>
@@ -259,7 +259,7 @@ export default function NotificationsPage() {
                   <button
                     onClick={testWhatsApp}
                     disabled={!settings.whatsapp_phone || waTest === "loading"}
-                    className="px-4 py-1.5 rounded-xl bg-[#075E54]/60 border border-[#075E54]/60 text-sm font-medium text-white hover:bg-[#075E54]/80 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                    className="px-4 py-1.5 rounded-xl bg-[#075E54]/60 border border-[#075E54]/60 text-sm font-medium text-gray-900 hover:bg-[#075E54]/80 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                   >
                     {waTest === "loading" ? "Sending…" : "Test"}
                   </button>
@@ -277,17 +277,17 @@ export default function NotificationsPage() {
             </div>
 
             {/* ── Alert events ── */}
-            <div className="bg-white/[0.03] border border-white/8 rounded-2xl p-5 space-y-4">
-              <h2 className="font-semibold text-white">Alert events</h2>
+            <div className="bg-white/[0.03] border border-black/8 rounded-2xl p-5 space-y-4">
+              <h2 className="font-semibold text-gray-900">Alert events</h2>
 
               <div className="space-y-3">
                 {/* Milestones */}
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="flex items-center gap-2 text-sm font-medium text-white">
+                    <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
                       <span>🏆</span> Product milestones
                     </div>
-                    <p className="text-[11px] text-zinc-500 mt-0.5">
+                    <p className="text-[11px] text-gray-500 mt-0.5">
                       Product reaches 5 / 20 / 40 sales
                     </p>
                   </div>
@@ -297,15 +297,15 @@ export default function NotificationsPage() {
                   />
                 </div>
 
-                <div className="border-t border-white/5" />
+                <div className="border-t border-black/5" />
 
                 {/* Kill signals */}
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="flex items-center gap-2 text-sm font-medium text-white">
+                    <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
                       <span>🔴</span> Kill signals
                     </div>
-                    <p className="text-[11px] text-zinc-500 mt-0.5">
+                    <p className="text-[11px] text-gray-500 mt-0.5">
                       Product spending budget with no orders
                     </p>
                   </div>
@@ -315,15 +315,15 @@ export default function NotificationsPage() {
                   />
                 </div>
 
-                <div className="border-t border-white/5" />
+                <div className="border-t border-black/5" />
 
                 {/* CS urgent */}
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="flex items-center gap-2 text-sm font-medium text-white">
+                    <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
                       <span>🆘</span> Urgent CS tickets
                     </div>
-                    <p className="text-[11px] text-zinc-500 mt-0.5">
+                    <p className="text-[11px] text-gray-500 mt-0.5">
                       CS ticket marked as urgent
                     </p>
                   </div>
@@ -333,18 +333,18 @@ export default function NotificationsPage() {
                   />
                 </div>
 
-                <div className="border-t border-white/5" />
+                <div className="border-t border-black/5" />
 
                 {/* Daily digest — disabled / coming soon */}
                 <div className="flex items-center justify-between opacity-60">
                   <div>
-                    <div className="flex items-center gap-2 text-sm font-medium text-white">
+                    <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
                       <span>📊</span> Daily digest
-                      <span className="ml-1 text-[10px] font-semibold bg-zinc-700 text-zinc-300 px-2 py-0.5 rounded-full">
+                      <span className="ml-1 text-[10px] font-semibold bg-zinc-700 text-gray-600 px-2 py-0.5 rounded-full">
                         Coming soon
                       </span>
                     </div>
-                    <p className="text-[11px] text-zinc-500 mt-0.5">
+                    <p className="text-[11px] text-gray-500 mt-0.5">
                       Morning summary of your store performance
                     </p>
                   </div>
@@ -362,15 +362,15 @@ export default function NotificationsPage() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold text-sm transition-all"
+                className="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-500 disabled:opacity-60 disabled:cursor-not-allowed text-gray-900 font-semibold text-sm transition-all"
               >
                 {savedOk ? "Saved ✓" : saving ? "Saving…" : "Save settings"}
               </button>
             </div>
 
             {/* ── Info box ── */}
-            <div className="bg-blue-950/30 border border-blue-500/20 rounded-2xl p-4 text-[13px] text-zinc-400 leading-relaxed space-y-1.5">
-              <p className="text-blue-300 font-semibold text-sm">How notifications work</p>
+            <div className="bg-blue-50 border border-blue-500/20 rounded-2xl p-4 text-[13px] text-gray-500 leading-relaxed space-y-1.5">
+              <p className="text-blue-700 font-semibold text-sm">How notifications work</p>
               <p>
                 TSecom checks your store data every few minutes. When a configured event is
                 detected — such as a product hitting a sales milestone or a kill signal being

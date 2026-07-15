@@ -65,36 +65,36 @@ const SIGNALS: Record<Signal, {
   kill: {
     label: "🔴 Pause Now",
     icon: <XCircle size={16} className="text-red-400" />,
-    bg: "bg-red-950/30", border: "border-red-500/30", dot: "bg-red-500",
-    textColor: "text-red-300",
+    bg: "bg-red-50", border: "border-red-500/30", dot: "bg-red-500",
+    textColor: "text-red-700",
     tip: "Pause this product in Google Ads → Campaigns → Shopping → product groups. Stop the bleed immediately.",
   },
   scale: {
     label: "🟢 Scale Up",
     icon: <TrendingUp size={16} className="text-emerald-400" />,
-    bg: "bg-emerald-950/25", border: "border-emerald-500/25", dot: "bg-emerald-400",
-    textColor: "text-emerald-300",
+    bg: "bg-emerald-50", border: "border-emerald-500/25", dot: "bg-emerald-400",
+    textColor: "text-emerald-700",
     tip: "Increase the daily budget or raise the bid for this product. Every extra euro has proven returns.",
   },
   opportunity: {
     label: "💡 Opportunity — add to Shopping",
     icon: <Lightbulb size={16} className="text-yellow-400" />,
-    bg: "bg-yellow-950/20", border: "border-yellow-500/20", dot: "bg-yellow-400",
-    textColor: "text-yellow-300",
+    bg: "bg-yellow-50", border: "border-yellow-500/20", dot: "bg-yellow-400",
+    textColor: "text-yellow-700",
     tip: "This product already sells (organic or direct) but gets little to no ad budget. Add it to your Shopping campaign or raise the bid.",
   },
   monitor: {
     label: "🟡 Monitor & Optimise",
     icon: <AlertTriangle size={16} className="text-amber-400" />,
-    bg: "bg-amber-950/15", border: "border-amber-500/20", dot: "bg-amber-400",
-    textColor: "text-amber-300",
+    bg: "bg-amber-50", border: "border-amber-500/20", dot: "bg-amber-400",
+    textColor: "text-amber-700",
     tip: "ROAS is mediocre. Try: a better product title (more keywords), a higher quality image, or lower your CPC bid.",
   },
   neutral: {
     label: "⚪ Neutral",
-    icon: <CheckCircle2 size={16} className="text-zinc-600" />,
-    bg: "bg-white/3", border: "border-white/5", dot: "bg-zinc-600",
-    textColor: "text-zinc-500",
+    icon: <CheckCircle2 size={16} className="text-gray-400" />,
+    bg: "bg-black/3", border: "border-black/5", dot: "bg-zinc-600",
+    textColor: "text-gray-500",
     tip: "No clear signal. Enter purchase cost to activate margin calculation.",
   },
 };
@@ -154,16 +154,16 @@ export default function ScaleCommandPage() {
           <h1 className="text-2xl font-black tracking-tight flex items-center gap-2">
             <Target size={22} className="text-blue-400" /> Scale Command
           </h1>
-          <p className="text-zinc-500 text-sm mt-0.5">
+          <p className="text-gray-500 text-sm mt-0.5">
             What should you pause, scale, or add to your feed right now?
           </p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           <DateRangePicker value={dateRange} onChange={setDateRange} />
-          <div className="flex gap-1 bg-white/5 rounded-xl p-1">
+          <div className="flex gap-1 bg-black/5 rounded-xl p-1">
             {STORES.map(s => (
               <button key={s.key} onClick={() => setStoreId(s.key)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${storeId === s.key ? "bg-blue-600 text-white" : "text-zinc-400 hover:text-white"}`}>
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${storeId === s.key ? "bg-blue-600 text-gray-900" : "text-gray-500 hover:text-gray-900"}`}>
                 {s.name}
               </button>
             ))}
@@ -174,12 +174,12 @@ export default function ScaleCommandPage() {
       {/* Impact summary */}
       {!loading && (
         <div className="grid grid-cols-3 gap-4">
-          <div className="rounded-2xl bg-red-950/30 border border-red-500/25 p-4">
+          <div className="rounded-2xl bg-red-50 border border-red-500/25 p-4">
             <div className="flex items-center gap-2 mb-2">
               <XCircle size={14} className="text-red-400" />
-              <p className="text-xs font-bold text-red-300 uppercase tracking-widest">Waste to stop</p>
+              <p className="text-xs font-bold text-red-700 uppercase tracking-widest">Waste to stop</p>
             </div>
-            <p className="text-2xl font-black text-red-300">
+            <p className="text-2xl font-black text-red-700">
               {killWaste > 0 ? `€${f2(killWaste)}` : "None"}
             </p>
             <p className="text-[11px] text-red-900 mt-1">
@@ -187,12 +187,12 @@ export default function ScaleCommandPage() {
             </p>
           </div>
 
-          <div className="rounded-2xl bg-emerald-950/25 border border-emerald-500/20 p-4">
+          <div className="rounded-2xl bg-emerald-50 border border-emerald-500/20 p-4">
             <div className="flex items-center gap-2 mb-2">
               <TrendingUp size={14} className="text-emerald-400" />
-              <p className="text-xs font-bold text-emerald-300 uppercase tracking-widest">Proven to scale</p>
+              <p className="text-xs font-bold text-emerald-700 uppercase tracking-widest">Proven to scale</p>
             </div>
-            <p className="text-2xl font-black text-emerald-300">
+            <p className="text-2xl font-black text-emerald-700">
               {scaleRevenue > 0 ? `€${f2(scaleRevenue)}` : "None"}
             </p>
             <p className="text-[11px] text-emerald-900 mt-1">
@@ -200,12 +200,12 @@ export default function ScaleCommandPage() {
             </p>
           </div>
 
-          <div className="rounded-2xl bg-yellow-950/20 border border-yellow-500/15 p-4">
+          <div className="rounded-2xl bg-yellow-50 border border-yellow-500/15 p-4">
             <div className="flex items-center gap-2 mb-2">
               <Lightbulb size={14} className="text-yellow-400" />
-              <p className="text-xs font-bold text-yellow-300 uppercase tracking-widest">Untapped opportunities</p>
+              <p className="text-xs font-bold text-yellow-700 uppercase tracking-widest">Untapped opportunities</p>
             </div>
-            <p className="text-2xl font-black text-yellow-300">
+            <p className="text-2xl font-black text-yellow-700">
               {oppOrders > 0 ? `${oppOrders} sales` : "None"}
             </p>
             <p className="text-[11px] text-yellow-900 mt-1">
@@ -217,7 +217,7 @@ export default function ScaleCommandPage() {
 
       {loading && (
         <div className="space-y-4">
-          {[...Array(4)].map((_, i) => <div key={i} className="h-32 rounded-2xl bg-white/4 animate-pulse" />)}
+          {[...Array(4)].map((_, i) => <div key={i} className="h-32 rounded-2xl bg-black/4 animate-pulse" />)}
         </div>
       )}
 
@@ -247,10 +247,10 @@ export default function ScaleCommandPage() {
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
               {prods.map(p => (
                 <div key={p.product_title}
-                  className="rounded-xl bg-black/20 border border-white/5 p-3 space-y-2">
+                  className="rounded-xl bg-black/20 border border-black/5 p-3 space-y-2">
 
                   {/* Title */}
-                  <p className="text-xs font-semibold leading-snug line-clamp-2 text-white">
+                  <p className="text-xs font-semibold leading-snug line-clamp-2 text-gray-900">
                     {p.product_title}
                   </p>
 
@@ -259,15 +259,15 @@ export default function ScaleCommandPage() {
                     {/* Spend */}
                     {p.ad_spend > 0 && (
                       <div>
-                        <p className="text-[9px] text-zinc-600 uppercase">Ad spend</p>
-                        <p className="text-xs font-bold text-red-300">€{f2(p.ad_spend)}</p>
+                        <p className="text-[9px] text-gray-400 uppercase">Ad spend</p>
+                        <p className="text-xs font-bold text-red-700">€{f2(p.ad_spend)}</p>
                       </div>
                     )}
 
                     {/* ROAS */}
                     {p.roas !== null && (
                       <div>
-                        <p className="text-[9px] text-zinc-600 uppercase">ROAS</p>
+                        <p className="text-[9px] text-gray-400 uppercase">ROAS</p>
                         <p className={`text-xs font-bold ${p.roas >= 3 ? "text-emerald-400" : p.roas >= 1.5 ? "text-amber-400" : "text-red-400"}`}>
                           {p.roas.toFixed(2)}x
                         </p>
@@ -276,14 +276,14 @@ export default function ScaleCommandPage() {
 
                     {/* Orders */}
                     <div>
-                      <p className="text-[9px] text-zinc-600 uppercase">Orders</p>
+                      <p className="text-[9px] text-gray-400 uppercase">Orders</p>
                       <p className="text-xs font-bold">{p.sold}</p>
                     </div>
 
                     {/* Revenue */}
                     {p.revenue > 0 && (
                       <div>
-                        <p className="text-[9px] text-zinc-600 uppercase">Revenue</p>
+                        <p className="text-[9px] text-gray-400 uppercase">Revenue</p>
                         <p className="text-xs font-bold">€{f2(p.revenue)}</p>
                       </div>
                     )}
@@ -291,7 +291,7 @@ export default function ScaleCommandPage() {
                     {/* Margin */}
                     {p.gross_margin !== null && (
                       <div>
-                        <p className="text-[9px] text-zinc-600 uppercase">Margin</p>
+                        <p className="text-[9px] text-gray-400 uppercase">Margin</p>
                         <p className={`text-xs font-bold ${(p.gross_margin ?? 0) >= 40 ? "text-emerald-400" : (p.gross_margin ?? 0) >= 20 ? "text-amber-400" : "text-red-400"}`}>
                           {(p.gross_margin ?? 0).toFixed(1)}%
                         </p>
@@ -301,8 +301,8 @@ export default function ScaleCommandPage() {
                     {/* Return rate */}
                     {p.return_rate > 0 && (
                       <div>
-                        <p className="text-[9px] text-zinc-600 uppercase">Return rate</p>
-                        <p className={`text-xs font-bold ${p.return_rate > 15 ? "text-red-400" : "text-zinc-400"}`}>
+                        <p className="text-[9px] text-gray-400 uppercase">Return rate</p>
+                        <p className={`text-xs font-bold ${p.return_rate > 15 ? "text-red-400" : "text-gray-500"}`}>
                           {p.return_rate.toFixed(0)}%
                         </p>
                       </div>
@@ -311,15 +311,15 @@ export default function ScaleCommandPage() {
                     {/* Clicks */}
                     {p.ad_clicks > 0 && (
                       <div>
-                        <p className="text-[9px] text-zinc-600 uppercase">Clicks</p>
-                        <p className="text-xs font-bold text-zinc-400">{p.ad_clicks.toLocaleString()}</p>
+                        <p className="text-[9px] text-gray-400 uppercase">Clicks</p>
+                        <p className="text-xs font-bold text-gray-500">{p.ad_clicks.toLocaleString()}</p>
                       </div>
                     )}
 
                     {/* Profit */}
                     {p.profit !== null && (
                       <div>
-                        <p className="text-[9px] text-zinc-600 uppercase">Profit</p>
+                        <p className="text-[9px] text-gray-400 uppercase">Profit</p>
                         <p className={`text-xs font-bold ${(p.profit ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                           €{f2(p.profit ?? 0)}
                         </p>
@@ -335,10 +335,10 @@ export default function ScaleCommandPage() {
 
       {/* Empty state */}
       {!loading && sections.every(s => s.products.length === 0) && (
-        <div className="rounded-2xl bg-white/3 border border-white/5 p-14 text-center text-zinc-600">
+        <div className="rounded-2xl bg-black/3 border border-black/5 p-14 text-center text-gray-400">
           <Target size={36} className="mx-auto mb-3 opacity-25" />
           <p className="text-sm font-medium">No product data in this period</p>
-          <p className="text-xs text-zinc-700 mt-1">
+          <p className="text-xs text-gray-400 mt-1">
             Make sure orders are imported and the Google Ads Script is active
           </p>
         </div>
@@ -346,8 +346,8 @@ export default function ScaleCommandPage() {
 
       {/* Legend */}
       {!loading && products.length > 0 && (
-        <div className="rounded-xl bg-white/3 border border-white/5 p-4">
-          <p className="text-[10px] text-zinc-600 uppercase tracking-widest mb-3">How classification works</p>
+        <div className="rounded-xl bg-black/3 border border-black/5 p-4">
+          <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-3">How classification works</p>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {([
               ["kill",        "Spend > €8, 0 orders  →  pause immediately"],
@@ -359,7 +359,7 @@ export default function ScaleCommandPage() {
               return (
                 <div key={sig} className="flex items-start gap-2">
                   <div className={`mt-1 w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />
-                  <p className="text-[10px] text-zinc-500 leading-relaxed">{desc}</p>
+                  <p className="text-[10px] text-gray-500 leading-relaxed">{desc}</p>
                 </div>
               );
             })}

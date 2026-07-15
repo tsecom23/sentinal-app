@@ -156,7 +156,7 @@ export default function GoogleAdsPage() {
       label: "Impressions",
       value: t ? t.impressions.toLocaleString("nl-NL") : "—",
       icon: <Eye size={15} className="text-purple-400" />,
-      color: "text-purple-300",
+      color: "text-purple-700",
     },
     {
       label: "CTR",
@@ -174,7 +174,7 @@ export default function GoogleAdsPage() {
       label: "Conversions",
       value: t ? t.conversions.toFixed(1) : "—",
       icon: <Check size={15} className="text-emerald-400" />,
-      color: "text-emerald-300",
+      color: "text-emerald-700",
     },
     {
       label: "ROAS",
@@ -193,14 +193,14 @@ export default function GoogleAdsPage() {
           <h1 className="text-2xl font-black tracking-tight flex items-center gap-2">
             <BarChart3 size={22} className="text-blue-400" /> Google Ads
           </h1>
-          <p className="text-zinc-500 text-sm mt-0.5">Alle ad stats — spend, clicks, CTR, CPC, ROAS</p>
+          <p className="text-gray-500 text-sm mt-0.5">Alle ad stats — spend, clicks, CTR, CPC, ROAS</p>
         </div>
         <div className="flex items-center gap-3">
           <DateRangePicker value={dateRange} onChange={setDateRange} />
-          <div className="flex gap-1 bg-white/5 rounded-xl p-1">
+          <div className="flex gap-1 bg-black/5 rounded-xl p-1">
             {stores.map(s => (
               <button key={s.id} onClick={() => { setStoreId(s.id); setParsed([]); setFileName(""); setImported(false); }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${storeId === s.id ? "bg-blue-600 text-white" : "text-zinc-400 hover:text-white"}`}>
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${storeId === s.id ? "bg-blue-600 text-gray-900" : "text-gray-500 hover:text-gray-900"}`}>
                 {s.name}
               </button>
             ))}
@@ -211,13 +211,13 @@ export default function GoogleAdsPage() {
       {/* Metric cards — 7 across */}
       {loading ? (
         <div className="grid grid-cols-7 gap-3">
-          {[...Array(7)].map((_, i) => <div key={i} className="h-20 rounded-2xl bg-white/4 animate-pulse" />)}
+          {[...Array(7)].map((_, i) => <div key={i} className="h-20 rounded-2xl bg-black/4 animate-pulse" />)}
         </div>
       ) : (
         <div className="grid grid-cols-7 gap-3">
           {METRIC_CARDS.map(c => (
-            <div key={c.label} className="rounded-2xl bg-white/3 border border-white/5 p-4">
-              <div className="flex items-center gap-1.5 mb-2 text-zinc-500">
+            <div key={c.label} className="rounded-2xl bg-black/3 border border-black/5 p-4">
+              <div className="flex items-center gap-1.5 mb-2 text-gray-500">
                 {c.icon}
                 <p className="text-[10px] uppercase tracking-widest font-medium">{c.label}</p>
               </div>
@@ -229,15 +229,15 @@ export default function GoogleAdsPage() {
 
       {/* Chart */}
       {hasData && (
-        <div className="rounded-2xl bg-white/3 border border-white/5 p-5">
+        <div className="rounded-2xl bg-black/3 border border-black/5 p-5">
           <div className="flex items-center gap-2 mb-4">
             <BarChart3 size={14} className="text-blue-400" />
-            <h3 className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">Trend</h3>
-            <span className="ml-auto text-[10px] text-zinc-600">{rows.length} days</span>
-            <div className="flex gap-1 bg-white/5 rounded-lg p-0.5 ml-2">
+            <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500">Trend</h3>
+            <span className="ml-auto text-[10px] text-gray-400">{rows.length} days</span>
+            <div className="flex gap-1 bg-black/5 rounded-lg p-0.5 ml-2">
               {([["spend","Spend"],["clicks","Clicks"],["impressions","Impr."]] as const).map(([k, l]) => (
                 <button key={k} onClick={() => setChart(k)}
-                  className={`px-2.5 py-1 rounded-md text-[10px] font-medium transition-all ${chart === k ? "bg-blue-600 text-white" : "text-zinc-500 hover:text-white"}`}>
+                  className={`px-2.5 py-1 rounded-md text-[10px] font-medium transition-all ${chart === k ? "bg-blue-600 text-gray-900" : "text-gray-500 hover:text-gray-900"}`}>
                   {l}
                 </button>
               ))}
@@ -250,7 +250,7 @@ export default function GoogleAdsPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
                   <XAxis dataKey="date" stroke="transparent" tick={{ fill: "#3f3f46", fontSize: 10 }} tickFormatter={d => d.slice(5)} />
                   <YAxis stroke="transparent" tick={{ fill: "#3f3f46", fontSize: 10 }} />
-                  <Tooltip contentStyle={{ background: "#0d0d13", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, fontSize: 11 }}
+                  <Tooltip contentStyle={{ background: "#ffffff", border: "1px solid rgba(15,23,42,0.08)", borderRadius: 12, fontSize: 11 }}
                     labelStyle={{ color: "#71717a" }} itemStyle={{ color: "#60a5fa" }}
                     formatter={(v: number) => [`€${v.toFixed(2)}`, "Spend"]} />
                   <defs>
@@ -266,7 +266,7 @@ export default function GoogleAdsPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
                   <XAxis dataKey="date" stroke="transparent" tick={{ fill: "#3f3f46", fontSize: 10 }} tickFormatter={d => d.slice(5)} />
                   <YAxis stroke="transparent" tick={{ fill: "#3f3f46", fontSize: 10 }} />
-                  <Tooltip contentStyle={{ background: "#0d0d13", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, fontSize: 11 }}
+                  <Tooltip contentStyle={{ background: "#ffffff", border: "1px solid rgba(15,23,42,0.08)", borderRadius: 12, fontSize: 11 }}
                     labelStyle={{ color: "#71717a" }} itemStyle={{ color: "#a78bfa" }}
                     formatter={(v: number) => [v.toLocaleString(), "Clicks"]} />
                   <Line type="monotone" dataKey="clicks" stroke="#a78bfa" strokeWidth={2} dot={false} />
@@ -276,7 +276,7 @@ export default function GoogleAdsPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
                   <XAxis dataKey="date" stroke="transparent" tick={{ fill: "#3f3f46", fontSize: 10 }} tickFormatter={d => d.slice(5)} />
                   <YAxis stroke="transparent" tick={{ fill: "#3f3f46", fontSize: 10 }} />
-                  <Tooltip contentStyle={{ background: "#0d0d13", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, fontSize: 11 }}
+                  <Tooltip contentStyle={{ background: "#ffffff", border: "1px solid rgba(15,23,42,0.08)", borderRadius: 12, fontSize: 11 }}
                     labelStyle={{ color: "#71717a" }} itemStyle={{ color: "#c084fc" }}
                     formatter={(v: number) => [v.toLocaleString(), "Impressions"]} />
                   <defs>
@@ -295,11 +295,11 @@ export default function GoogleAdsPage() {
 
       {/* Daily table */}
       {hasData && (
-        <div className="rounded-2xl bg-white/3 border border-white/5 overflow-hidden">
+        <div className="rounded-2xl bg-black/3 border border-black/5 overflow-hidden">
           <div className="overflow-y-auto max-h-72">
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-white/5 text-zinc-500 sticky top-0 bg-[#0f0f18]">
+                <tr className="border-b border-black/5 text-gray-500 sticky top-0 bg-white">
                   {["Date","Spend","Clicks","Impressions","CTR","CPC","Conv."].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-[10px] uppercase tracking-widest font-medium">{h}</th>
                   ))}
@@ -307,16 +307,16 @@ export default function GoogleAdsPage() {
               </thead>
               <tbody>
                 {[...rows].sort((a, b) => b.date.localeCompare(a.date)).map((r, i) => (
-                  <tr key={i} className="border-b border-white/4 hover:bg-white/3 transition">
-                    <td className="px-4 py-2.5 text-zinc-400 font-mono">{r.date}</td>
-                    <td className="px-4 py-2.5 font-bold text-red-300">€{f2(r.spend)}</td>
+                  <tr key={i} className="border-b border-black/4 hover:bg-black/3 transition">
+                    <td className="px-4 py-2.5 text-gray-500 font-mono">{r.date}</td>
+                    <td className="px-4 py-2.5 font-bold text-red-700">€{f2(r.spend)}</td>
                     <td className="px-4 py-2.5 font-semibold">{r.clicks.toLocaleString()}</td>
-                    <td className="px-4 py-2.5 text-zinc-400">{r.impressions.toLocaleString()}</td>
-                    <td className={`px-4 py-2.5 font-semibold ${r.ctr >= 2 ? "text-emerald-400" : r.ctr >= 1 ? "text-amber-400" : "text-zinc-400"}`}>
+                    <td className="px-4 py-2.5 text-gray-500">{r.impressions.toLocaleString()}</td>
+                    <td className={`px-4 py-2.5 font-semibold ${r.ctr >= 2 ? "text-emerald-400" : r.ctr >= 1 ? "text-amber-400" : "text-gray-500"}`}>
                       {r.ctr.toFixed(2)}%
                     </td>
-                    <td className="px-4 py-2.5 text-zinc-300">€{f2(r.cpc)}</td>
-                    <td className="px-4 py-2.5 text-zinc-500">{r.conversions.toFixed(1)}</td>
+                    <td className="px-4 py-2.5 text-gray-600">€{f2(r.cpc)}</td>
+                    <td className="px-4 py-2.5 text-gray-500">{r.conversions.toFixed(1)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -326,18 +326,18 @@ export default function GoogleAdsPage() {
       )}
 
       {/* CSV import */}
-      <div className="rounded-2xl bg-white/3 border border-white/5 p-5">
+      <div className="rounded-2xl bg-black/3 border border-black/5 p-5">
         <div className="flex items-center gap-2 mb-4">
           <Zap size={14} className="text-blue-400" />
-          <h3 className="text-[11px] font-bold uppercase tracking-widest text-zinc-400">CSV Import</h3>
-          <span className="ml-auto text-[10px] text-zinc-600">Manual backup alongside the Ads Script</span>
+          <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-500">CSV Import</h3>
+          <span className="ml-auto text-[10px] text-gray-400">Manual backup alongside the Ads Script</span>
         </div>
 
-        <div className="rounded-xl bg-blue-600/6 border border-blue-500/15 p-4 mb-4 text-xs text-zinc-400 space-y-1">
-          <p className="text-blue-300 font-semibold mb-2">Export from Google Ads:</p>
-          <p><span className="text-zinc-600">1.</span> ads.google.com → <strong className="text-white">Reports</strong> → Predefined → Time → Day</p>
-          <p><span className="text-zinc-600">2.</span> Set date range → <strong className="text-white">↓ Download → CSV</strong></p>
-          <p><span className="text-zinc-600">3.</span> Drop the .csv file below</p>
+        <div className="rounded-xl bg-blue-600/6 border border-blue-500/15 p-4 mb-4 text-xs text-gray-500 space-y-1">
+          <p className="text-blue-700 font-semibold mb-2">Export from Google Ads:</p>
+          <p><span className="text-gray-400">1.</span> ads.google.com → <strong className="text-gray-900">Reports</strong> → Predefined → Time → Day</p>
+          <p><span className="text-gray-400">2.</span> Set date range → <strong className="text-gray-900">↓ Download → CSV</strong></p>
+          <p><span className="text-gray-400">3.</span> Drop the .csv file below</p>
         </div>
 
         <div
@@ -346,38 +346,38 @@ export default function GoogleAdsPage() {
           onDragLeave={() => setDragOver(false)}
           onClick={() => fileRef.current?.click()}
           className={`rounded-xl border-2 border-dashed p-8 flex flex-col items-center cursor-pointer transition-all ${
-            dragOver ? "border-blue-500 bg-blue-600/10" : "border-white/8 bg-white/2 hover:border-white/15 hover:bg-white/4"
+            dragOver ? "border-blue-500 bg-blue-600/10" : "border-black/8 bg-gray-50 hover:border-black/15 hover:bg-black/4"
           }`}
         >
           <input ref={fileRef} type="file" accept=".csv" className="hidden"
             onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
-          <Upload size={22} className={`mb-2 ${dragOver ? "text-blue-400" : "text-zinc-700"}`} />
+          <Upload size={22} className={`mb-2 ${dragOver ? "text-blue-400" : "text-gray-400"}`} />
           {fileName ? (
             <div className="text-center">
               <p className="text-sm font-semibold">{fileName}</p>
-              <p className="text-xs text-zinc-500 mt-0.5">
+              <p className="text-xs text-gray-500 mt-0.5">
                 {parsed.length > 0
                   ? `${parsed.length} days · €${prevSpend.toFixed(2)} spend · ${prevClicks.toLocaleString()} clicks`
                   : "No recognised columns — check the CSV format"}
               </p>
             </div>
           ) : (
-            <p className="text-sm text-zinc-500">Drop your Google Ads CSV here or click</p>
+            <p className="text-sm text-gray-500">Drop your Google Ads CSV here or click</p>
           )}
         </div>
 
         {parsed.length > 0 && (
           <div className="mt-4 flex items-center justify-between">
-            <p className="text-xs text-zinc-400">
+            <p className="text-xs text-gray-500">
               {parsed.length} days found · {parsed[0]?.date} to {parsed[parsed.length - 1]?.date}
             </p>
             <div className="flex gap-2">
               <button onClick={() => { setParsed([]); setFileName(""); }}
-                className="h-8 px-3 rounded-lg bg-white/5 hover:bg-white/10 text-xs text-zinc-400 transition flex items-center gap-1.5">
+                className="h-8 px-3 rounded-lg bg-black/5 hover:bg-black/10 text-xs text-gray-500 transition flex items-center gap-1.5">
                 <X size={11} /> Cancel
               </button>
               <button onClick={doImport} disabled={importing}
-                className="h-8 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-semibold flex items-center gap-1.5 transition disabled:opacity-60">
+                className="h-8 px-4 rounded-lg bg-blue-600 text-white hover:bg-blue-500 text-xs font-semibold flex items-center gap-1.5 transition disabled:opacity-60">
                 {importing ? "Importing..." : <><Upload size={11} /> Import {parsed.length} days</>}
               </button>
             </div>
@@ -392,10 +392,10 @@ export default function GoogleAdsPage() {
       </div>
 
       {!hasData && !loading && (
-        <div className="rounded-2xl bg-white/3 border border-white/5 p-12 flex flex-col items-center text-zinc-700">
+        <div className="rounded-2xl bg-black/3 border border-black/5 p-12 flex flex-col items-center text-gray-400">
           <BarChart3 size={32} className="mb-3 opacity-30" />
           <p className="text-sm">No ad data for {storeId} in this period</p>
-          <p className="text-xs text-zinc-700 mt-1">Upload a CSV above or check that the Ads Script is active</p>
+          <p className="text-xs text-gray-400 mt-1">Upload a CSV above or check that the Ads Script is active</p>
         </div>
       )}
     </div>

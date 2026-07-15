@@ -20,12 +20,24 @@ var STORE_ID     = "martaline"; // ← aanpassen: "ceofo" of "martaline"
 function main() {
   var rows = {};
 
+  // Build explicit date range — DURING keyword not supported in shopping_performance_view
+  // 14 days is enough for daily updates; run hourly to keep data fresh
+  var today = new Date();
+  var startDate = new Date(today);
+  startDate.setDate(today.getDate() - 14);
+  function fmt(d) {
+    var mm = String(d.getMonth() + 1).padStart(2, "0");
+    var dd = String(d.getDate()).padStart(2, "0");
+    return d.getFullYear() + "-" + mm + "-" + dd;
+  }
+  var dateRange = "segments.date >= '" + fmt(startDate) + "' AND segments.date <= '" + fmt(today) + "'";
+
   try {
     var query =
       "SELECT segments.product_title, segments.date, " +
       "metrics.cost_micros, metrics.clicks, metrics.impressions, metrics.conversions " +
       "FROM shopping_performance_view " +
-      "WHERE segments.date DURING LAST_90_DAYS";
+      "WHERE " + dateRange;
 
     var result = AdsApp.search(query);
 
@@ -83,17 +95,20 @@ function main() {
     return;
   }
 
-  var response = UrlFetchApp.fetch(SENTINEL_API + "/api/ads/products/import", {
-    method:             "post",
-    contentType:        "application/json",
-    payload:            JSON.stringify({ rows: payload }),
-    muteHttpExceptions: true,
-  });
+  // Stuur in chunks van 1000 — voorkomt payload-limiet en Worker timeout
+  var BATCH_SIZE = 1000;
+  var batches = Math.ceil(payload.length / BATCH_SIZE);
+  for (var b = 0; b < batches; b++) {
+    var batch = payload.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
+    UrlFetchApp.fetch(SENTINEL_API + "/api/ads/products/import", {
+      method:             "post",
+      contentType:        "application/json",
+      payload:            JSON.stringify({ rows: batch }),
+      muteHttpExceptions: true,
+    });
+  }
 
-  Logger.log(
-    "✓ Product ads sync klaar — " + payload.length + " producten gepusht. " +
-    "Status: " + response.getResponseCode()
-  );
+  Logger.log("✓ " + payload.length + " product-dagen gepusht voor " + STORE_ID + " (" + batches + " batches)");
 }
 
 function round2(n) {

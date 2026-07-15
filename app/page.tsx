@@ -10,7 +10,7 @@ export default function Home() {
 
       fallback={
 
-        <div className="min-h-screen bg-[#07070b] text-white p-10">
+        <div className="min-h-screen bg-[#f6f7f9] text-gray-900 p-10">
 
           Loading...
 

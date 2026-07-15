@@ -51,7 +51,7 @@ function Badge({ count }: { count: number }) {
     );
   }
   return (
-    <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-white/8 text-zinc-500">
+    <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-black/8 text-gray-500">
       New
     </span>
   );
@@ -104,17 +104,17 @@ export default function CustomersPage() {
           <h1 className="text-2xl font-black tracking-tight flex items-center gap-2">
             <Users size={22} className="text-blue-400" /> Customers
           </h1>
-          <p className="text-zinc-500 text-sm mt-0.5">Repeat customers, top spenders and lifetime value</p>
+          <p className="text-gray-500 text-sm mt-0.5">Repeat customers, top spenders and lifetime value</p>
         </div>
 
         {/* Store selector */}
-        <div className="flex gap-1 bg-white/5 rounded-xl p-1">
+        <div className="flex gap-1 bg-black/5 rounded-xl p-1">
           {stores.map(s => (
             <button
               key={s.id}
               onClick={() => setStore(s.id)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                store === s.id ? "bg-blue-600 text-white" : "text-zinc-400 hover:text-white"
+                store === s.id ? "bg-blue-600 text-gray-900" : "text-gray-500 hover:text-gray-900"
               }`}
             >
               {s.name}
@@ -126,52 +126,52 @@ export default function CustomersPage() {
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {/* Total customers */}
-        <div className="bg-white/3 border border-white/5 rounded-2xl p-4">
-          <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-2">Total Customers</p>
+        <div className="bg-black/3 border border-black/5 rounded-2xl p-4">
+          <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2">Total Customers</p>
           <p className="text-2xl font-black text-blue-400">
             {loading ? "—" : data ? data.totalCustomers.toLocaleString("nl-NL") : "—"}
           </p>
-          <p className="text-[11px] text-zinc-600 mt-1">Unique customers</p>
+          <p className="text-[11px] text-gray-400 mt-1">Unique customers</p>
         </div>
 
         {/* Repeat customers */}
-        <div className="bg-white/3 border border-white/5 rounded-2xl p-4">
-          <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-2">Repeat Customers</p>
+        <div className="bg-black/3 border border-black/5 rounded-2xl p-4">
+          <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2">Repeat Customers</p>
           <p className="text-2xl font-black text-blue-400">
             {loading ? "—" : data ? `${data.repeatRate}%` : "—"}
           </p>
-          <p className="text-[11px] text-zinc-600 mt-1">
+          <p className="text-[11px] text-gray-400 mt-1">
             {data ? `${data.repeatCustomers.toLocaleString("nl-NL")} bought 2+ times` : "bought 2+ times"}
           </p>
         </div>
 
         {/* New today */}
-        <div className="bg-white/3 border border-white/5 rounded-2xl p-4">
-          <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-2">New Today</p>
+        <div className="bg-black/3 border border-black/5 rounded-2xl p-4">
+          <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2">New Today</p>
           <p className="text-2xl font-black text-emerald-400">
             {loading ? "—" : data ? data.newToday : "—"}
           </p>
-          <p className="text-[11px] text-zinc-600 mt-1">First-time buyers</p>
+          <p className="text-[11px] text-gray-400 mt-1">First-time buyers</p>
         </div>
 
         {/* Avg LTV */}
-        <div className="bg-white/3 border border-white/5 rounded-2xl p-4">
-          <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-2">Avg. LTV</p>
+        <div className="bg-black/3 border border-black/5 rounded-2xl p-4">
+          <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2">Avg. LTV</p>
           <p className="text-2xl font-black text-amber-400">
             {loading ? "—" : data ? fmt(data.avgLtv) : "—"}
           </p>
-          <p className="text-[11px] text-zinc-600 mt-1">Lifetime value per customer</p>
+          <p className="text-[11px] text-gray-400 mt-1">Lifetime value per customer</p>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-white/5 rounded-xl p-1 w-fit">
+      <div className="flex gap-1 bg-black/5 rounded-xl p-1 w-fit">
         {(["all", "repeat"] as const).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              tab === t ? "bg-blue-600 text-white" : "text-zinc-400 hover:text-white"
+              tab === t ? "bg-blue-600 text-gray-900" : "text-gray-500 hover:text-gray-900"
             }`}
           >
             {t === "all" ? "All customers" : "Repeat only"}
@@ -181,17 +181,17 @@ export default function CustomersPage() {
 
       {/* Search */}
       <div className="relative max-w-sm">
-        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
+        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Filter by email…"
-          className="w-full bg-white/4 border border-white/8 rounded-xl pl-9 pr-9 py-2 text-sm text-white placeholder-zinc-700 outline-none focus:border-blue-500/50"
+          className="w-full bg-black/4 border border-black/8 rounded-xl pl-9 pr-9 py-2 text-sm text-gray-900 placeholder-zinc-700 outline-none focus:border-blue-500/50"
         />
         {search && (
           <button
             onClick={() => setSearch("")}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-white"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-900"
           >
             <X size={12} />
           </button>
@@ -199,15 +199,15 @@ export default function CustomersPage() {
       </div>
 
       {/* Customer table */}
-      <div className="bg-white/3 border border-white/5 rounded-2xl overflow-hidden">
+      <div className="bg-black/3 border border-black/5 rounded-2xl overflow-hidden">
         {loading ? (
           <div className="space-y-2 p-4">
             {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-10 rounded-xl bg-white/4 animate-pulse" />
+              <div key={i} className="h-10 rounded-xl bg-black/4 animate-pulse" />
             ))}
           </div>
         ) : displayed.length === 0 ? (
-          <div className="p-12 flex flex-col items-center text-zinc-700">
+          <div className="p-12 flex flex-col items-center text-gray-400">
             <Users size={32} className="mb-3 opacity-30" />
             <p className="text-sm">
               {search
@@ -221,11 +221,11 @@ export default function CustomersPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/5">
+                <tr className="border-b border-black/5">
                   {["Email", "Orders", "Total Spent", "First Order", "Last Order", ""].map((h, i) => (
                     <th
                       key={i}
-                      className="text-left px-4 py-3 text-[10px] text-zinc-600 uppercase tracking-widest font-semibold whitespace-nowrap"
+                      className="text-left px-4 py-3 text-[10px] text-gray-400 uppercase tracking-widest font-semibold whitespace-nowrap"
                     >
                       {h}
                     </th>
@@ -234,18 +234,18 @@ export default function CustomersPage() {
               </thead>
               <tbody>
                 {displayed.map((c, i) => (
-                  <tr key={i} className="border-b border-white/5 hover:bg-white/2 transition">
-                    <td className="px-4 py-3 text-zinc-300 max-w-[220px] truncate">
-                      {c.email || <span className="text-zinc-600 italic">Anonymous</span>}
+                  <tr key={i} className="border-b border-black/5 hover:bg-black/[0.03] transition">
+                    <td className="px-4 py-3 text-gray-600 max-w-[220px] truncate">
+                      {c.email || <span className="text-gray-400 italic">Anonymous</span>}
                     </td>
-                    <td className="px-4 py-3 text-zinc-400">{c.order_count}</td>
-                    <td className="px-4 py-3 text-zinc-200 font-semibold whitespace-nowrap">
+                    <td className="px-4 py-3 text-gray-500">{c.order_count}</td>
+                    <td className="px-4 py-3 text-gray-700 font-semibold whitespace-nowrap">
                       {fmt(c.total_revenue)}
                     </td>
-                    <td className="px-4 py-3 text-zinc-500 whitespace-nowrap text-xs">
+                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">
                       {c.first_order ? fmtDate(c.first_order) : "—"}
                     </td>
-                    <td className="px-4 py-3 text-zinc-500 whitespace-nowrap text-xs">
+                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">
                       {c.last_order ? fmtDate(c.last_order) : "—"}
                     </td>
                     <td className="px-4 py-3">
@@ -257,7 +257,7 @@ export default function CustomersPage() {
             </table>
 
             {searchFiltered.length > 50 && (
-              <p className="px-4 py-3 text-[11px] text-zinc-600 border-t border-white/5">
+              <p className="px-4 py-3 text-[11px] text-gray-400 border-t border-black/5">
                 Showing 50 of {searchFiltered.length.toLocaleString("nl-NL")} customers
               </p>
             )}

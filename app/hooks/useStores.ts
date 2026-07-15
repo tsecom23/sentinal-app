@@ -14,8 +14,9 @@ export interface Store {
 
 // Always-available fallback — used when the API is unreachable or broken
 const FALLBACK_STORES: Store[] = [
-  { id: "ceofo",     name: "CEOFO",     shopify_domain: "", google_ads_customer_id: "", currency: "EUR" },
-  { id: "martaline", name: "Martaline", shopify_domain: "", google_ads_customer_id: "", currency: "EUR" },
+  { id: "ceofo",     name: "Melvoire",  shopify_domain: "c4r0ex-0k.myshopify.com", google_ads_customer_id: "", currency: "EUR" },
+  { id: "martaline", name: "Martaline", shopify_domain: "cqb72v-if.myshopify.com", google_ads_customer_id: "", currency: "EUR" },
+  { id: "dorevy",   name: "Dorevy",   shopify_domain: "gfauyv-wi.myshopify.com", google_ads_customer_id: "", currency: "EUR" },
 ];
 
 let _cache: Store[] | null = null;

@@ -130,9 +130,9 @@ function initials(name: string, email: string): string {
 }
 
 const STATUS_STYLES: Record<string, { label: string; cls: string }> = {
-  open:    { label: "Open",    cls: "bg-blue-500/20 text-blue-300 border-blue-500/30" },
-  pending: { label: "Pending", cls: "bg-amber-500/20 text-amber-300 border-amber-500/30" },
-  closed:  { label: "Closed",  cls: "bg-zinc-700/60 text-zinc-400 border-zinc-600/30" },
+  open:    { label: "Open",    cls: "bg-blue-500/20 text-blue-700 border-blue-500/30" },
+  pending: { label: "Pending", cls: "bg-amber-500/20 text-amber-700 border-amber-500/30" },
+  closed:  { label: "Closed",  cls: "bg-zinc-700/60 text-gray-500 border-zinc-600/30" },
 };
 
 const PROVIDER_COLORS: Record<string, string> = {
@@ -141,8 +141,8 @@ const PROVIDER_COLORS: Record<string, string> = {
 };
 
 const PRIORITY_STYLES: Record<string, { label: string; cls: string }> = {
-  urgent: { label: "URGENT", cls: "bg-red-500/20 text-red-300 border-red-500/40" },
-  high:   { label: "HIGH",   cls: "bg-orange-500/20 text-orange-300 border-orange-500/40" },
+  urgent: { label: "URGENT", cls: "bg-red-500/20 text-red-700 border-red-500/40" },
+  high:   { label: "HIGH",   cls: "bg-orange-500/20 text-orange-700 border-orange-500/40" },
   normal: { label: "",       cls: "" },
 };
 
@@ -166,7 +166,7 @@ function Avatar({ name, email, size = 36 }: { name: string; email: string; size?
   const colors = ["bg-blue-600", "bg-purple-600", "bg-emerald-600", "bg-amber-600", "bg-red-600", "bg-pink-600"];
   return (
     <div
-      className={`${colors[bg]} rounded-full flex items-center justify-center text-white font-bold shrink-0`}
+      className={`${colors[bg]} rounded-full flex items-center justify-center text-gray-900 font-bold shrink-0`}
       style={{ width: size, height: size, fontSize: size * 0.35 }}
     >
       {initials(name, email)}
@@ -190,30 +190,30 @@ function ConnectModal({ storeId, onClose }: { storeId: string; onClose: () => vo
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="bg-[#111118] border border-white/10 rounded-2xl p-6 w-full max-w-md space-y-5">
+      <div className="bg-gray-50 border border-black/10 rounded-2xl p-6 w-full max-w-md space-y-5">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold">Connect email account</h2>
-          <button onClick={onClose} className="text-zinc-500 hover:text-white"><X size={18} /></button>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-900"><X size={18} /></button>
         </div>
         <div className="space-y-3">
           <button onClick={() => connect("gmail")} disabled={!!loading}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-red-950/40 border border-red-800/40 hover:bg-red-950/60 disabled:opacity-50 transition-all">
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-red-50 border border-red-800/40 hover:bg-red-50 disabled:opacity-50 transition-all">
             {loading === "gmail" ? <Loader2 size={18} className="animate-spin text-red-400" /> : <span className="text-lg">📧</span>}
             <div className="text-left">
               <div className="font-semibold text-sm">Connect Gmail</div>
-              <div className="text-xs text-zinc-500">Google Workspace or personal Gmail</div>
+              <div className="text-xs text-gray-500">Google Workspace or personal Gmail</div>
             </div>
           </button>
           <button onClick={() => connect("outlook")} disabled={!!loading}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-blue-950/40 border border-blue-800/40 hover:bg-blue-950/60 disabled:opacity-50 transition-all">
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-blue-50 border border-blue-800/40 hover:bg-blue-50 disabled:opacity-50 transition-all">
             {loading === "outlook" ? <Loader2 size={18} className="animate-spin text-blue-400" /> : <span className="text-lg">📨</span>}
             <div className="text-left">
               <div className="font-semibold text-sm">Connect Outlook</div>
-              <div className="text-xs text-zinc-500">Microsoft 365 or Outlook.com</div>
+              <div className="text-xs text-gray-500">Microsoft 365 or Outlook.com</div>
             </div>
           </button>
         </div>
-        <div className="bg-amber-950/30 border border-amber-600/20 rounded-xl p-3 text-xs text-amber-400 leading-relaxed">
+        <div className="bg-amber-50 border border-amber-600/20 rounded-xl p-3 text-xs text-amber-400 leading-relaxed">
           <strong>Setup required:</strong> Add <code>GMAIL_CLIENT_ID</code>, <code>GMAIL_CLIENT_SECRET</code>,{" "}
           <code>OUTLOOK_CLIENT_ID</code>, <code>OUTLOOK_CLIENT_SECRET</code> as Cloudflare Worker secrets.
         </div>
@@ -242,26 +242,26 @@ function CannedPicker({ canned, onSelect, onClose, vars }: { canned: CannedRespo
   }
 
   return (
-    <div className="absolute bottom-full left-0 right-0 mb-2 bg-[#18181f] border border-white/10 rounded-xl shadow-xl z-10">
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-white/5">
+    <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border border-black/10 rounded-xl shadow-xl z-10">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-black/5">
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search templates…"
-          className="flex-1 bg-transparent text-xs text-white placeholder-zinc-600 outline-none" autoFocus />
-        <button onClick={onClose} className="text-zinc-600 hover:text-white"><X size={13} /></button>
+          className="flex-1 bg-transparent text-xs text-gray-900 placeholder-zinc-600 outline-none" autoFocus />
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-900"><X size={13} /></button>
       </div>
       <div className="max-h-64 overflow-y-auto">
-        {filtered.length === 0 && <p className="text-zinc-600 text-xs text-center py-4">No templates found</p>}
+        {filtered.length === 0 && <p className="text-gray-400 text-xs text-center py-4">No templates found</p>}
         {filtered.map(cr => (
-          <div key={cr.id} className="border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors">
+          <div key={cr.id} className="border-b border-black/5 last:border-0 hover:bg-black/5 transition-colors">
             <div className="flex items-start gap-2 px-3 py-2.5">
               <button onClick={() => { onSelect(applyVars(cr.body)); onClose(); }} className="flex-1 text-left min-w-0">
-                <div className="text-xs text-white font-medium">{cr.title}</div>
+                <div className="text-xs text-gray-900 font-medium">{cr.title}</div>
                 {showCannedTrans[cr.id] && cannedTrans[cr.id] ? (
                   <div className="mt-1 space-y-0.5">
                     <p className="text-[9px] text-blue-400 font-bold uppercase tracking-wide">→ EN</p>
-                    <p className="text-[10px] text-zinc-300 line-clamp-2">{cannedTrans[cr.id]}</p>
+                    <p className="text-[10px] text-gray-600 line-clamp-2">{cannedTrans[cr.id]}</p>
                   </div>
                 ) : (
-                  <div className="text-[10px] text-zinc-500 mt-0.5 line-clamp-1">{cr.body}</div>
+                  <div className="text-[10px] text-gray-500 mt-0.5 line-clamp-1">{cr.body}</div>
                 )}
               </button>
               <button
@@ -273,7 +273,7 @@ function CannedPicker({ canned, onSelect, onClose, vars }: { canned: CannedRespo
                 }}
                 disabled={cannedTranslating[cr.id]}
                 title={showCannedTrans[cr.id] ? "Show original" : "Translate to English"}
-                className="shrink-0 flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] text-zinc-600 hover:text-blue-400 hover:bg-blue-500/10 transition-all disabled:opacity-40 mt-0.5"
+                className="shrink-0 flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] text-gray-400 hover:text-blue-400 hover:bg-blue-500/10 transition-all disabled:opacity-40 mt-0.5"
               >
                 {cannedTranslating[cr.id] ? <Loader2 size={9} className="animate-spin" /> : <Languages size={9} />}
                 {showCannedTrans[cr.id] ? "FR" : "→EN"}
@@ -299,7 +299,7 @@ function OverviewPanel({ data, storeId, loading }: { data: OverviewData | null; 
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <Loader2 size={24} className="animate-spin text-zinc-600" />
+        <Loader2 size={24} className="animate-spin text-gray-400" />
       </div>
     );
   }
@@ -311,7 +311,7 @@ function OverviewPanel({ data, storeId, loading }: { data: OverviewData | null; 
     <div className="flex-1 overflow-y-auto p-6 space-y-5">
       <div>
         <h2 className="text-lg font-black">Inbox Overview</h2>
-        <p className="text-xs text-zinc-500 mt-0.5">Ticket metrics · {storeId.toUpperCase()}</p>
+        <p className="text-xs text-gray-500 mt-0.5">Ticket metrics · {storeId.toUpperCase()}</p>
       </div>
 
       {/* Status cards */}
@@ -320,11 +320,11 @@ function OverviewPanel({ data, storeId, loading }: { data: OverviewData | null; 
           { label: "Open",    value: data?.status?.open_count    ?? 0, cls: "text-blue-400",    bg: "bg-blue-500/10 border-blue-500/20" },
           { label: "Pending", value: data?.status?.pending_count ?? 0, cls: "text-amber-400",   bg: "bg-amber-500/10 border-amber-500/20" },
           { label: "Closed",  value: data?.status?.closed_count  ?? 0, cls: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20" },
-          { label: "Total",   value: data?.status?.total         ?? 0, cls: "text-white",        bg: "bg-white/5 border-white/10" },
+          { label: "Total",   value: data?.status?.total         ?? 0, cls: "text-gray-900",        bg: "bg-black/5 border-black/10" },
         ].map(({ label, value, cls, bg }) => (
           <div key={label} className={`rounded-2xl border p-5 ${bg}`}>
             <p className={`text-3xl font-black ${cls}`}>{value}</p>
-            <p className="text-xs text-zinc-500 mt-1">{label}</p>
+            <p className="text-xs text-gray-500 mt-1">{label}</p>
           </div>
         ))}
       </div>
@@ -336,7 +336,7 @@ function OverviewPanel({ data, storeId, loading }: { data: OverviewData | null; 
             <div className="flex-1 bg-red-500/10 border border-red-500/30 rounded-2xl p-4 flex items-center gap-3">
               <span className="text-2xl font-black text-red-400">{data!.urgent_open}</span>
               <div>
-                <p className="text-xs font-bold text-red-300">URGENT</p>
+                <p className="text-xs font-bold text-red-700">URGENT</p>
                 <p className="text-[10px] text-red-500">open ticket{data!.urgent_open > 1 ? "s" : ""}</p>
               </div>
             </div>
@@ -345,7 +345,7 @@ function OverviewPanel({ data, storeId, loading }: { data: OverviewData | null; 
             <div className="flex-1 bg-orange-500/10 border border-orange-500/30 rounded-2xl p-4 flex items-center gap-3">
               <span className="text-2xl font-black text-orange-400">{data!.high_open}</span>
               <div>
-                <p className="text-xs font-bold text-orange-300">HIGH</p>
+                <p className="text-xs font-bold text-orange-700">HIGH</p>
                 <p className="text-[10px] text-orange-500">open ticket{data!.high_open > 1 ? "s" : ""}</p>
               </div>
             </div>
@@ -355,39 +355,39 @@ function OverviewPanel({ data, storeId, loading }: { data: OverviewData | null; 
 
       {/* KPI row */}
       <div className="grid grid-cols-4 gap-3">
-        <div className="bg-white/4 border border-white/8 rounded-2xl p-4">
-          <p className="text-2xl font-black text-white">{fmtHours(data?.avg_response_hours ?? null)}</p>
-          <p className="text-xs text-zinc-500 mt-1">Avg first response</p>
-          <p className="text-[10px] text-zinc-700 mt-0.5">Email → reply</p>
+        <div className="bg-black/4 border border-black/8 rounded-2xl p-4">
+          <p className="text-2xl font-black text-gray-900">{fmtHours(data?.avg_response_hours ?? null)}</p>
+          <p className="text-xs text-gray-500 mt-1">Avg first response</p>
+          <p className="text-[10px] text-gray-400 mt-0.5">Email → reply</p>
         </div>
-        <div className="bg-white/4 border border-white/8 rounded-2xl p-4">
-          <p className="text-2xl font-black text-white">{fmtHours(data?.avg_resolution_hours ?? null)}</p>
-          <p className="text-xs text-zinc-500 mt-1">Avg resolution</p>
-          <p className="text-[10px] text-zinc-700 mt-0.5">Open → closed</p>
+        <div className="bg-black/4 border border-black/8 rounded-2xl p-4">
+          <p className="text-2xl font-black text-gray-900">{fmtHours(data?.avg_resolution_hours ?? null)}</p>
+          <p className="text-xs text-gray-500 mt-1">Avg resolution</p>
+          <p className="text-[10px] text-gray-400 mt-0.5">Open → closed</p>
         </div>
-        <div className="bg-white/4 border border-white/8 rounded-2xl p-4">
-          <p className="text-2xl font-black text-white">{data?.this_week ?? 0}</p>
-          <p className="text-xs text-zinc-500 mt-1">This week</p>
-          <p className="text-[10px] text-zinc-700 mt-0.5">Last 7 days</p>
+        <div className="bg-black/4 border border-black/8 rounded-2xl p-4">
+          <p className="text-2xl font-black text-gray-900">{data?.this_week ?? 0}</p>
+          <p className="text-xs text-gray-500 mt-1">This week</p>
+          <p className="text-[10px] text-gray-400 mt-0.5">Last 7 days</p>
         </div>
-        <div className="bg-white/4 border border-white/8 rounded-2xl p-4">
-          <p className="text-2xl font-black text-white">{data?.this_month ?? 0}</p>
-          <p className="text-xs text-zinc-500 mt-1">This month</p>
-          <p className="text-[10px] text-zinc-700 mt-0.5">Last 30 days</p>
+        <div className="bg-black/4 border border-black/8 rounded-2xl p-4">
+          <p className="text-2xl font-black text-gray-900">{data?.this_month ?? 0}</p>
+          <p className="text-xs text-gray-500 mt-1">This month</p>
+          <p className="text-[10px] text-gray-400 mt-0.5">Last 30 days</p>
         </div>
       </div>
 
       {/* Daily bar chart */}
-      <div className="bg-white/4 border border-white/8 rounded-2xl p-5">
+      <div className="bg-black/4 border border-black/8 rounded-2xl p-5">
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-sm font-bold">Ticket volume · last 14 days</h3>
-          <div className="flex items-center gap-3 text-[10px] text-zinc-500">
+          <div className="flex items-center gap-3 text-[10px] text-gray-500">
             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-blue-500/50 inline-block" />Open</span>
             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-500/60 inline-block" />Closed</span>
           </div>
         </div>
         {daily.length === 0 ? (
-          <p className="text-xs text-zinc-600 text-center py-6">No data yet — sync emails to see volume trends</p>
+          <p className="text-xs text-gray-400 text-center py-6">No data yet — sync emails to see volume trends</p>
         ) : (
           <div className="flex items-end gap-2 h-28">
             {daily.map(d => {
@@ -395,12 +395,12 @@ function OverviewPanel({ data, storeId, loading }: { data: OverviewData | null; 
               const closedPct = d.count > 0 ? Math.round((d.closed / d.count) * 100) : 0;
               return (
                 <div key={d.day} className="flex-1 flex flex-col items-center gap-1 min-w-0" title={`${d.day}: ${d.count} tickets, ${d.closed} closed`}>
-                  <span className="text-[9px] text-zinc-500 font-medium">{d.count}</span>
+                  <span className="text-[9px] text-gray-500 font-medium">{d.count}</span>
                   <div className="w-full rounded-t-md overflow-hidden flex flex-col-reverse" style={{ height: `${pct}%` }}>
                     <div className="w-full bg-blue-500/50" style={{ height: `${100 - closedPct}%` }} />
                     <div className="w-full bg-emerald-500/60" style={{ height: `${closedPct}%` }} />
                   </div>
-                  <span className="text-[9px] text-zinc-600 truncate w-full text-center">{d.day.slice(5)}</span>
+                  <span className="text-[9px] text-gray-400 truncate w-full text-center">{d.day.slice(5)}</span>
                 </div>
               );
             })}
@@ -409,9 +409,9 @@ function OverviewPanel({ data, storeId, loading }: { data: OverviewData | null; 
       </div>
 
       {!data && !loading && (
-        <div className="bg-white/3 border border-white/8 rounded-2xl p-6 text-center">
-          <p className="text-sm text-zinc-500">No data yet</p>
-          <p className="text-xs text-zinc-600 mt-1">Connect an account and sync emails to see metrics</p>
+        <div className="bg-black/3 border border-black/8 rounded-2xl p-6 text-center">
+          <p className="text-sm text-gray-500">No data yet</p>
+          <p className="text-xs text-gray-400 mt-1">Connect an account and sync emails to see metrics</p>
         </div>
       )}
     </div>
@@ -420,85 +420,54 @@ function OverviewPanel({ data, storeId, loading }: { data: OverviewData | null; 
 
 // ─── Refund Modal ─────────────────────────────────────────────────────────────
 
-function RefundModal({ order, onConfirm, onClose }: {
+function RefundModal({ order, shopifyDomain, onClose }: {
   order: CustomerOrder;
-  onConfirm: (type: "full" | "partial", amount?: number) => void;
+  shopifyDomain: string;
   onClose: () => void;
 }) {
-  const [type, setType] = useState<"full" | "partial">("full");
-  const [amountStr, setAmountStr] = useState(order.revenue.toFixed(2));
-
-  const total   = order.revenue;
-  const partial = Math.max(0, Math.min(parseFloat(amountStr.replace(",", ".")) || 0, total));
-  const pct     = total > 0 ? Math.round((partial / total) * 100) : 0;
-
-  function confirm() {
-    if (type === "full") { onConfirm("full"); return; }
-    if (partial <= 0) return;
-    onConfirm("partial", partial);
+  function openShopify() {
+    const domain = shopifyDomain || "admin.shopify.com";
+    window.open(`https://${domain}/admin/orders/${order.shopify_order_id}/refund`, "_blank");
+    onClose();
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="bg-[#111118] border border-white/10 rounded-2xl p-6 w-full max-w-sm space-y-5">
+      <div className="bg-gray-50 border border-black/10 rounded-2xl p-6 w-full max-w-sm space-y-5">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-base font-bold">Refund order #{order.order_number || order.shopify_order_id}</h2>
-            <p className="text-[11px] text-zinc-500 mt-0.5">Total: €{(order.revenue ?? 0).toFixed(2)}</p>
+            <p className="text-[11px] text-gray-500 mt-0.5">Total: €{(order.revenue ?? 0).toFixed(2)}</p>
           </div>
-          <button onClick={onClose} className="text-zinc-500 hover:text-white"><X size={16} /></button>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-900"><X size={16} /></button>
         </div>
 
-        {/* Type toggle */}
-        <div className="flex gap-1 bg-white/5 rounded-xl p-1">
-          {(["full", "partial"] as const).map(t => (
-            <button key={t} onClick={() => setType(t)}
-              className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all ${type === t ? "bg-red-600 text-white" : "text-zinc-500 hover:text-white"}`}>
-              {t === "full" ? `Full (€${(order.revenue ?? 0).toFixed(2)})` : "Partial amount"}
-            </button>
+        <div className="bg-gray-100 border border-black/8 rounded-xl p-4 space-y-1.5">
+          {order.items?.map((item, i) => (
+            <div key={i} className="flex justify-between text-xs text-gray-500">
+              <span>{item.quantity}× {item.product_title} {item.variant_title ? `(${item.variant_title})` : ""}</span>
+              <span>€{item.revenue.toFixed(2)}</span>
+            </div>
           ))}
+          <div className="flex justify-between text-xs font-bold text-gray-900 border-t border-black/8 pt-1.5 mt-1.5">
+            <span>Total</span>
+            <span>€{(order.revenue ?? 0).toFixed(2)}</span>
+          </div>
         </div>
 
-        {/* Partial amount input */}
-        {type === "partial" && (
-          <div className="space-y-2">
-            <label className="text-[11px] text-zinc-500">Refund amount</label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">€</span>
-              <input
-                type="number" min="0.01" max={total} step="0.01"
-                value={amountStr}
-                onChange={e => setAmountStr(e.target.value)}
-                className="w-full bg-white/6 border border-white/10 rounded-xl pl-8 pr-4 py-2.5 text-sm text-white outline-none focus:border-red-500/50"
-                autoFocus
-              />
-            </div>
-            <div className="flex gap-2">
-              {[25, 50, 75, 100].map(p => (
-                <button key={p} onClick={() => setAmountStr(((total * p) / 100).toFixed(2))}
-                  className={`flex-1 py-1 rounded-lg text-[10px] font-semibold transition-all ${pct === p ? "bg-red-600 text-white" : "bg-white/5 text-zinc-500 hover:text-white"}`}>
-                  {p}%
-                </button>
-              ))}
-            </div>
-            {partial > 0 && <p className="text-[10px] text-zinc-600 text-center">{pct}% of total · €{partial.toFixed(2)} back to customer</p>}
-          </div>
-        )}
-
-        <div className="bg-amber-950/30 border border-amber-600/20 rounded-xl p-3 text-[11px] text-amber-400">
-          This will send a refund to the customer's original payment method via Shopify. This cannot be undone.
+        <div className="bg-blue-50 border border-blue-600/20 rounded-xl p-3 text-[11px] text-blue-700">
+          Je wordt doorgestuurd naar Shopify om het refund te verwerken. Kies daar het bedrag en bevestig.
         </div>
 
         <div className="flex gap-2">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-medium text-zinc-400 transition-all">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-black/5 hover:bg-black/10 text-xs font-medium text-gray-500 transition-all">
             Cancel
           </button>
           <button
-            onClick={confirm}
-            disabled={type === "partial" && partial <= 0}
-            className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 disabled:opacity-40 text-xs font-bold text-white transition-all"
+            onClick={openShopify}
+            className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-xs font-bold text-gray-900 transition-all"
           >
-            {type === "full" ? "Refund full amount" : `Refund €${partial.toFixed(2)}`}
+            Open in Shopify →
           </button>
         </div>
       </div>
@@ -594,14 +563,21 @@ export default function InboxPage() {
     finally { setLoadingMsgs(false); }
   }
 
+  const customerAbortRef = useRef<AbortController | null>(null);
+
   async function fetchCustomer(email: string) {
+    customerAbortRef.current?.abort();
     setCustomer(null);
     if (!email) return;
+    const controller = new AbortController();
+    customerAbortRef.current = controller;
     try {
-      const r = await fetch(`${API}/api/inbox/customer?store_id=${storeId}&email=${encodeURIComponent(email)}`);
+      const r = await fetch(`${API}/api/inbox/customer?store_id=${storeId}&email=${encodeURIComponent(email)}`, { signal: controller.signal });
       const d = await r.json() as { customer: CustomerData | null };
       setCustomer(d.customer);
-    } catch { /* silent */ }
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") { /* silent */ }
+    }
   }
 
   async function fetchCanned() {
@@ -727,40 +703,40 @@ export default function InboxPage() {
   const pendingCount = threads.filter(t => t.status === "pending").length;
 
   return (
-    <div className="flex h-screen bg-[#0a0a0f] text-white overflow-hidden">
+    <div className="flex h-screen bg-[#f6f7f9] text-gray-900 overflow-hidden">
 
       {/* ── Left: thread list ───────────────────────────────────────────────── */}
-      <div className="w-[300px] shrink-0 flex flex-col border-r border-white/5 bg-[#0d0d13]">
-        <div className="px-4 pt-5 pb-3 space-y-3 border-b border-white/5">
+      <div className="w-[300px] shrink-0 flex flex-col border-r border-black/5 bg-white">
+        <div className="px-4 pt-5 pb-3 space-y-3 border-b border-black/5">
           <div className="flex items-center justify-between">
-            <div className="flex gap-0.5 bg-white/5 rounded-lg p-0.5">
+            <div className="flex gap-0.5 bg-black/5 rounded-lg p-0.5">
               <button onClick={() => setTab("inbox")}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${tab === "inbox" ? "bg-blue-600 text-white" : "text-zinc-500 hover:text-white"}`}>
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${tab === "inbox" ? "bg-blue-600 text-gray-900" : "text-gray-500 hover:text-gray-900"}`}>
                 <Inbox size={11} /> Inbox
-                {openCount > 0 && <span className={`rounded-full px-1 text-[9px] font-bold ${tab === "inbox" ? "bg-white/20" : "bg-blue-600 text-white"}`}>{openCount}</span>}
+                {openCount > 0 && <span className={`rounded-full px-1 text-[9px] font-bold ${tab === "inbox" ? "bg-black/20" : "bg-blue-600 text-gray-900"}`}>{openCount}</span>}
               </button>
               <button onClick={() => setTab("overview")}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${tab === "overview" ? "bg-blue-600 text-white" : "text-zinc-500 hover:text-white"}`}>
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${tab === "overview" ? "bg-blue-600 text-gray-900" : "text-gray-500 hover:text-gray-900"}`}>
                 <BarChart2 size={11} /> Overview
               </button>
             </div>
             <div className="flex items-center gap-1.5">
-              {syncMsg && <span className="text-[10px] text-zinc-500">{syncMsg}</span>}
+              {syncMsg && <span className="text-[10px] text-gray-500">{syncMsg}</span>}
               <button onClick={handleSync} disabled={syncing} title="Sync emails"
-                className="p-1.5 rounded-lg hover:bg-white/5 text-zinc-500 hover:text-white transition-all disabled:opacity-40">
+                className="p-1.5 rounded-lg hover:bg-black/5 text-gray-500 hover:text-gray-900 transition-all disabled:opacity-40">
                 <RefreshCw size={13} className={syncing ? "animate-spin" : ""} />
               </button>
               <button onClick={() => setShowConnect(true)} title="Connect account"
-                className="p-1.5 rounded-lg hover:bg-white/5 text-zinc-500 hover:text-white transition-all">
+                className="p-1.5 rounded-lg hover:bg-black/5 text-gray-500 hover:text-gray-900 transition-all">
                 <Mail size={13} />
               </button>
             </div>
           </div>
 
-          <div className="flex gap-1 bg-white/5 rounded-lg p-0.5">
+          <div className="flex gap-1 bg-black/5 rounded-lg p-0.5">
             {stores.map(s => (
               <button key={s.id} onClick={() => { setStoreId(s.id); setSelected(null); }}
-                className={`flex-1 py-1 rounded-md text-[11px] font-medium transition-all ${storeId === s.id ? "bg-blue-600 text-white" : "text-zinc-500 hover:text-white"}`}>
+                className={`flex-1 py-1 rounded-md text-[11px] font-medium transition-all ${storeId === s.id ? "bg-blue-600 text-gray-900" : "text-gray-500 hover:text-gray-900"}`}>
                 {s.name}
               </button>
             ))}
@@ -769,7 +745,7 @@ export default function InboxPage() {
           <div className="flex gap-0.5 text-[11px]">
             {(["open", "pending", "closed", "all"] as const).map(s => (
               <button key={s} onClick={() => setStatusFilter(s)}
-                className={`px-2 py-1 rounded-lg font-medium transition-all capitalize ${statusFilter === s ? "bg-white/10 text-white" : "text-zinc-600 hover:text-zinc-400"}`}>
+                className={`px-2 py-1 rounded-lg font-medium transition-all capitalize ${statusFilter === s ? "bg-black/10 text-gray-900" : "text-gray-400 hover:text-gray-500"}`}>
                 {s === "open" ? `Open${openCount > 0 ? ` (${openCount})` : ""}` :
                  s === "pending" ? `Pending${pendingCount > 0 ? ` (${pendingCount})` : ""}` :
                  s === "closed" ? "Closed" : "All"}
@@ -778,16 +754,16 @@ export default function InboxPage() {
           </div>
 
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…"
-            className="w-full bg-white/5 border border-white/8 rounded-lg px-3 py-1.5 text-xs text-white placeholder-zinc-600 outline-none focus:border-blue-500/40" />
+            className="w-full bg-black/5 border border-black/8 rounded-lg px-3 py-1.5 text-xs text-gray-900 placeholder-zinc-600 outline-none focus:border-blue-500/40" />
         </div>
 
         {accounts.length > 0 && (
-          <div className="px-3 py-2 border-b border-white/5 flex flex-wrap gap-1.5">
+          <div className="px-3 py-2 border-b border-black/5 flex flex-wrap gap-1.5">
             {accounts.map(a => (
-              <div key={a.id} className="flex items-center gap-1 bg-white/5 rounded-lg px-2 py-1">
+              <div key={a.id} className="flex items-center gap-1 bg-black/5 rounded-lg px-2 py-1">
                 <span className={`text-[10px] font-bold ${PROVIDER_COLORS[a.provider]}`}>{a.provider === "gmail" ? "G" : "⊞"}</span>
-                <span className="text-[10px] text-zinc-400 max-w-[100px] truncate">{a.email}</span>
-                <button onClick={() => handleDeleteAccount(a.id)} className="text-zinc-600 hover:text-red-400 ml-0.5"><X size={9} /></button>
+                <span className="text-[10px] text-gray-500 max-w-[100px] truncate">{a.email}</span>
+                <button onClick={() => handleDeleteAccount(a.id)} className="text-gray-400 hover:text-red-400 ml-0.5"><X size={9} /></button>
               </div>
             ))}
           </div>
@@ -795,7 +771,7 @@ export default function InboxPage() {
 
         <div className="flex-1 overflow-y-auto">
           {threads.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full gap-3 text-zinc-600 px-4 text-center">
+            <div className="flex flex-col items-center justify-center h-full gap-3 text-gray-400 px-4 text-center">
               <Inbox size={28} />
               <p className="text-xs">{accounts.length === 0 ? "Connect a Gmail or Outlook account to get started" : "No threads yet — click sync to fetch emails"}</p>
               {accounts.length === 0 && <button onClick={() => setShowConnect(true)} className="text-xs text-blue-400 underline">Connect account</button>}
@@ -807,8 +783,8 @@ export default function InboxPage() {
             const isHigh     = t.priority === "high";
             return (
               <button key={t.id} onClick={() => setSelected(t)}
-                className={`w-full text-left px-3 py-2.5 border-b border-white/4 transition-all group
-                  ${isSelected ? "bg-blue-600/10 border-l-2 border-l-blue-500 pl-2.5" : "hover:bg-white/4"}
+                className={`w-full text-left px-3 py-2.5 border-b border-black/4 transition-all group
+                  ${isSelected ? "bg-blue-600/10 border-l-2 border-l-blue-500 pl-2.5" : "hover:bg-black/4"}
                   ${isUrgent ? "border-l-2 border-l-red-500 pl-2.5" : ""}
                 `}>
                 <div className="flex items-start gap-2.5">
@@ -816,13 +792,13 @@ export default function InboxPage() {
                   <div className="flex-1 min-w-0">
                     {/* Row 1: name + time */}
                     <div className="flex items-center justify-between gap-1 mb-0.5">
-                      <span className={`text-[11px] font-bold truncate ${isSelected ? "text-white" : "text-zinc-200"}`}>
+                      <span className={`text-[11px] font-bold truncate ${isSelected ? "text-gray-900" : "text-gray-700"}`}>
                         {t.customer_name || t.customer_email.split("@")[0]}
                       </span>
-                      <span className="text-[10px] text-zinc-600 shrink-0 tabular-nums">{timeAgo(t.last_message_at)}</span>
+                      <span className="text-[10px] text-gray-400 shrink-0 tabular-nums">{timeAgo(t.last_message_at)}</span>
                     </div>
                     {/* Row 2: subject */}
-                    <p className="text-[10px] text-zinc-500 truncate leading-snug">{t.subject || "(no subject)"}</p>
+                    <p className="text-[10px] text-gray-500 truncate leading-snug">{t.subject || "(no subject)"}</p>
                     {/* Row 3: indicators */}
                     <div className="flex items-center gap-1.5 mt-1">
                       {isUrgent && <span className="text-[9px] font-bold text-red-400 bg-red-500/10 px-1 rounded">URGENT</span>}
@@ -836,7 +812,7 @@ export default function InboxPage() {
                         {t.provider === "gmail" ? "G" : "⊞"}
                       </span>
                       {t.message_count > 1 && (
-                        <span className="text-[9px] text-zinc-700 ml-auto">{t.message_count}</span>
+                        <span className="text-[9px] text-gray-400 ml-auto">{t.message_count}</span>
                       )}
                     </div>
                   </div>
@@ -852,17 +828,17 @@ export default function InboxPage() {
         {tab === "overview" ? (
           <OverviewPanel data={overview} storeId={storeId} loading={overviewLoading} />
         ) : !selected ? (
-          <div className="flex-1 flex items-center justify-center text-zinc-600 flex-col gap-3">
+          <div className="flex-1 flex items-center justify-center text-gray-400 flex-col gap-3">
             <Mail size={40} />
             <p className="text-sm">Select a conversation</p>
           </div>
         ) : (
           <>
             {/* Thread header */}
-            <div className="shrink-0 px-6 py-4 border-b border-white/5 flex items-start justify-between gap-4">
+            <div className="shrink-0 px-6 py-4 border-b border-black/5 flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <h2 className="font-bold text-base truncate">{selected.subject}</h2>
-                <p className="text-zinc-500 text-xs mt-0.5">
+                <p className="text-gray-500 text-xs mt-0.5">
                   {selected.customer_name && `${selected.customer_name} · `}{selected.customer_email}
                   {selected.account_email && ` → ${selected.account_email}`}
                 </p>
@@ -872,22 +848,22 @@ export default function InboxPage() {
                   <button className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold ${STATUS_STYLES[selected.status]?.cls}`}>
                     {STATUS_STYLES[selected.status]?.label}<ChevronDown size={11} />
                   </button>
-                  <div className="absolute right-0 top-full mt-1 bg-[#18181f] border border-white/10 rounded-xl shadow-xl py-1 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity z-10 min-w-[130px]">
+                  <div className="absolute right-0 top-full mt-1 bg-white border border-black/10 rounded-xl shadow-xl py-1 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity z-10 min-w-[130px]">
                     {(["open", "pending", "closed"] as const).map(s => (
                       <button key={s} onClick={() => updateStatus(selected.id, s)}
-                        className={`w-full text-left px-3 py-1.5 text-xs hover:bg-white/5 transition-colors ${selected.status === s ? "text-blue-400 font-semibold" : "text-zinc-400"}`}>
+                        className={`w-full text-left px-3 py-1.5 text-xs hover:bg-black/5 transition-colors ${selected.status === s ? "text-blue-400 font-semibold" : "text-gray-500"}`}>
                         {STATUS_STYLES[s].label}
                       </button>
                     ))}
                   </div>
                 </div>
                 <button onClick={() => updateStatus(selected.id, "closed")} title="Close ticket"
-                  className="p-1.5 rounded-lg text-zinc-600 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all"><CheckCheck size={14} /></button>
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all"><CheckCheck size={14} /></button>
                 <button onClick={() => updateStatus(selected.id, "pending")} title="Mark as pending"
-                  className="p-1.5 rounded-lg text-zinc-600 hover:text-amber-400 hover:bg-amber-500/10 transition-all"><Clock size={14} /></button>
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-amber-400 hover:bg-amber-500/10 transition-all"><Clock size={14} /></button>
                 <button onClick={handleCreateTicket} disabled={ticketCreating}
                   title="Create CS ticket from this email"
-                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all disabled:opacity-40 ${ticketCreated ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "bg-white/5 text-zinc-400 hover:bg-blue-500/10 hover:text-blue-400 border border-white/8"}`}>
+                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all disabled:opacity-40 ${ticketCreated ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "bg-black/5 text-gray-500 hover:bg-blue-500/10 hover:text-blue-400 border border-black/8"}`}>
                   {ticketCreating ? <Loader2 size={11} className="animate-spin" /> : ticketCreated ? <CheckCheck size={11} /> : <Zap size={11} />}
                   {ticketCreated ? "Ticket created!" : "Create ticket"}
                 </button>
@@ -896,7 +872,7 @@ export default function InboxPage() {
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-              {loadingMsgs && <div className="flex items-center gap-2 text-zinc-600 text-sm"><Loader2 size={14} className="animate-spin" /> Loading…</div>}
+              {loadingMsgs && <div className="flex items-center gap-2 text-gray-400 text-sm"><Loader2 size={14} className="animate-spin" /> Loading…</div>}
               {messages.map(msg => {
                 const isOut = msg.direction === "outbound";
                 const rawText = msg.body_text || msg.body_html?.replace(/<[^>]+>/g, "") || "";
@@ -908,8 +884,8 @@ export default function InboxPage() {
                   <div key={msg.id} className={`flex gap-3 ${isOut ? "flex-row-reverse" : ""}`}>
                     {!isOut && <Avatar name={msg.from_name} email={msg.from_email} size={32} />}
                     <div className={`max-w-[75%] space-y-1.5 ${isOut ? "items-end flex flex-col" : ""}`}>
-                      <div className="flex items-center gap-2 text-[10px] text-zinc-600">
-                        {!isOut && <span className="font-semibold text-zinc-400">{msg.from_name || msg.from_email}</span>}
+                      <div className="flex items-center gap-2 text-[10px] text-gray-400">
+                        {!isOut && <span className="font-semibold text-gray-500">{msg.from_name || msg.from_email}</span>}
                         {isOut && <span className="text-emerald-600 font-semibold">You</span>}
                         <span>{timeAgo(msg.sent_at)}</span>
                         {!isOut && (
@@ -918,7 +894,7 @@ export default function InboxPage() {
                               ? setShowTranslated(p => ({ ...p, [msg.id]: false }))
                               : handleTranslate(msg.id, rawText)}
                             disabled={isTranslating}
-                            className="flex items-center gap-1 text-[10px] text-zinc-600 hover:text-blue-400 transition-colors disabled:opacity-40"
+                            className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-blue-400 transition-colors disabled:opacity-40"
                           >
                             {isTranslating ? <Loader2 size={9} className="animate-spin" /> : <Languages size={10} />}
                             {showingTrans ? "Original" : "Translate →EN"}
@@ -926,14 +902,14 @@ export default function InboxPage() {
                         )}
                       </div>
 
-                      <div className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${isOut ? "bg-blue-600 text-white rounded-tr-sm" : "bg-white/5 border border-white/8 text-zinc-200 rounded-tl-sm"}`}>
+                      <div className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${isOut ? "bg-blue-600 text-gray-900 rounded-tr-sm" : "bg-black/5 border border-black/8 text-gray-700 rounded-tl-sm"}`}>
                         {showingTrans && translated ? (
                           <div className="space-y-2">
-                            <p className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">Translation (EN)</p>
+                            <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider">Translation (EN)</p>
                             <p className="whitespace-pre-wrap">{translated}</p>
-                            <div className="border-t border-white/10 pt-2">
-                              <p className="text-[10px] text-zinc-600 font-semibold uppercase tracking-wider mb-1">Original (FR)</p>
-                              <p className="whitespace-pre-wrap text-zinc-500 text-xs">{rawText}</p>
+                            <div className="border-t border-black/10 pt-2">
+                              <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-1">Original (FR)</p>
+                              <p className="whitespace-pre-wrap text-gray-500 text-xs">{rawText}</p>
                             </div>
                           </div>
                         ) : msg.body_html ? (
@@ -950,7 +926,7 @@ export default function InboxPage() {
             </div>
 
             {/* Reply composer */}
-            <div className="shrink-0 border-t border-white/5 px-6 py-4 space-y-3">
+            <div className="shrink-0 border-t border-black/5 px-6 py-4 space-y-3">
               <div className="relative">
                 {showCanned && (
                   <CannedPicker
@@ -969,15 +945,15 @@ export default function InboxPage() {
                   onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) handleReply(); }}
                   placeholder="Write your reply in French… (Ctrl+Enter to send)"
                   rows={3}
-                  className="w-full bg-white/4 border border-white/8 rounded-2xl px-4 py-3 text-sm text-white placeholder-zinc-700 outline-none focus:border-blue-500/50 transition-colors resize-none" />
+                  className="w-full bg-black/4 border border-black/8 rounded-2xl px-4 py-3 text-sm text-gray-900 placeholder-zinc-700 outline-none focus:border-blue-500/50 transition-colors resize-none" />
               </div>
               <div className="flex items-center justify-between">
                 <button onClick={() => setShowCanned(s => !s)}
-                  className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-white transition-colors px-2 py-1.5 rounded-lg hover:bg-white/5">
+                  className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-900 transition-colors px-2 py-1.5 rounded-lg hover:bg-black/5">
                   <Zap size={12} /> Insert template
                 </button>
                 <button onClick={handleReply} disabled={sending || !replyText.trim()}
-                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all rounded-xl px-4 py-2 text-xs font-semibold">
+                  className="flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all rounded-xl px-4 py-2 text-xs font-semibold">
                   {sending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
                   Send
                 </button>
@@ -988,27 +964,27 @@ export default function InboxPage() {
       </div>
 
       {/* ── Right: Gorgias-stijl klantpaneel ──────────────────────────────── */}
-      <div className="w-[310px] shrink-0 border-l border-white/5 bg-[#0d0d13] flex flex-col overflow-y-auto">
+      <div className="w-[310px] shrink-0 border-l border-black/5 bg-white flex flex-col overflow-y-auto">
         {selected ? (
           <div className="divide-y divide-white/5">
 
             {/* ── Customer profile ── */}
             <div className="p-4 space-y-3">
-              <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Customer</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Customer</p>
               <div className="flex items-center gap-3">
                 <Avatar name={selected.customer_name} email={selected.customer_email} size={44} />
                 <div className="min-w-0">
-                  <p className="text-sm font-bold text-white truncate">
+                  <p className="text-sm font-bold text-gray-900 truncate">
                     {selected.customer_name || customer?.name || "Unknown"}
                   </p>
-                  <p className="text-[11px] text-zinc-500 truncate">{selected.customer_email}</p>
+                  <p className="text-[11px] text-gray-500 truncate">{selected.customer_email}</p>
                   {customer?.phone && (
-                    <p className="text-[10px] text-zinc-600 flex items-center gap-1 mt-0.5">
+                    <p className="text-[10px] text-gray-400 flex items-center gap-1 mt-0.5">
                       <Phone size={9} /> {customer.phone}
                     </p>
                   )}
                   {(customer?.city || customer?.country) && (
-                    <p className="text-[10px] text-zinc-600 flex items-center gap-1 mt-0.5">
+                    <p className="text-[10px] text-gray-400 flex items-center gap-1 mt-0.5">
                       <MapPin size={9} /> {[customer.city, customer.country].filter(Boolean).join(", ")}
                     </p>
                   )}
@@ -1017,62 +993,62 @@ export default function InboxPage() {
 
               {/* LTV metrics */}
               <div className="grid grid-cols-3 gap-2">
-                <div className="bg-white/4 rounded-xl p-2.5 text-center">
-                  <p className="text-lg font-black text-white">{customer?.total_orders ?? "—"}</p>
-                  <p className="text-[9px] text-zinc-600 mt-0.5">Orders</p>
+                <div className="bg-black/4 rounded-xl p-2.5 text-center">
+                  <p className="text-lg font-black text-gray-900">{customer?.total_orders ?? "—"}</p>
+                  <p className="text-[9px] text-gray-400 mt-0.5">Orders</p>
                 </div>
-                <div className="bg-white/4 rounded-xl p-2.5 text-center">
+                <div className="bg-black/4 rounded-xl p-2.5 text-center">
                   <p className="text-lg font-black text-emerald-400">
                     {customer ? `€${customer.total_spend.toFixed(0)}` : "—"}
                   </p>
-                  <p className="text-[9px] text-zinc-600 mt-0.5">LTV</p>
+                  <p className="text-[9px] text-gray-400 mt-0.5">LTV</p>
                 </div>
-                <div className={`rounded-xl p-2.5 text-center ${(customer?.ticket_count ?? 0) > 0 ? "bg-amber-500/10" : "bg-white/4"}`}>
-                  <p className={`text-lg font-black ${(customer?.ticket_count ?? 0) > 0 ? "text-amber-400" : "text-white"}`}>
+                <div className={`rounded-xl p-2.5 text-center ${(customer?.ticket_count ?? 0) > 0 ? "bg-amber-500/10" : "bg-black/4"}`}>
+                  <p className={`text-lg font-black ${(customer?.ticket_count ?? 0) > 0 ? "text-amber-400" : "text-gray-900"}`}>
                     {customer?.ticket_count ?? "—"}
                   </p>
-                  <p className="text-[9px] text-zinc-600 mt-0.5">Tickets</p>
+                  <p className="text-[9px] text-gray-400 mt-0.5">Tickets</p>
                 </div>
               </div>
 
               {/* Conversation info */}
               <div className="space-y-1 text-xs">
                 <div className="flex justify-between items-center py-0.5">
-                  <span className="text-zinc-600">Channel</span>
+                  <span className="text-gray-400">Channel</span>
                   <span className={`font-semibold ${PROVIDER_COLORS[selected.provider]}`}>
                     {selected.provider === "gmail" ? "Gmail" : "Outlook"}
                   </span>
                 </div>
                 <div className="flex justify-between items-center py-0.5">
-                  <span className="text-zinc-600">Status</span>
+                  <span className="text-gray-400">Status</span>
                   <span className={`font-bold px-1.5 py-0.5 rounded-full border text-[9px] ${STATUS_STYLES[selected.status]?.cls}`}>
                     {STATUS_STYLES[selected.status]?.label}
                   </span>
                 </div>
                 {(selected.priority === "urgent" || selected.priority === "high") && (
                   <div className="flex justify-between items-center py-0.5">
-                    <span className="text-zinc-600">Priority</span>
+                    <span className="text-gray-400">Priority</span>
                     <span className={`font-bold px-1.5 py-0.5 rounded-full border text-[9px] ${PRIORITY_STYLES[selected.priority]?.cls}`}>
                       {PRIORITY_STYLES[selected.priority]?.label}
                     </span>
                   </div>
                 )}
                 <div className="flex justify-between items-center py-0.5">
-                  <span className="text-zinc-600">Messages</span>
-                  <span className="text-white font-semibold">{messages.length}</span>
+                  <span className="text-gray-400">Messages</span>
+                  <span className="text-gray-900 font-semibold">{messages.length}</span>
                 </div>
               </div>
             </div>
 
             {/* ── Orders ── */}
             <div className="p-4 space-y-2">
-              <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest flex items-center gap-1.5">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
                 <ShoppingBag size={10} /> Orders
               </p>
               {!customer ? (
-                <p className="text-[11px] text-zinc-700 py-2">Loading…</p>
+                <p className="text-[11px] text-gray-400 py-2">Loading…</p>
               ) : customer.orders.length === 0 ? (
-                <p className="text-[11px] text-zinc-700 py-2">No orders found</p>
+                <p className="text-[11px] text-gray-400 py-2">No orders found</p>
               ) : (
                 <div className="space-y-2">
                   {customer.orders.map(o => {
@@ -1081,7 +1057,7 @@ export default function InboxPage() {
                     const fulfillCls =
                       o.fulfillment_status === "fulfilled"  ? "text-emerald-400 bg-emerald-500/10" :
                       o.fulfillment_status === "partial"    ? "text-amber-400 bg-amber-500/10" :
-                                                              "text-zinc-500 bg-white/5";
+                                                              "text-gray-500 bg-black/5";
                     const fulfillLabel =
                       o.fulfillment_status === "fulfilled" ? "Shipped" :
                       o.fulfillment_status === "partial"   ? "Partial" : "Unfulfilled";
@@ -1089,7 +1065,7 @@ export default function InboxPage() {
                       o.financial_status === "refunded" || o.financial_status === "voided" ? "text-red-400 bg-red-500/10" :
                       o.financial_status === "partially_refunded"                          ? "text-orange-400 bg-orange-500/10" :
                       o.financial_status === "paid"                                        ? "text-emerald-400 bg-emerald-500/10" :
-                                                                                            "text-zinc-500 bg-white/5";
+                                                                                            "text-gray-500 bg-black/5";
                     const financialLabel =
                       o.financial_status === "refunded"           ? "Refunded" :
                       o.financial_status === "voided"             ? "Cancelled" :
@@ -1097,14 +1073,14 @@ export default function InboxPage() {
                       o.financial_status === "paid"               ? "Paid" :
                                                                     o.financial_status ?? "—";
                     return (
-                      <div key={o.id ?? o.shopify_order_id} className="bg-white/4 border border-white/5 rounded-xl p-3 space-y-2">
+                      <div key={o.id ?? o.shopify_order_id} className="bg-black/4 border border-black/5 rounded-xl p-3 space-y-2">
                         {/* Order header */}
                         <div className="flex items-start justify-between gap-2">
                           <div>
-                            <p className="text-xs font-bold text-white">
+                            <p className="text-xs font-bold text-gray-900">
                               #{o.order_number || o.shopify_order_id}
                             </p>
-                            <p className="text-[10px] text-zinc-600 mt-0.5">{fmtDate(o.created_at)}</p>
+                            <p className="text-[10px] text-gray-400 mt-0.5">{fmtDate(o.created_at)}</p>
                           </div>
                           <p className="text-sm font-black text-emerald-400 shrink-0">
                             €{(o.revenue ?? 0).toFixed(2)}
@@ -1120,30 +1096,30 @@ export default function InboxPage() {
                           <a
                             href={o.tracking_url || "#"}
                             target="_blank" rel="noopener noreferrer"
-                            className="flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300 transition-colors"
+                            className="flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-700 transition-colors"
                           >
                             <Truck size={9} /> {o.tracking_number}
                           </a>
                         )}
                         {/* Items */}
                         {o.items && o.items.length > 0 && (
-                          <div className="space-y-0.5 border-t border-white/5 pt-2">
+                          <div className="space-y-0.5 border-t border-black/5 pt-2">
                             {o.items.map((item, ii) => (
                               <div key={ii} className="flex items-start justify-between gap-1">
-                                <p className="text-[10px] text-zinc-400 leading-tight flex-1 min-w-0">
-                                  <span className="text-zinc-600">{item.quantity}×</span> {item.product_title}
+                                <p className="text-[10px] text-gray-500 leading-tight flex-1 min-w-0">
+                                  <span className="text-gray-400">{item.quantity}×</span> {item.product_title}
                                   {item.variant_title && item.variant_title !== "Default Title" && (
-                                    <span className="text-zinc-600"> · {item.variant_title}</span>
+                                    <span className="text-gray-400"> · {item.variant_title}</span>
                                   )}
                                 </p>
-                                <p className="text-[10px] text-zinc-500 shrink-0">€{(item.revenue ?? 0).toFixed(2)}</p>
+                                <p className="text-[10px] text-gray-500 shrink-0">€{(item.revenue ?? 0).toFixed(2)}</p>
                               </div>
                             ))}
                           </div>
                         )}
                         {/* Order actions */}
                         {!isDone && o.financial_status !== "refunded" && o.financial_status !== "voided" && (
-                          <div className="flex gap-1.5 border-t border-white/5 pt-2">
+                          <div className="flex gap-1.5 border-t border-black/5 pt-2">
                             <button
                               onClick={() => setRefundTarget(o)}
                               disabled={!!isBusy}
@@ -1155,14 +1131,14 @@ export default function InboxPage() {
                             <button
                               onClick={() => handleOrderAction(o.shopify_order_id, "cancel")}
                               disabled={!!isBusy}
-                              className="flex-1 flex items-center justify-center gap-1 py-1 rounded-lg text-[10px] font-semibold text-zinc-400 bg-white/5 hover:bg-white/10 disabled:opacity-40 transition-all"
+                              className="flex-1 flex items-center justify-center gap-1 py-1 rounded-lg text-[10px] font-semibold text-gray-500 bg-black/5 hover:bg-black/10 disabled:opacity-40 transition-all"
                             >
                               Cancel
                             </button>
                           </div>
                         )}
                         {isDone && (
-                          <p className="text-[10px] text-emerald-400 text-center pt-1 border-t border-white/5">
+                          <p className="text-[10px] text-emerald-400 text-center pt-1 border-t border-black/5">
                             {isDone === "refund" ? "Refunded" : "Cancelled"}
                           </p>
                         )}
@@ -1176,14 +1152,14 @@ export default function InboxPage() {
             {/* ── Previous tickets ── */}
             {customer && customer.tickets.length > 0 && (
               <div className="p-4 space-y-2">
-                <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Previous tickets</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Previous tickets</p>
                 <div className="space-y-1.5">
                   {customer.tickets.map(t => (
                     <a key={t.id} href="/customer-service"
-                      className="flex items-start gap-2 bg-white/3 hover:bg-white/5 rounded-xl px-3 py-2 transition-colors group">
+                      className="flex items-start gap-2 bg-black/3 hover:bg-black/5 rounded-xl px-3 py-2 transition-colors group">
                       <div className="flex-1 min-w-0">
-                        <p className="text-[11px] text-zinc-300 group-hover:text-white truncate transition-colors">{t.subject || "No subject"}</p>
-                        <p className="text-[9px] text-zinc-600 mt-0.5">{fmtDate(t.created_at)}</p>
+                        <p className="text-[11px] text-gray-600 group-hover:text-gray-900 truncate transition-colors">{t.subject || "No subject"}</p>
+                        <p className="text-[9px] text-gray-400 mt-0.5">{fmtDate(t.created_at)}</p>
                       </div>
                       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border shrink-0 mt-0.5 ${STATUS_STYLES[t.status]?.cls ?? ""}`}>
                         {STATUS_STYLES[t.status]?.label ?? t.status}
@@ -1196,22 +1172,22 @@ export default function InboxPage() {
 
             {/* ── Actions ── */}
             <div className="p-4 space-y-1.5">
-              <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-2">Actions</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Actions</p>
               <button onClick={() => updateStatus(selected.id, "closed")}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-zinc-400 hover:bg-emerald-500/10 hover:text-emerald-400 transition-all">
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-gray-500 hover:bg-emerald-500/10 hover:text-emerald-400 transition-all">
                 <CheckCheck size={13} /> Close
               </button>
               <button onClick={() => updateStatus(selected.id, "pending")}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-zinc-400 hover:bg-amber-500/10 hover:text-amber-400 transition-all">
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-gray-500 hover:bg-amber-500/10 hover:text-amber-400 transition-all">
                 <Clock size={13} /> Mark as pending
               </button>
               <button onClick={() => updateStatus(selected.id, "open")}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-zinc-400 hover:bg-blue-500/10 hover:text-blue-400 transition-all">
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-gray-500 hover:bg-blue-500/10 hover:text-blue-400 transition-all">
                 <Archive size={13} /> Reopen
               </button>
               <button onClick={handleCreateTicket} disabled={ticketCreating}
                 className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium transition-all disabled:opacity-40 ${
-                  ticketCreated ? "bg-emerald-500/10 text-emerald-400" : "text-zinc-400 hover:bg-purple-500/10 hover:text-purple-400"
+                  ticketCreated ? "bg-emerald-500/10 text-emerald-400" : "text-gray-500 hover:bg-purple-500/10 hover:text-purple-400"
                 }`}>
                 {ticketCreating ? <Loader2 size={13} className="animate-spin" /> : ticketCreated ? <CheckCheck size={13} /> : <Zap size={13} />}
                 {ticketCreated ? "Ticket created!" : "Create CS ticket"}
@@ -1222,48 +1198,48 @@ export default function InboxPage() {
         ) : (
           /* Geen thread geselecteerd — templates beheer */
           <div className="p-4 space-y-4">
-            <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Templates ({canned.length})</p>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Templates ({canned.length})</p>
             <div className="space-y-1.5 max-h-72 overflow-y-auto">
               {canned.map(cr => (
-                <div key={cr.id} className="flex items-start gap-2 bg-white/3 rounded-xl px-3 py-2">
+                <div key={cr.id} className="flex items-start gap-2 bg-black/3 rounded-xl px-3 py-2">
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-white">{cr.title}</p>
-                    <p className="text-[10px] text-zinc-600 mt-0.5 line-clamp-1">{cr.body}</p>
+                    <p className="text-xs font-medium text-gray-900">{cr.title}</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5 line-clamp-1">{cr.body}</p>
                   </div>
-                  <button onClick={() => deleteCanned(cr.id)} className="text-zinc-700 hover:text-red-400 transition-colors shrink-0 mt-0.5"><Trash2 size={11} /></button>
+                  <button onClick={() => deleteCanned(cr.id)} className="text-gray-400 hover:text-red-400 transition-colors shrink-0 mt-0.5"><Trash2 size={11} /></button>
                 </div>
               ))}
-              {canned.length === 0 && <p className="text-[11px] text-zinc-600 text-center py-2">No templates</p>}
+              {canned.length === 0 && <p className="text-[11px] text-gray-400 text-center py-2">No templates</p>}
             </div>
 
             {showNewCanned ? (
               <div className="space-y-2">
                 <input value={newCannedTitle} onChange={e => setNewCannedTitle(e.target.value)} placeholder="Template name"
-                  className="w-full bg-white/5 border border-white/8 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-zinc-600 outline-none focus:border-blue-500/40" />
+                  className="w-full bg-black/5 border border-black/8 rounded-lg px-2.5 py-1.5 text-xs text-gray-900 placeholder-zinc-600 outline-none focus:border-blue-500/40" />
                 <textarea value={newCannedBody} onChange={e => setNewCannedBody(e.target.value)} placeholder="Content…" rows={4}
-                  className="w-full bg-white/5 border border-white/8 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-zinc-600 outline-none focus:border-blue-500/40 resize-none" />
+                  className="w-full bg-black/5 border border-black/8 rounded-lg px-2.5 py-1.5 text-xs text-gray-900 placeholder-zinc-600 outline-none focus:border-blue-500/40 resize-none" />
                 <div className="flex gap-1.5">
-                  <button onClick={saveCanned} className="flex-1 bg-blue-600 hover:bg-blue-500 transition-all rounded-lg py-1.5 text-xs font-semibold">Save</button>
-                  <button onClick={() => setShowNewCanned(false)} className="flex-1 bg-white/5 hover:bg-white/10 transition-all rounded-lg py-1.5 text-xs text-zinc-400">Cancel</button>
+                  <button onClick={saveCanned} className="flex-1 bg-blue-600 text-white hover:bg-blue-500 transition-all rounded-lg py-1.5 text-xs font-semibold">Save</button>
+                  <button onClick={() => setShowNewCanned(false)} className="flex-1 bg-black/5 hover:bg-black/10 transition-all rounded-lg py-1.5 text-xs text-gray-500">Cancel</button>
                 </div>
               </div>
             ) : (
-              <button onClick={() => setShowNewCanned(true)} className="w-full bg-white/5 hover:bg-white/10 transition-all rounded-xl py-2 text-xs font-medium text-zinc-400 hover:text-white">
+              <button onClick={() => setShowNewCanned(true)} className="w-full bg-black/5 hover:bg-black/10 transition-all rounded-xl py-2 text-xs font-medium text-gray-500 hover:text-gray-900">
                 + New template
               </button>
             )}
 
-            <div className="pt-2 border-t border-white/5 space-y-2">
-              <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Connected accounts</p>
+            <div className="pt-2 border-t border-black/5 space-y-2">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Connected accounts</p>
               {accounts.map(a => (
-                <div key={a.id} className="flex items-center gap-2 bg-white/3 rounded-xl px-3 py-2">
+                <div key={a.id} className="flex items-center gap-2 bg-black/3 rounded-xl px-3 py-2">
                   <span className={`text-xs font-bold ${PROVIDER_COLORS[a.provider]}`}>{a.provider === "gmail" ? "G" : "⊞"}</span>
-                  <span className="text-[11px] text-zinc-400 flex-1 min-w-0 truncate">{a.email}</span>
-                  <button onClick={() => handleDeleteAccount(a.id)} className="text-zinc-700 hover:text-red-400 transition-colors"><X size={11} /></button>
+                  <span className="text-[11px] text-gray-500 flex-1 min-w-0 truncate">{a.email}</span>
+                  <button onClick={() => handleDeleteAccount(a.id)} className="text-gray-400 hover:text-red-400 transition-colors"><X size={11} /></button>
                 </div>
               ))}
-              {accounts.length === 0 && <p className="text-[11px] text-zinc-600">No accounts connected</p>}
-              <button onClick={() => setShowConnect(true)} className="w-full bg-white/5 hover:bg-white/10 transition-all rounded-xl py-2 text-xs font-medium text-zinc-400 hover:text-white">
+              {accounts.length === 0 && <p className="text-[11px] text-gray-400">No accounts connected</p>}
+              <button onClick={() => setShowConnect(true)} className="w-full bg-black/5 hover:bg-black/10 transition-all rounded-xl py-2 text-xs font-medium text-gray-500 hover:text-gray-900">
                 + Connect account
               </button>
             </div>
@@ -1276,11 +1252,7 @@ export default function InboxPage() {
       {refundTarget && (
         <RefundModal
           order={refundTarget}
-          onConfirm={(type, amount) => {
-            const o = refundTarget;
-            setRefundTarget(null);
-            handleOrderAction(o.shopify_order_id, "refund", type, amount);
-          }}
+          shopifyDomain={stores.find(s => s.id === storeId)?.shopify_domain ?? ""}
           onClose={() => setRefundTarget(null)}
         />
       )}

@@ -41,22 +41,22 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#08080f] text-white flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#f6f7f9] text-gray-900 flex items-center justify-center p-4">
       <div className="w-full max-w-sm space-y-6">
 
         {/* Logo */}
         <div className="flex flex-col items-center gap-3 mb-8">
           <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center shadow-lg shadow-blue-900/50">
-            <span className="text-white font-black text-xl tracking-tight leading-none">TS</span>
+            <span className="text-gray-900 font-black text-xl tracking-tight leading-none">TS</span>
           </div>
           <div className="text-center">
             <h1 className="text-2xl font-black tracking-tight">TSecom</h1>
-            <p className="text-zinc-500 text-sm">AI Commerce OS</p>
+            <p className="text-gray-500 text-sm">AI Commerce OS</p>
           </div>
         </div>
 
         {/* Card */}
-        <div className="bg-white/4 border border-white/8 rounded-2xl p-6 space-y-4">
+        <div className="bg-black/4 border border-black/8 rounded-2xl p-6 space-y-4">
           <h2 className="text-lg font-bold">Sign in</h2>
 
           <div className="space-y-3">
@@ -64,7 +64,7 @@ export default function LoginPage() {
               type="email"
               placeholder="Email"
               autoComplete="email"
-              className="w-full bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-sm placeholder-zinc-600 outline-none focus:border-blue-500/60 transition-colors"
+              className="w-full bg-black/5 border border-black/8 rounded-xl px-4 py-3 text-sm placeholder-zinc-600 outline-none focus:border-blue-500/60 transition-colors"
               value={email}
               onChange={e => setEmail(e.target.value)}
               onKeyDown={e => e.key === "Enter" && signIn()}
@@ -73,7 +73,7 @@ export default function LoginPage() {
               type="password"
               placeholder="Password"
               autoComplete="current-password"
-              className="w-full bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-sm placeholder-zinc-600 outline-none focus:border-blue-500/60 transition-colors"
+              className="w-full bg-black/5 border border-black/8 rounded-xl px-4 py-3 text-sm placeholder-zinc-600 outline-none focus:border-blue-500/60 transition-colors"
               value={password}
               onChange={e => setPassword(e.target.value)}
               onKeyDown={e => e.key === "Enter" && signIn()}
@@ -81,7 +81,7 @@ export default function LoginPage() {
           </div>
 
           {message && (
-            <p className={`text-xs px-3 py-2 rounded-lg ${isError ? "bg-red-950/50 text-red-400" : "bg-emerald-950/50 text-emerald-400"}`}>
+            <p className={`text-xs px-3 py-2 rounded-lg ${isError ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-700"}`}>
               {message}
             </p>
           )}
@@ -89,24 +89,24 @@ export default function LoginPage() {
           <button
             onClick={signIn}
             disabled={loading || !email || !password}
-            className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed py-3 rounded-xl text-sm font-semibold transition-colors"
+            className="w-full bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-40 disabled:cursor-not-allowed py-3 rounded-xl text-sm font-semibold transition-colors"
           >
             {loading ? "Signing in…" : "Sign in"}
           </button>
 
-          <div className="border-t border-white/5 pt-4">
-            <p className="text-xs text-zinc-600 text-center mb-3">No account yet?</p>
+          <div className="border-t border-black/5 pt-4">
+            <p className="text-xs text-gray-400 text-center mb-3">No account yet?</p>
             <button
               onClick={signUp}
               disabled={loading || !email || !password}
-              className="w-full bg-white/5 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed py-3 rounded-xl text-sm font-medium transition-colors text-zinc-300"
+              className="w-full bg-black/5 hover:bg-black/10 disabled:opacity-40 disabled:cursor-not-allowed py-3 rounded-xl text-sm font-medium transition-colors text-gray-600"
             >
               Create account
             </button>
           </div>
         </div>
 
-        <p className="text-center text-zinc-700 text-xs">
+        <p className="text-center text-gray-400 text-xs">
           Access restricted to authorised users only.
         </p>
       </div>

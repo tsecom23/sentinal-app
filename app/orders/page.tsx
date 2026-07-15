@@ -150,21 +150,21 @@ export default function OrdersPage() {
           <h1 className="text-2xl font-black tracking-tight flex items-center gap-2">
             <ShoppingCart size={22} className="text-blue-400" /> Orders
           </h1>
-          <p className="text-zinc-500 text-sm mt-0.5">All incoming orders</p>
+          <p className="text-gray-500 text-sm mt-0.5">All incoming orders</p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
-          {syncMsg && <span className="text-xs text-zinc-400">{syncMsg}</span>}
+          {syncMsg && <span className="text-xs text-gray-500">{syncMsg}</span>}
           <button onClick={syncOrders} disabled={syncing}
             title="Sync orders from Shopify (last 60 days)"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-medium text-zinc-400 hover:text-white transition-all disabled:opacity-40">
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/5 hover:bg-black/10 text-xs font-medium text-gray-500 hover:text-gray-900 transition-all disabled:opacity-40">
             {syncing ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
             Sync Shopify
           </button>
           <DateRangePicker value={dateRange} onChange={setDateRange} />
-          <div className="flex gap-1 bg-white/5 rounded-xl p-1">
+          <div className="flex gap-1 bg-black/5 rounded-xl p-1">
             {stores.map(s => (
               <button key={s.id} onClick={() => setStoreId(s.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${storeId === s.id ? "bg-blue-600 text-white" : "text-zinc-400 hover:text-white"}`}>
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${storeId === s.id ? "bg-blue-600 text-gray-900" : "text-gray-500 hover:text-gray-900"}`}>
                 {s.name}
               </button>
             ))}
@@ -176,11 +176,11 @@ export default function OrdersPage() {
       {today && (
         <div className="grid grid-cols-4 gap-3">
           {/* Today orders */}
-          <div className="rounded-2xl bg-white/3 border border-white/5 p-4 col-span-1">
-            <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-2">Today</p>
+          <div className="rounded-2xl bg-black/3 border border-black/5 p-4 col-span-1">
+            <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2">Today</p>
             <div className="flex items-end gap-2">
               <p className="text-2xl font-black">{today.orders}</p>
-              <p className="text-zinc-500 text-xs mb-1">orders</p>
+              <p className="text-gray-500 text-xs mb-1">orders</p>
             </div>
             {todayDelta !== null && (
               <div className={`flex items-center gap-1 text-xs mt-1 ${todayDelta >= 0 ? "text-emerald-400" : "text-red-400"}`}>
@@ -191,25 +191,25 @@ export default function OrdersPage() {
           </div>
 
           {/* Today revenue */}
-          <div className="rounded-2xl bg-white/3 border border-white/5 p-4">
-            <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-2">Revenue today</p>
+          <div className="rounded-2xl bg-black/3 border border-black/5 p-4">
+            <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2">Revenue today</p>
             <p className="text-2xl font-black">€{f2(today.revenue)}</p>
             {yesterday && yesterday.revenue > 0 && (
-              <p className="text-[11px] text-zinc-600 mt-1">Yesterday €{f2(yesterday.revenue)}</p>
+              <p className="text-[11px] text-gray-400 mt-1">Yesterday €{f2(yesterday.revenue)}</p>
             )}
           </div>
 
           {/* Ad spend today */}
           <div className={`rounded-2xl border p-4 ${
             today.adSpend && today.adSpend > 0
-              ? "bg-white/3 border-white/5"
-              : "bg-white/2 border-white/4"
+              ? "bg-black/3 border-black/5"
+              : "bg-gray-50 border-black/4"
           }`}>
-            <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-2">Ad spend today</p>
-            <p className="text-2xl font-black text-red-300">
+            <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2">Ad spend today</p>
+            <p className="text-2xl font-black text-red-700">
               {today.adSpend && today.adSpend > 0 ? `€${f2(today.adSpend)}` : "—"}
             </p>
-            <p className="text-[11px] text-zinc-600 mt-1">
+            <p className="text-[11px] text-gray-400 mt-1">
               {today.adSpend && today.adSpend > 0 ? "auto-synced via Ads Script" : "Not yet synced"}
             </p>
           </div>
@@ -217,14 +217,14 @@ export default function OrdersPage() {
           {/* ROAS today */}
           <div className={`rounded-2xl border p-4 ${
             today.roas === null || !today.adSpend
-              ? "bg-white/2 border-white/4"
-              : today.roas >= 3 ? "bg-emerald-950/30 border-emerald-500/20"
-              : today.roas >= 1.5 ? "bg-amber-950/30 border-amber-500/20"
-              : "bg-red-950/30 border-red-500/20"
+              ? "bg-gray-50 border-black/4"
+              : today.roas >= 3 ? "bg-emerald-50 border-emerald-500/20"
+              : today.roas >= 1.5 ? "bg-amber-50 border-amber-500/20"
+              : "bg-red-50 border-red-500/20"
           }`}>
-            <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-2">ROAS today</p>
+            <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2">ROAS today</p>
             <p className={`text-2xl font-black ${
-              today.roas === null || !today.adSpend ? "text-zinc-600"
+              today.roas === null || !today.adSpend ? "text-gray-400"
               : today.roas >= 3 ? "text-emerald-400"
               : today.roas >= 1.5 ? "text-amber-400"
               : "text-red-400"
@@ -232,8 +232,8 @@ export default function OrdersPage() {
               {today.roas !== null && today.adSpend ? `${today.roas.toFixed(2)}x` : "—"}
             </p>
             <div className="flex items-center gap-1 mt-1">
-              <TrendingUp size={10} className="text-zinc-600" />
-              <p className="text-[11px] text-zinc-600">Revenue / ad spend</p>
+              <TrendingUp size={10} className="text-gray-400" />
+              <p className="text-[11px] text-gray-400">Revenue / ad spend</p>
             </div>
           </div>
         </div>
@@ -241,31 +241,31 @@ export default function OrdersPage() {
 
       {/* Period summary */}
       <div className="grid grid-cols-3 gap-3">
-        <div className="rounded-2xl bg-white/3 border border-white/5 p-4">
-          <p className="text-[10px] text-zinc-600 uppercase tracking-widest mb-1">Period orders</p>
+        <div className="rounded-2xl bg-black/3 border border-black/5 p-4">
+          <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Period orders</p>
           <p className="text-xl font-black">{totalOrders}</p>
         </div>
-        <div className="rounded-2xl bg-white/3 border border-white/5 p-4">
-          <p className="text-[10px] text-zinc-600 uppercase tracking-widest mb-1">Period revenue</p>
+        <div className="rounded-2xl bg-black/3 border border-black/5 p-4">
+          <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Period revenue</p>
           <p className="text-xl font-black">€{f2(totalRevenue)}</p>
         </div>
-        <div className="rounded-2xl bg-white/3 border border-white/5 p-4">
-          <p className="text-[10px] text-zinc-600 uppercase tracking-widest mb-1">Avg. order value</p>
+        <div className="rounded-2xl bg-black/3 border border-black/5 p-4">
+          <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1">Avg. order value</p>
           <p className="text-xl font-black">{totalOrders > 0 ? `€${f2(avgOrderVal)}` : "—"}</p>
         </div>
       </div>
 
       {/* Search */}
       <div className="relative max-w-sm">
-        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" />
+        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search by customer, product, order number…"
-          className="w-full bg-white/4 border border-white/8 rounded-xl pl-9 pr-4 py-2 text-sm text-white placeholder-zinc-700 outline-none focus:border-blue-500/50"
+          className="w-full bg-black/4 border border-black/8 rounded-xl pl-9 pr-4 py-2 text-sm text-gray-900 placeholder-zinc-700 outline-none focus:border-blue-500/50"
         />
         {search && (
-          <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-white">
+          <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-900">
             <X size={12} />
           </button>
         )}
@@ -274,10 +274,10 @@ export default function OrdersPage() {
       {/* Orders timeline */}
       {loading ? (
         <div className="space-y-3">
-          {[...Array(5)].map((_, i) => <div key={i} className="h-16 rounded-2xl bg-white/4 animate-pulse" />)}
+          {[...Array(5)].map((_, i) => <div key={i} className="h-16 rounded-2xl bg-black/4 animate-pulse" />)}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="rounded-2xl bg-white/3 border border-white/5 p-12 text-center text-zinc-600">
+        <div className="rounded-2xl bg-black/3 border border-black/5 p-12 text-center text-gray-400">
           <ShoppingCart size={32} className="mx-auto mb-3 opacity-30" />
           <p className="text-sm">{search ? "No orders found" : "No orders in this period"}</p>
         </div>
@@ -290,9 +290,9 @@ export default function OrdersPage() {
               <div key={day}>
                 {/* Day header */}
                 <div className="flex items-center gap-3 mb-2">
-                  <p className="text-xs font-bold text-zinc-400">{formatDate(day + "T12:00:00")}</p>
-                  <div className="flex-1 h-px bg-white/5" />
-                  <p className="text-xs text-zinc-600">{dayOrders.length} orders · €{f2(dayRevenue)}</p>
+                  <p className="text-xs font-bold text-gray-500">{formatDate(day + "T12:00:00")}</p>
+                  <div className="flex-1 h-px bg-black/5" />
+                  <p className="text-xs text-gray-400">{dayOrders.length} orders · €{f2(dayRevenue)}</p>
                 </div>
 
                 {/* Orders for this day */}
@@ -308,7 +308,7 @@ export default function OrdersPage() {
                     return (
                       <div
                         key={order.id}
-                        className="rounded-2xl bg-white/3 border border-white/5 overflow-hidden hover:border-white/10 transition-colors"
+                        className="rounded-2xl bg-black/3 border border-black/5 overflow-hidden hover:border-black/10 transition-colors"
                       >
                         {/* Main row */}
                         <button
@@ -316,7 +316,7 @@ export default function OrdersPage() {
                           className="w-full flex items-center gap-4 px-4 py-3 text-left"
                         >
                           {/* Expand icon */}
-                          <div className="text-zinc-700 shrink-0">
+                          <div className="text-gray-400 shrink-0">
                             {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                           </div>
 
@@ -327,12 +327,12 @@ export default function OrdersPage() {
 
                           {/* Customer */}
                           <div className="w-48 shrink-0 min-w-0">
-                            <p className="text-xs text-zinc-300 truncate">{order.email}</p>
+                            <p className="text-xs text-gray-600 truncate">{order.email}</p>
                           </div>
 
                           {/* Products summary */}
                           <div className="flex-1 min-w-0">
-                            <p className="text-xs text-zinc-500 truncate">{itemsLabel}</p>
+                            <p className="text-xs text-gray-500 truncate">{itemsLabel}</p>
                           </div>
 
                           {/* Revenue */}
@@ -342,33 +342,33 @@ export default function OrdersPage() {
 
                           {/* Time */}
                           <div className="w-20 text-right shrink-0">
-                            <p className="text-[10px] text-zinc-600">{formatTime(order.created_at)}</p>
-                            <p className="text-[10px] text-zinc-700">{timeAgo(order.created_at)}</p>
+                            <p className="text-[10px] text-gray-400">{formatTime(order.created_at)}</p>
+                            <p className="text-[10px] text-gray-400">{timeAgo(order.created_at)}</p>
                           </div>
                         </button>
 
                         {/* Expanded line items */}
                         {isOpen && (
-                          <div className="border-t border-white/5 px-4 pb-3 pt-2 space-y-2">
+                          <div className="border-t border-black/5 px-4 pb-3 pt-2 space-y-2">
                             {order.items.length === 0 ? (
-                              <p className="text-xs text-zinc-700">No product details available</p>
+                              <p className="text-xs text-gray-400">No product details available</p>
                             ) : order.items.map((item, i) => (
                               <div key={i} className="flex items-center gap-3">
                                 <div className="w-6 h-6 rounded-lg bg-blue-600/15 flex items-center justify-center text-[10px] text-blue-400 font-bold shrink-0">
                                   {item.quantity}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-medium text-zinc-200 truncate">{item.product_title}</p>
+                                  <p className="text-xs font-medium text-gray-700 truncate">{item.product_title}</p>
                                   {item.variant_title && (
-                                    <p className="text-[10px] text-zinc-600">{item.variant_title}</p>
+                                    <p className="text-[10px] text-gray-400">{item.variant_title}</p>
                                   )}
                                 </div>
-                                <p className="text-xs font-semibold text-zinc-300 shrink-0">€{f2(item.revenue)}</p>
+                                <p className="text-xs font-semibold text-gray-600 shrink-0">€{f2(item.revenue)}</p>
                               </div>
                             ))}
-                            <div className="flex justify-between pt-1 border-t border-white/5">
-                              <p className="text-[10px] text-zinc-700">Customer: {order.email}</p>
-                              <p className="text-[10px] text-zinc-600">
+                            <div className="flex justify-between pt-1 border-t border-black/5">
+                              <p className="text-[10px] text-gray-400">Customer: {order.email}</p>
+                              <p className="text-[10px] text-gray-400">
                                 {new Date(order.created_at).toLocaleString("en-GB")}
                               </p>
                             </div>

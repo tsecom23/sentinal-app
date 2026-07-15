@@ -50,8 +50,8 @@ export default function ProductDetailPage() {
 
   if (!product) {
     return (
-      <div className="min-h-screen bg-[#0b0b0f] text-white p-10">
-        <a href="/product-insights" className="text-zinc-400">
+      <div className="min-h-screen bg-[#f6f7f9] text-gray-900 p-10">
+        <a href="/product-insights" className="text-gray-500">
           ← Back to Product Insights
         </a>
 
@@ -70,22 +70,22 @@ export default function ProductDetailPage() {
       : 0;
 
   return (
-    <div className="min-h-screen bg-[#0b0b0f] text-white p-10">
+    <div className="min-h-screen bg-[#f6f7f9] text-gray-900 p-10">
       <a
         href="/product-insights"
-        className="text-zinc-400 hover:text-white"
+        className="text-gray-500 hover:text-gray-900"
       >
         ← Back to Product Insights
       </a>
 
       <div className="mt-8 mb-10">
-        <p className="text-zinc-500">Product Detail</p>
+        <p className="text-gray-500">Product Detail</p>
 
         <h1 className="text-4xl font-bold max-w-4xl">
           {product.product_title}
         </h1>
 
-        <p className="text-zinc-500 mt-2">
+        <p className="text-gray-500 mt-2">
           {product.variant_title || "Default"}
         </p>
       </div>
@@ -162,8 +162,8 @@ function Card({
   value: string;
 }) {
   return (
-    <div className="bg-[#15151c] p-6 rounded-2xl">
-      <p className="text-zinc-500">{title}</p>
+    <div className="bg-white p-6 rounded-2xl">
+      <p className="text-gray-500">{title}</p>
 
       <h2 className="text-3xl font-bold mt-2">
         {value}
@@ -180,7 +180,7 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-[#15151c] p-6 rounded-2xl">
+    <div className="bg-white p-6 rounded-2xl">
       <h3 className="text-xl font-bold mb-5">
         {title}
       </h3>
@@ -199,7 +199,7 @@ function Row({
 }) {
   return (
     <div className="flex justify-between border-b border-zinc-800 py-3">
-      <span className="text-zinc-500">
+      <span className="text-gray-500">
         {label}
       </span>
 

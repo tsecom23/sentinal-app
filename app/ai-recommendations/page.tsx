@@ -30,7 +30,7 @@ const LABEL_STYLES: Record<string, string> = {
   SCALE:      "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30",
   "FIX MARGIN": "bg-amber-500/15 text-amber-400 border border-amber-500/30",
   OPTIMIZE:   "bg-blue-500/15 text-blue-400 border border-blue-500/30",
-  MONITOR:    "bg-zinc-500/15 text-zinc-400 border border-zinc-500/30",
+  MONITOR:    "bg-zinc-500/15 text-gray-500 border border-zinc-500/30",
   "SET COST": "bg-orange-500/15 text-orange-400 border border-orange-500/30",
   DEAD:       "bg-red-500/15 text-red-400 border border-red-500/30",
 };
@@ -40,7 +40,7 @@ function fmt(n: number) {
 }
 
 function LabelBadge({ label }: { label: string }) {
-  const cls = LABEL_STYLES[label] ?? "bg-zinc-500/15 text-zinc-400 border border-zinc-500/30";
+  const cls = LABEL_STYLES[label] ?? "bg-zinc-500/15 text-gray-500 border border-zinc-500/30";
   return (
     <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide ${cls}`}>
       {label}
@@ -63,36 +63,36 @@ function InsightCard({
         </p>
         <LabelBadge label={item.label} />
       </div>
-      <p className="text-zinc-400 text-xs leading-relaxed">{item.recommendation}</p>
+      <p className="text-gray-500 text-xs leading-relaxed">{item.recommendation}</p>
       <div className="grid grid-cols-3 gap-2 pt-1">
-        <div className="bg-white/4 rounded-lg px-2 py-1.5">
-          <p className="text-[9px] text-zinc-600 uppercase tracking-wide">Verkocht</p>
-          <p className="text-xs font-bold text-zinc-200">{item.sold}x</p>
+        <div className="bg-black/4 rounded-lg px-2 py-1.5">
+          <p className="text-[9px] text-gray-400 uppercase tracking-wide">Verkocht</p>
+          <p className="text-xs font-bold text-gray-700">{item.sold}x</p>
         </div>
-        <div className="bg-white/4 rounded-lg px-2 py-1.5">
-          <p className="text-[9px] text-zinc-600 uppercase tracking-wide">Revenue</p>
-          <p className="text-xs font-bold text-zinc-200">€{fmt(item.net_revenue)}</p>
+        <div className="bg-black/4 rounded-lg px-2 py-1.5">
+          <p className="text-[9px] text-gray-400 uppercase tracking-wide">Revenue</p>
+          <p className="text-xs font-bold text-gray-700">€{fmt(item.net_revenue)}</p>
         </div>
-        <div className="bg-white/4 rounded-lg px-2 py-1.5">
-          <p className="text-[9px] text-zinc-600 uppercase tracking-wide">Marge</p>
+        <div className="bg-black/4 rounded-lg px-2 py-1.5">
+          <p className="text-[9px] text-gray-400 uppercase tracking-wide">Marge</p>
           <p className={`text-xs font-bold ${item.margin >= 30 ? "text-emerald-400" : item.margin >= 10 ? "text-amber-400" : "text-red-400"}`}>
             {item.margin.toFixed(1)}%
           </p>
         </div>
-        <div className="bg-white/4 rounded-lg px-2 py-1.5">
-          <p className="text-[9px] text-zinc-600 uppercase tracking-wide">Ad spend</p>
-          <p className={`text-xs font-bold ${item.ad_spend > 0 ? "text-red-300" : "text-zinc-600"}`}>
+        <div className="bg-black/4 rounded-lg px-2 py-1.5">
+          <p className="text-[9px] text-gray-400 uppercase tracking-wide">Ad spend</p>
+          <p className={`text-xs font-bold ${item.ad_spend > 0 ? "text-red-700" : "text-gray-400"}`}>
             {item.ad_spend > 0 ? `€${fmt(item.ad_spend)}` : "—"}
           </p>
         </div>
-        <div className="bg-white/4 rounded-lg px-2 py-1.5">
-          <p className="text-[9px] text-zinc-600 uppercase tracking-wide">ROAS</p>
-          <p className={`text-xs font-bold ${item.roas === null ? "text-zinc-600" : item.roas >= 3 ? "text-emerald-400" : item.roas >= 1.5 ? "text-amber-400" : "text-red-400"}`}>
+        <div className="bg-black/4 rounded-lg px-2 py-1.5">
+          <p className="text-[9px] text-gray-400 uppercase tracking-wide">ROAS</p>
+          <p className={`text-xs font-bold ${item.roas === null ? "text-gray-400" : item.roas >= 3 ? "text-emerald-400" : item.roas >= 1.5 ? "text-amber-400" : "text-red-400"}`}>
             {item.roas !== null ? `${item.roas.toFixed(2)}x` : "—"}
           </p>
         </div>
-        <div className="bg-white/4 rounded-lg px-2 py-1.5">
-          <p className="text-[9px] text-zinc-600 uppercase tracking-wide">Winst</p>
+        <div className="bg-black/4 rounded-lg px-2 py-1.5">
+          <p className="text-[9px] text-gray-400 uppercase tracking-wide">Winst</p>
           <p className={`text-xs font-bold ${item.profit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
             €{fmt(item.profit)}
           </p>
@@ -106,7 +106,7 @@ function SkeletonCards({ count = 4 }: { count?: number }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="h-32 rounded-2xl bg-white/4 animate-pulse" />
+        <div key={i} className="h-32 rounded-2xl bg-black/4 animate-pulse" />
       ))}
     </div>
   );
@@ -157,20 +157,20 @@ export default function AIRecommendationsPage() {
             <Bot size={22} className="text-purple-400" />
             AI Recommendations
           </h1>
-          <p className="text-zinc-500 text-sm mt-0.5">
+          <p className="text-gray-500 text-sm mt-0.5">
             Rule-based AI signals for every product
           </p>
         </div>
         {/* Store selector */}
-        <div className="flex gap-1 bg-white/5 rounded-xl p-1">
+        <div className="flex gap-1 bg-black/5 rounded-xl p-1">
           {stores.map((s) => (
             <button
               key={s.id}
               onClick={() => setStoreId(s.id)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                 storeId === s.id
-                  ? "bg-blue-600 text-white"
-                  : "text-zinc-400 hover:text-white"
+                  ? "bg-blue-600 text-gray-900"
+                  : "text-gray-500 hover:text-gray-900"
               }`}
             >
               {s.name}
@@ -187,8 +187,8 @@ export default function AIRecommendationsPage() {
           { label: "Kill signals", value: kills.length, color: "text-red-400" },
           { label: "Need fixing", value: needFix.length, color: "text-amber-400" },
         ].map((c) => (
-          <div key={c.label} className="rounded-2xl bg-white/3 border border-white/5 p-4">
-            <p className="text-[10px] text-zinc-600 uppercase tracking-widest mb-2">
+          <div key={c.label} className="rounded-2xl bg-black/3 border border-black/5 p-4">
+            <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-2">
               {c.label}
             </p>
             <p className={`text-2xl font-black ${c.color}`}>{c.value}</p>
@@ -202,7 +202,7 @@ export default function AIRecommendationsPage() {
           <SkeletonCards count={4} />
         </div>
       ) : insights.length === 0 ? (
-        <div className="rounded-2xl bg-white/3 border border-white/5 p-12 text-center text-zinc-600">
+        <div className="rounded-2xl bg-black/3 border border-black/5 p-12 text-center text-gray-400">
           No insights found for this store.
         </div>
       ) : (
@@ -210,9 +210,9 @@ export default function AIRecommendationsPage() {
           {/* Kill signals */}
           {kills.length > 0 && (
             <section className="space-y-3">
-              <h2 className="text-sm font-bold text-zinc-300 flex items-center gap-2">
+              <h2 className="text-sm font-bold text-gray-600 flex items-center gap-2">
                 🔴 Kill signals
-                <span className="text-xs font-normal text-zinc-600">
+                <span className="text-xs font-normal text-gray-400">
                   ({kills.length})
                 </span>
               </h2>
@@ -221,7 +221,7 @@ export default function AIRecommendationsPage() {
                   <InsightCard
                     key={item.product_title + "-kill"}
                     item={item}
-                    bgClass="bg-red-950/20 border-red-500/30"
+                    bgClass="bg-red-50 border-red-500/30"
                   />
                 ))}
               </div>
@@ -231,9 +231,9 @@ export default function AIRecommendationsPage() {
           {/* Scale opportunities */}
           {scales.length > 0 && (
             <section className="space-y-3">
-              <h2 className="text-sm font-bold text-zinc-300 flex items-center gap-2">
+              <h2 className="text-sm font-bold text-gray-600 flex items-center gap-2">
                 🚀 Scale opportunities
-                <span className="text-xs font-normal text-zinc-600">
+                <span className="text-xs font-normal text-gray-400">
                   ({scales.length})
                 </span>
               </h2>
@@ -242,7 +242,7 @@ export default function AIRecommendationsPage() {
                   <InsightCard
                     key={item.product_title + "-scale"}
                     item={item}
-                    bgClass="bg-emerald-950/20 border-emerald-500/30"
+                    bgClass="bg-emerald-50 border-emerald-500/30"
                   />
                 ))}
               </div>
@@ -252,9 +252,9 @@ export default function AIRecommendationsPage() {
           {/* All recommendations */}
           <section className="space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-3">
-              <h2 className="text-sm font-bold text-zinc-300">
+              <h2 className="text-sm font-bold text-gray-600">
                 All recommendations
-                <span className="text-xs font-normal text-zinc-600 ml-2">
+                <span className="text-xs font-normal text-gray-400 ml-2">
                   ({sorted.length})
                 </span>
               </h2>
@@ -266,8 +266,8 @@ export default function AIRecommendationsPage() {
                     onClick={() => setSortLabel(l)}
                     className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-all ${
                       sortLabel === l
-                        ? "bg-white/10 text-white"
-                        : "text-zinc-600 hover:text-zinc-400"
+                        ? "bg-black/10 text-gray-900"
+                        : "text-gray-400 hover:text-gray-500"
                     }`}
                   >
                     {l}
@@ -276,7 +276,7 @@ export default function AIRecommendationsPage() {
               </div>
             </div>
             {sorted.length === 0 ? (
-              <div className="rounded-2xl bg-white/3 border border-white/5 p-8 text-center text-zinc-600 text-sm">
+              <div className="rounded-2xl bg-black/3 border border-black/5 p-8 text-center text-gray-400 text-sm">
                 No products with label "{sortLabel}".
               </div>
             ) : (
@@ -285,7 +285,7 @@ export default function AIRecommendationsPage() {
                   <InsightCard
                     key={item.product_title + "-all"}
                     item={item}
-                    bgClass="bg-white/3 border-white/5"
+                    bgClass="bg-black/3 border-black/5"
                   />
                 ))}
               </div>
