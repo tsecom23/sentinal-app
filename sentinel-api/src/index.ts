@@ -743,13 +743,22 @@ export default {
       const clicks = (adsRow?.clicks as number) ?? 0;
       const impressions = (adsRow?.impressions as number) ?? 0;
 
-      // Per-channel UTM attribution
-      const facebookRevenue = fx((utmRow?.facebookRevenue as number) ?? 0);
-      const googleRevenue   = fx((utmRow?.googleRevenue as number) ?? 0);
-      const googleRoas      = googleAdSpend > 0 ? googleRevenue / googleAdSpend : 0;
-      const metaRoas        = metaAdSpend > 0 ? facebookRevenue / metaAdSpend : 0;
-      const googleProfit    = googleRevenue - googleAdSpend - (googleRevenue / (grossRevenue || 1)) * productCost;
-      const metaProfit      = facebookRevenue - metaAdSpend - (facebookRevenue / (grossRevenue || 1)) * productCost;
+      // Per-channel revenue: use UTM if available, else proportional spend-based estimate
+      const facebookRevenueUtm = fx((utmRow?.facebookRevenue as number) ?? 0);
+      const googleRevenueUtm   = fx((utmRow?.googleRevenue as number) ?? 0);
+      const hasUtm = facebookRevenueUtm > 0 || googleRevenueUtm > 0;
+
+      // Proportional fallback: split total revenue by spend ratio
+      const googleSpendShare    = totalAdSpend > 0 ? googleAdSpend / totalAdSpend : (googleAdSpend > 0 ? 1 : 0);
+      const metaSpendShare      = totalAdSpend > 0 ? metaAdSpend   / totalAdSpend : (metaAdSpend   > 0 ? 1 : 0);
+      const facebookRevenue     = hasUtm ? facebookRevenueUtm : Math.round(netRevenue * metaSpendShare   * 100) / 100;
+      const googleRevenue       = hasUtm ? googleRevenueUtm   : Math.round(netRevenue * googleSpendShare * 100) / 100;
+      const revenueIsEstimated  = !hasUtm && totalAdSpend > 0;
+
+      const googleRoas   = googleAdSpend > 0 ? googleRevenue / googleAdSpend : 0;
+      const metaRoas     = metaAdSpend   > 0 ? facebookRevenue / metaAdSpend : 0;
+      const googleProfit = googleRevenue   - googleAdSpend - (googleRevenue   / (netRevenue || 1)) * productCost;
+      const metaProfit   = facebookRevenue - metaAdSpend   - (facebookRevenue / (netRevenue || 1)) * productCost;
 
       // Break-even ROAS: the minimum ROAS needed to cover product costs
       // Formula: breakEven = revenue / (revenue - productCost) = 1 / gross_margin
@@ -794,7 +803,7 @@ export default {
         orders, adSpend, googleAdSpend, metaAdSpend, productCost,
         returnAmount, returnCount, disputeAmount, disputeCount,
         profit, aov, roas, breakEvenRoas, returnRate, cpc, ctr, clicks, impressions,
-        googleRevenue, facebookRevenue, googleRoas, metaRoas, googleProfit, metaProfit,
+        googleRevenue, facebookRevenue, googleRoas, metaRoas, googleProfit, metaProfit, revenueIsEstimated,
         sessions: 0, cvr: 0,
         revenueTrend: netRevenueTrend,
         currency: "EUR", storeCurrency, fxRate,

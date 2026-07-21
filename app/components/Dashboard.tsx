@@ -43,6 +43,7 @@ type Overview = {
   googleRevenue: number; facebookRevenue: number;
   googleRoas: number; metaRoas: number;
   googleProfit: number; metaProfit: number;
+  revenueIsEstimated?: boolean;
   revenueTrend: { day: string; revenue: number; profit: number; googleSpend?: number; metaSpend?: number }[];
 };
 
@@ -209,9 +210,10 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
   const cpc          = ov?.cpc          ?? 0;
   const ctr          = ov?.ctr          ?? 0;
   const clicks       = ov?.clicks       ?? 0;
-  const hasMetaData  = metaAdSpend > 0;
+  const hasMetaData   = metaAdSpend > 0;
   const hasGoogleData = googleAdSpend > 0;
   const hasChannelSplit = hasMetaData || hasGoogleData;
+  const revenueIsEstimated = ov?.revenueIsEstimated ?? false;
 
   // Per-channel derived values
   const googleRevenue  = ov?.googleRevenue   ?? 0;
@@ -418,9 +420,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
           </button>
           {adChannel !== "combined" && (
             <span className="ml-2 text-[10px] text-gray-400">
-              {adChannel === "google"
-                ? googleRevenue > 0 ? `€${fmt(googleRevenue)} attributed via UTM` : "Enter Google spend via ✎ in the Ad Spend card"
-                : facebookRevenue > 0 ? `€${fmt(facebookRevenue)} attributed via UTM` : "Enter Meta spend via ✎ in the Ad Spend card"}
+              {revenueIsEstimated ? "Revenue is spend-weighted estimate — UTM attribution not yet available" : "Revenue attributed via UTM"}
             </span>
           )}
         </div>
@@ -433,7 +433,9 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
           value={`€${fmt(revenue)}`}
           sub={adChannel === "combined"
             ? (returnAmount > 0 ? `Gross €${fmt(grossRevenue)} − €${fmt(returnAmount)} returns` : `AOV €${fmt(aov)}`)
-            : (revenue > 0 ? `UTM attributed · ${((revenue / (netRevTotal || 1)) * 100).toFixed(0)}% of total revenue` : "No UTM data yet")}
+            : revenueIsEstimated
+              ? `~estimated (${((revenue / (netRevTotal || 1)) * 100).toFixed(0)}% spend share) · no UTM data yet`
+              : `UTM attributed · ${((revenue / (netRevTotal || 1)) * 100).toFixed(0)}% of total`}
           accent="blue"
           loading={loading}
         />
