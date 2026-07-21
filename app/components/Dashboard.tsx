@@ -145,14 +145,18 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
           .sort(([a], [b]) => a.localeCompare(b))
           .map(([day, v]) => ({ day, ...v }));
 
+        const totalGoogleAds = results.reduce((s, r) => s + (r.ov.googleAdSpend ?? 0), 0);
+        const totalMetaAds   = results.reduce((s, r) => s + (r.ov.metaAdSpend ?? 0), 0);
         setOverview({
           revenue: totalRevenue, grossRevenue: totalGross, netRevenue: totalRevenue,
-          orders: totalOrders, adSpend: totalAds, productCost: totalCost,
+          orders: totalOrders, adSpend: totalAds, googleAdSpend: totalGoogleAds, metaAdSpend: totalMetaAds,
+          productCost: totalCost,
           profit: totalProfit, aov: totalOrders > 0 ? totalRevenue / totalOrders : 0,
           roas: totalRoas, breakEvenRoas: beRoas,
           returnAmount: totalReturn, returnCount: totalReturnC,
           returnRate: totalOrders > 0 ? (totalReturnC / totalOrders) * 100 : 0,
           disputeAmount: 0, disputeCount: 0, cpc: 0, ctr: 0, clicks: 0, impressions: 0,
+          googleRevenue: 0, facebookRevenue: 0, googleRoas: 0, metaRoas: 0, googleProfit: 0, metaProfit: 0,
           revenueTrend,
         });
         setAlerts([]); setProducts([]); setMilestones(null);
