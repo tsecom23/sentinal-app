@@ -1,8 +1,0 @@
-CREATE TABLE IF NOT EXISTS ads_daily (
-  id TEXT PRIMARY KEY,
-  date TEXT NOT NULL,
-  spend REAL DEFAULT 0,
-  clicks INTEGER DEFAULT 0,
-  impressions INTEGER DEFAULT 0,
-  conversions REAL DEFAULT 0
-);

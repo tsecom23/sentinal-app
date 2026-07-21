@@ -276,6 +276,14 @@ const MIGRATIONS = [
   `ALTER TABLE disputes ADD COLUMN source_platform TEXT DEFAULT 'stripe'`,
   `ALTER TABLE disputes ADD COLUMN dispute_type TEXT DEFAULT 'dispute'`,
   `ALTER TABLE returns ADD COLUMN tracking_number TEXT DEFAULT ''`,
+  `CREATE TABLE IF NOT EXISTS meta_ads_daily (
+    id TEXT PRIMARY KEY, store_id TEXT, date TEXT NOT NULL,
+    spend REAL DEFAULT 0, clicks INTEGER DEFAULT 0,
+    impressions INTEGER DEFAULT 0, conversions REAL DEFAULT 0,
+    cpc REAL DEFAULT 0, ctr REAL DEFAULT 0, roas REAL DEFAULT 0,
+    country TEXT DEFAULT '')`,
+  `ALTER TABLE orders ADD COLUMN utm_source TEXT DEFAULT ''`,
+  `ALTER TABLE orders ADD COLUMN utm_medium TEXT DEFAULT ''`,
 ];
 
 async function runMigrations(db: D1Database) {
@@ -600,7 +608,7 @@ export default {
       const ob  = <T extends unknown[]>(base: T) => (country ? [...base, country] : base) as unknown[];
       const ab  = <T extends unknown[]>(base: T) => (country ? [...base, country] : base) as unknown[];
 
-      const [overview, costRow, adsRow, returnsRow, disputesRow, trend, returnsTrend, adsTrend] = await Promise.all([
+      const [overview, costRow, adsRow, metaAdsRow, utmRow, returnsRow, disputesRow, trend, returnsTrend, adsTrend, metaAdsTrend] = await Promise.all([
         env.DB.prepare(`
           SELECT COUNT(*) as orders,
                  COALESCE(SUM(revenue),0) as revenue,
@@ -647,6 +655,28 @@ export default {
         `).bind(...ab([storeId, start, end])).first(),
 
         env.DB.prepare(`
+          SELECT COALESCE(SUM(spend),0) as metaSpend,
+                 COALESCE(SUM(clicks),0) as metaClicks,
+                 COALESCE(SUM(impressions),0) as metaImpressions
+          FROM meta_ads_daily
+          WHERE store_id=? AND date>=? AND date<=? ${adsCC}
+        `).bind(...ab([storeId, start, end])).first(),
+
+        env.DB.prepare(`
+          SELECT
+            COALESCE(SUM(CASE WHEN LOWER(utm_source) LIKE '%facebook%' OR LOWER(utm_source) LIKE '%instagram%' OR LOWER(utm_source)='fb' THEN revenue ELSE 0 END),0) as facebookRevenue,
+            COALESCE(SUM(CASE WHEN LOWER(utm_source) LIKE '%google%' THEN revenue ELSE 0 END),0) as googleRevenue
+          FROM (
+            SELECT MAX(revenue) as revenue, utm_source
+            FROM orders
+            WHERE store_id=? AND substr(created_at,1,10)>=? AND substr(created_at,1,10)<=?
+              ${orderCC}
+              AND financial_status NOT IN ('refunded','voided','cancelled')
+            GROUP BY COALESCE(shopify_order_id, id), utm_source
+          )
+        `).bind(...ob([storeId, start, end])).first(),
+
+        env.DB.prepare(`
           SELECT COALESCE(SUM(amount),0) as returnAmount, COUNT(*) as returnCount
           FROM returns
           WHERE store_id=? AND substr(created_at,1,10)>=? AND substr(created_at,1,10)<=?
@@ -682,12 +712,22 @@ export default {
           WHERE store_id=? AND date>=? AND date<=? ${adsCC}
           GROUP BY date
         `).bind(...ab([storeId, start, end])).all(),
+
+        // Daily Meta ad spend
+        env.DB.prepare(`
+          SELECT date as day, COALESCE(SUM(spend),0) as metaSpend
+          FROM meta_ads_daily
+          WHERE store_id=? AND date>=? AND date<=? ${adsCC}
+          GROUP BY date
+        `).bind(...ab([storeId, start, end])).all(),
       ]);
 
       // Revenue values come from orders stored in store's local currency — apply FX to get EUR
       const grossRevenue = fx((overview?.revenue as number) ?? 0);
       const orders = (overview?.orders as number) ?? 0;
-      const adSpend = (adsRow?.adSpend as number) ?? 0;          // ad spend is already in EUR
+      const googleAdSpend = (adsRow?.adSpend as number) ?? 0;
+      const metaAdSpend   = (metaAdsRow?.metaSpend as number) ?? 0;
+      const adSpend = googleAdSpend + metaAdSpend;
       const productCost = fx((costRow?.productCost as number) ?? 0); // COGs entered in store currency
       const returnAmount = fx((returnsRow?.returnAmount as number) ?? 0);
       const returnCount = (returnsRow?.returnCount as number) ?? 0;
@@ -702,6 +742,14 @@ export default {
       const ctr = (adsRow?.ctr as number) ?? 0;
       const clicks = (adsRow?.clicks as number) ?? 0;
       const impressions = (adsRow?.impressions as number) ?? 0;
+
+      // Per-channel UTM attribution
+      const facebookRevenue = fx((utmRow?.facebookRevenue as number) ?? 0);
+      const googleRevenue   = fx((utmRow?.googleRevenue as number) ?? 0);
+      const googleRoas      = googleAdSpend > 0 ? googleRevenue / googleAdSpend : 0;
+      const metaRoas        = metaAdSpend > 0 ? facebookRevenue / metaAdSpend : 0;
+      const googleProfit    = googleRevenue - googleAdSpend - (googleRevenue / (grossRevenue || 1)) * productCost;
+      const metaProfit      = facebookRevenue - metaAdSpend - (facebookRevenue / (grossRevenue || 1)) * productCost;
 
       // Break-even ROAS: the minimum ROAS needed to cover product costs
       // Formula: breakEven = revenue / (revenue - productCost) = 1 / gross_margin
@@ -722,24 +770,31 @@ export default {
       for (const r of (adsTrend.results ?? []) as { day: string; adSpend: number }[]) {
         adsMap.set(r.day, r.adSpend);
       }
+      const metaAdsMap = new Map<string, number>();
+      for (const r of (metaAdsTrend.results ?? []) as { day: string; metaSpend: number }[]) {
+        metaAdsMap.set(r.day, r.metaSpend);
+      }
 
       // Build trend with both revenue and daily profit estimate (revenue converted to EUR)
       const netRevenueTrend = (trend.results ?? []).map((r) => {
         const row = r as { day: string; revenue: number };
         const dayRevenue = Math.max(0, fx(row.revenue) - (returnsMap.get(row.day) ?? 0));
-        const dayAdSpend = adsMap.get(row.day) ?? 0;
+        const dayGoogleSpend = adsMap.get(row.day) ?? 0;
+        const dayMetaSpend = metaAdsMap.get(row.day) ?? 0;
+        const dayAdSpend = dayGoogleSpend + dayMetaSpend;
         const dayProductCost = dayRevenue * costRatio;
         const dayProfit = Math.round((dayRevenue - dayAdSpend - dayProductCost) * 100) / 100;
-        return { day: row.day, revenue: dayRevenue, profit: dayProfit };
+        return { day: row.day, revenue: dayRevenue, profit: dayProfit, googleSpend: dayGoogleSpend, metaSpend: dayMetaSpend };
       });
 
       return json({
         revenue: netRevenue,
         grossRevenue,
         netRevenue,
-        orders, adSpend, productCost,
+        orders, adSpend, googleAdSpend, metaAdSpend, productCost,
         returnAmount, returnCount, disputeAmount, disputeCount,
         profit, aov, roas, breakEvenRoas, returnRate, cpc, ctr, clicks, impressions,
+        googleRevenue, facebookRevenue, googleRoas, metaRoas, googleProfit, metaProfit,
         sessions: 0, cvr: 0,
         revenueTrend: netRevenueTrend,
         currency: "EUR", storeCurrency, fxRate,
@@ -1401,6 +1456,48 @@ export default {
       return json({ ok: true, imported: count });
     }
 
+    // ── POST /api/meta/import ─────────────────────────────────────────────────
+    if (path === "/api/meta/import" && method === "POST") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const body = await request.json() as any;
+      const force = body.force === true;
+      const rows = body.rows as Array<{
+        store_id: string; date: string; spend: number; clicks?: number;
+        impressions?: number; conversions?: number; cpc?: number; ctr?: number; roas?: number;
+        country?: string;
+      }>;
+      let count = 0;
+      for (const row of rows ?? []) {
+        const country = row.country ?? "";
+        const id = country ? `meta-${row.store_id}-${row.date}-${country}` : `meta-${row.store_id}-${row.date}`;
+        if (force) {
+          await env.DB.prepare(`
+            INSERT OR REPLACE INTO meta_ads_daily
+              (id,store_id,date,country,spend,clicks,impressions,conversions,cpc,ctr,roas)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+          `).bind(id, row.store_id, row.date, country, row.spend, row.clicks ?? 0,
+                  row.impressions ?? 0, row.conversions ?? 0, row.cpc ?? 0, row.ctr ?? 0, row.roas ?? 0).run();
+        } else {
+          await env.DB.prepare(`
+            INSERT INTO meta_ads_daily
+              (id,store_id,date,country,spend,clicks,impressions,conversions,cpc,ctr,roas)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(id) DO UPDATE SET
+              spend       = CASE WHEN excluded.spend > spend THEN excluded.spend ELSE spend END,
+              clicks      = excluded.clicks,
+              impressions = excluded.impressions,
+              conversions = excluded.conversions,
+              cpc         = excluded.cpc,
+              ctr         = excluded.ctr,
+              roas        = excluded.roas
+          `).bind(id, row.store_id, row.date, country, row.spend, row.clicks ?? 0,
+                  row.impressions ?? 0, row.conversions ?? 0, row.cpc ?? 0, row.ctr ?? 0, row.roas ?? 0).run();
+        }
+        count++;
+      }
+      return json({ ok: true, imported: count });
+    }
+
     // ── POST /api/webhooks/shopify/orders-create ──────────────────────────────
     if (path === "/api/webhooks/shopify/orders-create" && method === "POST") {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1501,18 +1598,31 @@ export default {
           const customerCountry = o.billing_address?.country_code ?? o.shipping_address?.country_code ?? "";
           const firstFulfillment = (o.fulfillments ?? [])[0];
 
+          // Extract UTM attribution from landing_site URL
+          let utmSource = "";
+          let utmMedium = "";
+          const landingSite: string = o.landing_site ?? o.referring_site ?? "";
+          if (landingSite) {
+            try {
+              const qs = new URLSearchParams(landingSite.includes("?") ? landingSite.split("?")[1] : landingSite);
+              utmSource = qs.get("utm_source") ?? "";
+              utmMedium = qs.get("utm_medium") ?? "";
+            } catch { /* ignore */ }
+          }
+
           await env.DB.prepare(`
             INSERT OR REPLACE INTO orders
               (id,shopify_order_id,order_number,email,currency,revenue,net_revenue,created_at,store_id,
                customer_name,customer_phone,customer_city,customer_country,
-               financial_status,fulfillment_status,tracking_number,tracking_url)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+               financial_status,fulfillment_status,tracking_number,tracking_url,utm_source,utm_medium)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
           `).bind(orderId, orderId, String(o.order_number ?? ""), o.email ?? "",
                   o.currency ?? "EUR", revenue, netRevenue,
                   o.created_at ?? new Date().toISOString(), store_id,
                   customerName, customerPhone, customerCity, customerCountry,
                   o.cancelled_at ? "cancelled" : (o.financial_status ?? "paid"), o.fulfillment_status ?? "unfulfilled",
-                  firstFulfillment?.tracking_number ?? "", firstFulfillment?.tracking_url ?? "").run();
+                  firstFulfillment?.tracking_number ?? "", firstFulfillment?.tracking_url ?? "",
+                  utmSource, utmMedium).run();
 
           for (const item of o.line_items ?? []) {
             await env.DB.prepare(`
