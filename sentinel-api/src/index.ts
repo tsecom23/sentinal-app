@@ -743,17 +743,10 @@ export default {
       const clicks = (adsRow?.clicks as number) ?? 0;
       const impressions = (adsRow?.impressions as number) ?? 0;
 
-      // Per-channel revenue: use UTM if available, else proportional spend-based estimate
-      const facebookRevenueUtm = fx((utmRow?.facebookRevenue as number) ?? 0);
-      const googleRevenueUtm   = fx((utmRow?.googleRevenue as number) ?? 0);
-      const hasUtm = facebookRevenueUtm > 0 || googleRevenueUtm > 0;
-
-      // Proportional fallback: split total revenue by spend ratio
-      const googleSpendShare    = totalAdSpend > 0 ? googleAdSpend / totalAdSpend : (googleAdSpend > 0 ? 1 : 0);
-      const metaSpendShare      = totalAdSpend > 0 ? metaAdSpend   / totalAdSpend : (metaAdSpend   > 0 ? 1 : 0);
-      const facebookRevenue     = hasUtm ? facebookRevenueUtm : Math.round(netRevenue * metaSpendShare   * 100) / 100;
-      const googleRevenue       = hasUtm ? googleRevenueUtm   : Math.round(netRevenue * googleSpendShare * 100) / 100;
-      const revenueIsEstimated  = !hasUtm && totalAdSpend > 0;
+      // Per-channel revenue: Facebook = UTM-attributed, Google = everything else
+      const facebookRevenue    = fx((utmRow?.facebookRevenue as number) ?? 0);
+      const googleRevenue      = Math.max(0, netRevenue - facebookRevenue);
+      const revenueIsEstimated = false;
 
       const googleRoas   = googleAdSpend > 0 ? googleRevenue / googleAdSpend : 0;
       const metaRoas     = metaAdSpend   > 0 ? facebookRevenue / metaAdSpend : 0;
