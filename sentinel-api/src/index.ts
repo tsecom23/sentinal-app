@@ -69,6 +69,88 @@ async function syncCancellations(env: Env, storeId?: string): Promise<number> {
   return marked;
 }
 
+async function syncRecentOrders(env: Env): Promise<number> {
+  const stores = (await env.DB.prepare(
+    `SELECT id, shopify_domain, shopify_access_token FROM stores`
+  ).all()).results as Array<{ id: string; shopify_domain: string; shopify_access_token: string }>;
+
+  let imported = 0;
+  for (const store of stores) {
+    if (!store.shopify_domain || !store.shopify_access_token) continue;
+    const since = new Date();
+    since.setDate(since.getDate() - 2);
+    const sinceIso = since.toISOString();
+    const base = `https://${store.shopify_domain}/admin/api/2024-01`;
+    const headers = { "X-Shopify-Access-Token": store.shopify_access_token, "Content-Type": "application/json" };
+
+    let pageInfo: string | null = null;
+    for (let page = 0; page < 10; page++) {
+      const qs = pageInfo
+        ? `page_info=${pageInfo}&limit=250`
+        : `limit=250&status=any&created_at_min=${sinceIso}&order=created_at+asc`;
+      const res = await fetch(`${base}/orders.json?${qs}`, { headers });
+      if (!res.ok) break;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = await res.json() as any;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const orders: any[] = data.orders ?? [];
+      if (orders.length === 0) break;
+
+      for (const o of orders) {
+        const orderId = String(o.id);
+        const revenue = parseFloat(o.total_price ?? "0");
+        const netRevenue = parseFloat(o.subtotal_price ?? String(revenue));
+        const customerName = `${o.customer?.first_name ?? ""} ${o.customer?.last_name ?? ""}`.trim();
+        const customerPhone = o.customer?.phone ?? o.billing_address?.phone ?? "";
+        const customerCity = o.billing_address?.city ?? o.shipping_address?.city ?? "";
+        const customerCountry = o.billing_address?.country_code ?? o.shipping_address?.country_code ?? "";
+        const firstFulfillment = (o.fulfillments ?? [])[0];
+        let utmSource = "";
+        let utmMedium = "";
+        const landingSite: string = o.landing_site ?? o.referring_site ?? "";
+        if (landingSite) {
+          try {
+            const lqs = new URLSearchParams(landingSite.includes("?") ? landingSite.split("?")[1] : landingSite);
+            utmSource = lqs.get("utm_source") ?? "";
+            utmMedium = lqs.get("utm_medium") ?? "";
+          } catch { /* ignore */ }
+        }
+
+        await env.DB.prepare(`
+          INSERT OR REPLACE INTO orders
+            (id,shopify_order_id,order_number,email,currency,revenue,net_revenue,created_at,store_id,
+             customer_name,customer_phone,customer_city,customer_country,
+             financial_status,fulfillment_status,tracking_number,tracking_url,utm_source,utm_medium)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        `).bind(orderId, orderId, String(o.order_number ?? ""), o.email ?? "",
+                o.currency ?? "EUR", revenue, netRevenue,
+                o.created_at ?? new Date().toISOString(), store.id,
+                customerName, customerPhone, customerCity, customerCountry,
+                o.cancelled_at ? "cancelled" : (o.financial_status ?? "paid"), o.fulfillment_status ?? "unfulfilled",
+                firstFulfillment?.tracking_number ?? "", firstFulfillment?.tracking_url ?? "",
+                utmSource, utmMedium).run();
+
+        for (const item of o.line_items ?? []) {
+          await env.DB.prepare(`
+            INSERT OR REPLACE INTO order_items
+              (id,order_id,product_id,variant_id,product_title,variant_title,quantity,revenue,cost,store_id)
+            VALUES (?,?,?,?,?,?,?,?,?,?)
+          `).bind(`${orderId}-item-${item.id}`, orderId, String(item.product_id ?? ""),
+                  String(item.variant_id ?? ""), item.title ?? "", item.variant_title ?? "",
+                  item.quantity ?? 1, parseFloat(item.price ?? "0") * (item.quantity ?? 1) - parseFloat(item.total_discount ?? "0"),
+                  0, store.id).run();
+        }
+        imported++;
+      }
+
+      const link = res.headers.get("Link") ?? "";
+      const next = link.match(/page_info=([^&>]+)[^>]*>;\s*rel="next"/);
+      if (next) { pageInfo = next[1]; } else { break; }
+    }
+  }
+  return imported;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getAmsterdamDate(offsetDays = 0): string {
@@ -284,6 +366,7 @@ const MIGRATIONS = [
     country TEXT DEFAULT '')`,
   `ALTER TABLE orders ADD COLUMN utm_source TEXT DEFAULT ''`,
   `ALTER TABLE orders ADD COLUMN utm_medium TEXT DEFAULT ''`,
+  `ALTER TABLE meta_ads_daily ADD COLUMN conversion_value REAL DEFAULT 0`,
 ];
 
 async function runMigrations(db: D1Database) {
@@ -577,7 +660,7 @@ export default {
       const body = await request.json() as { name?: string; shopify_domain?: string; shopify_access_token?: string; google_ads_customer_id?: string; currency?: string };
       await env.DB.prepare(
         `UPDATE stores SET name=COALESCE(?,name), shopify_domain=COALESCE(?,shopify_domain), shopify_access_token=COALESCE(?,shopify_access_token), google_ads_customer_id=COALESCE(?,google_ads_customer_id), currency=COALESCE(?,currency) WHERE id=?`
-      ).bind(body.name ?? null, body.shopify_domain ?? null, body.shopify_access_token ?? null, body.google_ads_customer_id ?? null, body.currency ?? null, id).run();
+      ).bind(body.name || null, body.shopify_domain || null, body.shopify_access_token || null, body.google_ads_customer_id || null, body.currency || null, id).run();
       const store = await env.DB.prepare(`SELECT * FROM stores WHERE id=?`).bind(id).first();
       return json({ ok: true, store });
     }
@@ -602,11 +685,36 @@ export default {
       const fx = (v: number) => Math.round(v * fxRate * 100) / 100;
 
       // Optional per-country filter (e.g. ?country=FR for CEOFO)
-      const country = url.searchParams.get("country") || "";
-      const orderCC   = country ? "AND customer_country=?" : "";
-      const adsCC     = country ? "AND country=?" : "AND (country='' OR country IS NULL)";
+      const country  = url.searchParams.get("country")  || "";
+      const campaign = url.searchParams.get("campaign") || "";
+      const orderCC  = country ? "AND customer_country=?" : "";
+      // Google Ads filter (has campaign column)
+      const googleCC = country
+        ? (campaign ? "AND country=? AND campaign=?" : "AND country=? AND (campaign='' OR campaign IS NULL)")
+        : (campaign ? "AND (country='' OR country IS NULL) AND campaign=?" : "AND (country='' OR country IS NULL) AND (campaign='' OR campaign IS NULL)");
+      // Meta Ads filter (no campaign column)
+      const metaCC   = country ? "AND country=?" : "AND (country='' OR country IS NULL)";
       const ob  = <T extends unknown[]>(base: T) => (country ? [...base, country] : base) as unknown[];
-      const ab  = <T extends unknown[]>(base: T) => (country ? [...base, country] : base) as unknown[];
+      const gb  = <T extends unknown[]>(base: T) => {
+        const b = (country ? [...base, country] : [...base]) as unknown[];
+        return (campaign ? [...b, campaign] : b) as unknown[];
+      };
+      const mb  = <T extends unknown[]>(base: T) => (country ? [...base, country] : base) as unknown[];
+
+      // Campaign→product-category mapping: when a campaign is selected, filter revenue
+      // to only orders that contain items tagged with the matching category.
+      const CAMPAIGN_CATEGORY_MAP: Record<string, string> = {
+        "fashion": "fashion",
+        "home & decor": "home",
+        "home decor": "home",
+        "home": "home",
+      };
+      const productCategory = campaign ? (CAMPAIGN_CATEGORY_MAP[campaign.toLowerCase()] ?? "") : "";
+      // Category filter: join order_items with product_costs to filter by tag
+      const catJoin  = productCategory ? `JOIN product_costs _pc ON _pc.product_title = oi.product_title AND _pc.store_id = o.store_id AND _pc.category = '${productCategory.replace(/'/g,"''")}'` : "";
+      const catExists = productCategory
+        ? `AND EXISTS (SELECT 1 FROM order_items _oi JOIN product_costs _pc ON _pc.product_title = _oi.product_title AND _pc.store_id = o.store_id WHERE _oi.order_id = o.id AND _pc.category = '${productCategory.replace(/'/g,"''")}' )`
+        : "";
 
       const [overview, costRow, adsRow, metaAdsRow, utmRow, returnsRow, disputesRow, trend, returnsTrend, adsTrend, metaAdsTrend] = await Promise.all([
         env.DB.prepare(`
@@ -615,10 +723,10 @@ export default {
                  COALESCE(SUM(net_revenue),0) as netRevenue
           FROM (
             SELECT MAX(revenue) as revenue, MAX(net_revenue) as net_revenue
-            FROM orders
-            WHERE store_id=? AND substr(created_at,1,10)>=? AND substr(created_at,1,10)<=?
-            ${orderCC}
-            GROUP BY COALESCE(shopify_order_id, id)
+            FROM orders o
+            WHERE o.store_id=? AND substr(o.created_at,1,10)>=? AND substr(o.created_at,1,10)<=?
+            ${orderCC} ${catExists}
+            GROUP BY COALESCE(o.shopify_order_id, o.id)
           )
         `).bind(...ob([storeId, start, end])).first(),
 
@@ -633,6 +741,7 @@ export default {
           WHERE o.store_id=? AND substr(o.created_at,1,10)>=? AND substr(o.created_at,1,10)<=?
             ${orderCC}
             AND o.revenue > 0
+            ${productCategory ? `AND pc.category = '${productCategory.replace(/'/g,"''")}'` : ""}
             AND NOT EXISTS (
               SELECT 1 FROM orders o2
               WHERE o2.shopify_order_id = o.shopify_order_id
@@ -651,30 +760,20 @@ export default {
                  CASE WHEN SUM(clicks)>0 THEN SUM(spend)/SUM(clicks) ELSE 0 END as cpc,
                  CASE WHEN SUM(impressions)>0 THEN CAST(SUM(clicks) AS REAL)/SUM(impressions)*100 ELSE 0 END as ctr
           FROM google_ads_daily
-          WHERE store_id=? AND date>=? AND date<=? ${adsCC}
-        `).bind(...ab([storeId, start, end])).first(),
+          WHERE store_id=? AND date>=? AND date<=? ${googleCC}
+        `).bind(...gb([storeId, start, end])).first(),
 
         env.DB.prepare(`
           SELECT COALESCE(SUM(spend),0) as metaSpend,
                  COALESCE(SUM(clicks),0) as metaClicks,
-                 COALESCE(SUM(impressions),0) as metaImpressions
+                 COALESCE(SUM(impressions),0) as metaImpressions,
+                 COALESCE(SUM(conversion_value),0) as metaConversionValue
           FROM meta_ads_daily
-          WHERE store_id=? AND date>=? AND date<=? ${adsCC}
-        `).bind(...ab([storeId, start, end])).first(),
+          WHERE store_id=? AND date>=? AND date<=? ${metaCC}
+        `).bind(...mb([storeId, start, end])).first(),
 
-        env.DB.prepare(`
-          SELECT
-            COALESCE(SUM(CASE WHEN LOWER(utm_source) LIKE '%facebook%' OR LOWER(utm_source) LIKE '%instagram%' OR LOWER(utm_source)='fb' THEN revenue ELSE 0 END),0) as facebookRevenue,
-            COALESCE(SUM(CASE WHEN LOWER(utm_source) LIKE '%google%' THEN revenue ELSE 0 END),0) as googleRevenue
-          FROM (
-            SELECT MAX(revenue) as revenue, utm_source
-            FROM orders
-            WHERE store_id=? AND substr(created_at,1,10)>=? AND substr(created_at,1,10)<=?
-              ${orderCC}
-              AND financial_status NOT IN ('refunded','voided','cancelled')
-            GROUP BY COALESCE(shopify_order_id, id), utm_source
-          )
-        `).bind(...ob([storeId, start, end])).first(),
+        // Placeholder — keep position in destructured array (utmRow no longer used for revenue)
+        Promise.resolve(null),
 
         env.DB.prepare(`
           SELECT COALESCE(SUM(amount),0) as returnAmount, COUNT(*) as returnCount
@@ -690,11 +789,11 @@ export default {
 
         env.DB.prepare(`
           SELECT day, COALESCE(SUM(revenue),0) as revenue FROM (
-            SELECT substr(created_at,1,10) as day, MAX(revenue) as revenue
-            FROM orders
-            WHERE store_id=? AND substr(created_at,1,10)>=? AND substr(created_at,1,10)<=?
-            ${orderCC}
-            GROUP BY COALESCE(shopify_order_id, id)
+            SELECT substr(o.created_at,1,10) as day, MAX(o.revenue) as revenue
+            FROM orders o
+            WHERE o.store_id=? AND substr(o.created_at,1,10)>=? AND substr(o.created_at,1,10)<=?
+            ${orderCC} ${catExists}
+            GROUP BY COALESCE(o.shopify_order_id, o.id)
           ) GROUP BY day ORDER BY day ASC
         `).bind(...ob([storeId, start, end])).all(),
 
@@ -709,17 +808,17 @@ export default {
         env.DB.prepare(`
           SELECT date as day, COALESCE(SUM(spend),0) as adSpend
           FROM google_ads_daily
-          WHERE store_id=? AND date>=? AND date<=? ${adsCC}
+          WHERE store_id=? AND date>=? AND date<=? ${googleCC}
           GROUP BY date
-        `).bind(...ab([storeId, start, end])).all(),
+        `).bind(...gb([storeId, start, end])).all(),
 
         // Daily Meta ad spend
         env.DB.prepare(`
           SELECT date as day, COALESCE(SUM(spend),0) as metaSpend
           FROM meta_ads_daily
-          WHERE store_id=? AND date>=? AND date<=? ${adsCC}
+          WHERE store_id=? AND date>=? AND date<=? ${metaCC}
           GROUP BY date
-        `).bind(...ab([storeId, start, end])).all(),
+        `).bind(...mb([storeId, start, end])).all(),
       ]);
 
       // Revenue values come from orders stored in store's local currency — apply FX to get EUR
@@ -743,8 +842,8 @@ export default {
       const clicks = (adsRow?.clicks as number) ?? 0;
       const impressions = (adsRow?.impressions as number) ?? 0;
 
-      // Per-channel revenue: Facebook = UTM-attributed, Google = everything else
-      const facebookRevenue    = fx((utmRow?.facebookRevenue as number) ?? 0);
+      // Per-channel revenue: Facebook = Meta pixel conversion_value, Google = everything else
+      const facebookRevenue    = (metaAdsRow?.metaConversionValue as number) ?? 0;
       const googleRevenue      = Math.max(0, netRevenue - facebookRevenue);
       const revenueIsEstimated = false;
 
@@ -1379,6 +1478,16 @@ export default {
       return json({ ok: true, id });
     }
 
+    // ── GET /api/ads/campaigns ────────────────────────────────────────────────
+    if (path === "/api/ads/campaigns" && method === "GET") {
+      const storeId = url.searchParams.get("store_id");
+      if (!storeId) return json({ error: "Missing store_id" }, 400);
+      const rows = await env.DB.prepare(
+        `SELECT DISTINCT campaign FROM google_ads_daily WHERE store_id=? AND campaign IS NOT NULL AND campaign != '' ORDER BY campaign`
+      ).bind(storeId).all();
+      return json({ campaigns: rows.results.map((r: any) => r.campaign as string) });
+    }
+
     // ── GET /api/ads/today ────────────────────────────────────────────────────
     if (path === "/api/ads/today" && method === "GET") {
       const storeId = url.searchParams.get("store_id");
@@ -1424,24 +1533,26 @@ export default {
       const rows = body.rows as Array<{
         store_id: string; date: string; spend: number; clicks: number;
         impressions: number; conversions: number; cpc: number; ctr: number; roas: number;
-        country?: string;
+        country?: string; campaign?: string;
       }>;
       let count = 0;
       for (const row of rows ?? []) {
-        const country = row.country ?? "";
-        const id = country ? `${row.store_id}-${row.date}-${country}` : `${row.store_id}-${row.date}`;
+        const country  = row.country  ?? "";
+        const campaign = row.campaign ?? "";
+        const baseId   = country ? `${row.store_id}-${row.date}-${country}` : `${row.store_id}-${row.date}`;
+        const id       = campaign ? `${baseId}~${campaign}` : baseId;
         if (force) {
           await env.DB.prepare(`
             INSERT OR REPLACE INTO google_ads_daily
-              (id,store_id,date,country,spend,clicks,impressions,conversions,cpc,ctr,roas)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)
-          `).bind(id, row.store_id, row.date, country, row.spend, row.clicks,
+              (id,store_id,date,country,campaign,spend,clicks,impressions,conversions,cpc,ctr,roas)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+          `).bind(id, row.store_id, row.date, country, campaign, row.spend, row.clicks,
                   row.impressions, row.conversions, row.cpc, row.ctr, row.roas).run();
         } else {
           await env.DB.prepare(`
             INSERT INTO google_ads_daily
-              (id,store_id,date,country,spend,clicks,impressions,conversions,cpc,ctr,roas)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+              (id,store_id,date,country,campaign,spend,clicks,impressions,conversions,cpc,ctr,roas)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(id) DO UPDATE SET
               spend       = CASE WHEN excluded.spend > spend THEN excluded.spend ELSE spend END,
               clicks      = excluded.clicks,
@@ -1450,7 +1561,7 @@ export default {
               cpc         = excluded.cpc,
               ctr         = excluded.ctr,
               roas        = excluded.roas
-          `).bind(id, row.store_id, row.date, country, row.spend, row.clicks,
+          `).bind(id, row.store_id, row.date, country, campaign, row.spend, row.clicks,
                   row.impressions, row.conversions, row.cpc, row.ctr, row.roas).run();
         }
         count++;
@@ -1465,8 +1576,8 @@ export default {
       const force = body.force === true;
       const rows = body.rows as Array<{
         store_id: string; date: string; spend: number; clicks?: number;
-        impressions?: number; conversions?: number; cpc?: number; ctr?: number; roas?: number;
-        country?: string;
+        impressions?: number; conversions?: number; conversion_value?: number;
+        cpc?: number; ctr?: number; roas?: number; country?: string;
       }>;
       let count = 0;
       for (const row of rows ?? []) {
@@ -1475,25 +1586,28 @@ export default {
         if (force) {
           await env.DB.prepare(`
             INSERT OR REPLACE INTO meta_ads_daily
-              (id,store_id,date,country,spend,clicks,impressions,conversions,cpc,ctr,roas)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+              (id,store_id,date,country,spend,clicks,impressions,conversions,conversion_value,cpc,ctr,roas)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
           `).bind(id, row.store_id, row.date, country, row.spend, row.clicks ?? 0,
-                  row.impressions ?? 0, row.conversions ?? 0, row.cpc ?? 0, row.ctr ?? 0, row.roas ?? 0).run();
+                  row.impressions ?? 0, row.conversions ?? 0, row.conversion_value ?? 0,
+                  row.cpc ?? 0, row.ctr ?? 0, row.roas ?? 0).run();
         } else {
           await env.DB.prepare(`
             INSERT INTO meta_ads_daily
-              (id,store_id,date,country,spend,clicks,impressions,conversions,cpc,ctr,roas)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+              (id,store_id,date,country,spend,clicks,impressions,conversions,conversion_value,cpc,ctr,roas)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(id) DO UPDATE SET
-              spend       = CASE WHEN excluded.spend > spend THEN excluded.spend ELSE spend END,
-              clicks      = excluded.clicks,
-              impressions = excluded.impressions,
-              conversions = excluded.conversions,
-              cpc         = excluded.cpc,
-              ctr         = excluded.ctr,
-              roas        = excluded.roas
+              spend            = CASE WHEN excluded.spend > spend THEN excluded.spend ELSE spend END,
+              clicks           = excluded.clicks,
+              impressions      = excluded.impressions,
+              conversions      = excluded.conversions,
+              conversion_value = excluded.conversion_value,
+              cpc              = excluded.cpc,
+              ctr              = excluded.ctr,
+              roas             = excluded.roas
           `).bind(id, row.store_id, row.date, country, row.spend, row.clicks ?? 0,
-                  row.impressions ?? 0, row.conversions ?? 0, row.cpc ?? 0, row.ctr ?? 0, row.roas ?? 0).run();
+                  row.impressions ?? 0, row.conversions ?? 0, row.conversion_value ?? 0,
+                  row.cpc ?? 0, row.ctr ?? 0, row.roas ?? 0).run();
         }
         count++;
       }
@@ -1540,7 +1654,7 @@ export default {
           VALUES (?,?,?,?,?,?,?,?,?,?)
         `).bind(`${orderId}-item-${item.id}`, orderId, String(item.product_id ?? ""),
                 String(item.variant_id ?? ""), item.title ?? "", item.variant_title ?? "",
-                item.quantity ?? 1, parseFloat(item.price ?? "0") * (item.quantity ?? 1),
+                item.quantity ?? 1, parseFloat(item.price ?? "0") * (item.quantity ?? 1) - parseFloat(item.total_discount ?? "0"),
                 0, storeId).run();
       }
 
@@ -1633,9 +1747,48 @@ export default {
               VALUES (?,?,?,?,?,?,?,?,?,?)
             `).bind(`${orderId}-item-${item.id}`, orderId, String(item.product_id ?? ""),
                     String(item.variant_id ?? ""), item.title ?? "", item.variant_title ?? "",
-                    item.quantity ?? 1, parseFloat(item.price ?? "0") * (item.quantity ?? 1),
+                    item.quantity ?? 1, parseFloat(item.price ?? "0") * (item.quantity ?? 1) - parseFloat(item.total_discount ?? "0"),
                     0, store_id).run();
           }
+
+          // Sync refunds: delete old combined-format records then re-insert per product
+          if ((o.refunds ?? []).length > 0) {
+            await env.DB.prepare(`DELETE FROM returns WHERE order_id=? AND store_id=? AND source_platform='shopify'`)
+              .bind(orderId, store_id).run();
+            for (const refund of o.refunds ?? []) {
+              const reason   = (refund.note ?? "Shopify refund") as string;
+              const category = classifyReason(reason);
+              const createdAt = refund.created_at ?? new Date().toISOString();
+              const refundLIs = refund.refund_line_items ?? [];
+              if (refundLIs.length > 0) {
+                for (const li of refundLIs) {
+                  const title  = li.line_item?.title ?? "Unknown";
+                  const amount = parseFloat(li.subtotal ?? "0");
+                  await env.DB.prepare(`
+                    INSERT OR REPLACE INTO returns
+                      (id,order_id,store_id,product_title,variant_title,reason,amount,status,created_at,reason_category,source_platform,event_type)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                  `).bind(`ret-shopify-${refund.id}-${li.id}`, orderId, store_id,
+                          title, li.line_item?.variant_title ?? "",
+                          reason, amount, "refunded", createdAt,
+                          category, "shopify", "refund").run();
+                }
+              } else {
+                const amount = (refund.transactions ?? []).reduce(
+                  (sum: number, t: { amount?: string }) => sum + parseFloat(t.amount ?? "0"), 0
+                );
+                await env.DB.prepare(`
+                  INSERT OR REPLACE INTO returns
+                    (id,order_id,store_id,product_title,variant_title,reason,amount,status,created_at,reason_category,source_platform,event_type)
+                  VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                `).bind(`ret-shopify-${refund.id}`, orderId, store_id,
+                        "Shipping refund", "",
+                        reason, amount, "refunded", createdAt,
+                        category, "shopify", "refund").run();
+              }
+            }
+          }
+
           imported++;
         }
 
@@ -1646,6 +1799,32 @@ export default {
       }
 
       return json({ ok: true, imported });
+    }
+
+    // ── POST /api/orders/patch-utm ─────────────────────────────────────────────
+    // Manually set utm_source/utm_medium on existing orders by order_number.
+    // Body: { store_id, updates: [{order_number, utm_source, utm_medium?}] }
+    if (path === "/api/orders/patch-utm" && method === "POST") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const body = await request.json() as any;
+      const { store_id, updates } = body;
+      if (!store_id || !Array.isArray(updates)) return json({ error: "Missing store_id or updates" }, 400);
+      let patched = 0;
+      for (const u of updates) {
+        const medium = u.utm_medium ?? "paid";
+        if (u.order_number) {
+          const r = await env.DB.prepare(
+            `UPDATE orders SET utm_source=?, utm_medium=? WHERE store_id=? AND order_number=?`
+          ).bind(u.utm_source, medium, store_id, String(u.order_number)).run();
+          patched += r.meta?.changes ?? 0;
+        } else if (u.order_id) {
+          const r = await env.DB.prepare(
+            `UPDATE orders SET utm_source=?, utm_medium=? WHERE store_id=? AND id=?`
+          ).bind(u.utm_source, medium, store_id, String(u.order_id)).run();
+          patched += r.meta?.changes ?? 0;
+        }
+      }
+      return json({ ok: true, patched });
     }
 
     // ── POST /api/webhooks/shopify/products-create ────────────────────────────
@@ -1684,34 +1863,49 @@ export default {
       const storeId = url.searchParams.get("store_id");
       if (!storeId) return json({ error: "Missing store_id" }, 400);
 
-      // Sum all transactions (handles partial refunds)
-      const amount = (body.transactions ?? []).reduce(
-        (sum: number, t: { amount?: string }) => sum + parseFloat(t.amount ?? "0"), 0
-      );
       const orderId = String(body.order_id ?? "");
-      const id = `ret-shopify-${body.id}`;
-
-      // Build product title from all refunded line items
-      const refundedTitles = (body.refund_line_items ?? [])
-        .map((l: { line_item?: { title?: string } }) => l.line_item?.title ?? "")
-        .filter(Boolean)
-        .join(", ");
-      const firstLine = body.refund_line_items?.[0];
-
       const refundReason = body.note ?? "Shopify refund";
       const refundCategory = classifyReason(refundReason);
-      await env.DB.prepare(`
-        INSERT OR REPLACE INTO returns
-          (id,order_id,store_id,product_title,variant_title,reason,amount,status,created_at,reason_category,source_platform,event_type)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-      `).bind(id, orderId, storeId,
-              refundedTitles || firstLine?.line_item?.title || "Unknown",
-              firstLine?.line_item?.variant_title ?? "",
-              refundReason, amount, "refunded",
-              body.created_at ?? new Date().toISOString(),
-              refundCategory, "shopify", "refund").run();
+      const refundLineItems = (body.refund_line_items ?? []) as Array<{
+        id: string | number;
+        subtotal?: string;
+        quantity?: number;
+        line_item?: { title?: string; variant_title?: string; price?: string };
+      }>;
 
-      return json({ ok: true, id });
+      if (refundLineItems.length > 0) {
+        // One return record per refunded product, using the actual product subtotal (excl. shipping)
+        for (const li of refundLineItems) {
+          const title  = li.line_item?.title ?? "Unknown";
+          const amount = parseFloat(li.subtotal ?? "0");
+          const liId   = `ret-shopify-${body.id}-${li.id}`;
+          await env.DB.prepare(`
+            INSERT OR REPLACE INTO returns
+              (id,order_id,store_id,product_title,variant_title,reason,amount,status,created_at,reason_category,source_platform,event_type)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+          `).bind(liId, orderId, storeId,
+                  title, li.line_item?.variant_title ?? "",
+                  refundReason, amount, "refunded",
+                  body.created_at ?? new Date().toISOString(),
+                  refundCategory, "shopify", "refund").run();
+        }
+      } else {
+        // Shipping-only refund or unknown — store as generic entry
+        const amount = (body.transactions ?? []).reduce(
+          (sum: number, t: { amount?: string }) => sum + parseFloat(t.amount ?? "0"), 0
+        );
+        await env.DB.prepare(`
+          INSERT OR REPLACE INTO returns
+            (id,order_id,store_id,product_title,variant_title,reason,amount,status,created_at,reason_category,source_platform,event_type)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+        `).bind(`ret-shopify-${body.id}`, orderId, storeId,
+                "Shipping refund", "",
+                refundReason, amount, "refunded",
+                body.created_at ?? new Date().toISOString(),
+                refundCategory, "shopify", "refund").run();
+      }
+
+      return json({ ok: true });
     }
 
     // ── POST /api/webhooks/shopify/disputes-create ────────────────────────────
@@ -1823,17 +2017,68 @@ export default {
     if (path === "/api/product-costs/bulk" && method === "POST") {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const body = await request.json() as any;
-      const items = body.items as Array<{ store_id: string; product_title: string; cost: number }>;
+      const items = body.items as Array<{ store_id: string; product_title: string; cost: number; category?: string }>;
+      let count = 0;
+      for (const item of items ?? []) {
+        const id = `${item.store_id}::${item.product_title}`;
+        const cat = item.category ?? null;
+        if (cat !== null) {
+          await env.DB.prepare(`
+            INSERT OR REPLACE INTO product_costs (id, store_id, product_title, cost, category, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `).bind(id, item.store_id, item.product_title, parseFloat(String(item.cost)) || 0, cat, new Date().toISOString()).run();
+        } else {
+          // Preserve existing category when not provided
+          await env.DB.prepare(`
+            INSERT INTO product_costs (id, store_id, product_title, cost, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET cost=excluded.cost, updated_at=excluded.updated_at
+          `).bind(id, item.store_id, item.product_title, parseFloat(String(item.cost)) || 0, new Date().toISOString()).run();
+        }
+        count++;
+      }
+      return json({ ok: true, updated: count });
+    }
+
+    // ── POST /api/product-costs/set-category ─────────────────────────────────
+    if (path === "/api/product-costs/set-category" && method === "POST") {
+      const body = await request.json() as any;
+      const items = body.items as Array<{ store_id: string; product_title: string; category: string }>;
       let count = 0;
       for (const item of items ?? []) {
         const id = `${item.store_id}::${item.product_title}`;
         await env.DB.prepare(`
-          INSERT OR REPLACE INTO product_costs (id, store_id, product_title, cost, updated_at)
-          VALUES (?, ?, ?, ?, ?)
-        `).bind(id, item.store_id, item.product_title, parseFloat(String(item.cost)) || 0, new Date().toISOString()).run();
+          INSERT INTO product_costs (id, store_id, product_title, cost, category, updated_at)
+          VALUES (?, ?, ?, 0, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET category=excluded.category, updated_at=excluded.updated_at
+        `).bind(id, item.store_id, item.product_title, item.category, new Date().toISOString()).run();
         count++;
       }
       return json({ ok: true, updated: count });
+    }
+
+    // ── GET /api/product-costs/debug ──────────────────────────────────────────
+    if (path === "/api/product-costs/debug" && method === "GET") {
+      const storeId = url.searchParams.get("store_id");
+      const like    = url.searchParams.get("like") ?? "%";
+      const rows = await env.DB.prepare(
+        `SELECT id, product_title, cost, updated_at FROM product_costs WHERE store_id=? AND product_title LIKE ? LIMIT 20`
+      ).bind(storeId, like).all();
+      return json({ rows: rows.results ?? [] });
+    }
+
+    // ── POST /api/product-costs/cleanup ───────────────────────────────────────
+    if (path === "/api/product-costs/cleanup" && method === "POST") {
+      // Remove null-id, empty-id, and encoding-drift records
+      const r1 = await env.DB.prepare(`DELETE FROM product_costs WHERE id IS NULL OR id = ''`).run();
+      const r2 = await env.DB.prepare(
+        `DELETE FROM product_costs WHERE id IS NOT NULL AND id != '' AND id != (store_id || '::' || product_title)`
+      ).run();
+      // Show remaining for verification
+      const remaining = await env.DB.prepare(
+        `SELECT id, cost, updated_at FROM product_costs WHERE product_title LIKE 'Voile%' LIMIT 10`
+      ).all();
+      return json({ deleted_null_or_empty: r1.meta?.changes ?? 0, deleted_drift: r2.meta?.changes ?? 0, remaining: remaining.results });
     }
 
     // ── GET /api/orders ───────────────────────────────────────────────────────
@@ -1944,7 +2189,7 @@ export default {
               AND o.shopify_order_id != ''
           )`;
 
-      const [orderStats, returnStats, adStats, costData, prevOrderStats, prevAdStats] = await Promise.all([
+      const [orderStats, returnStats, adStats, costData, prevOrderStats, prevAdStats, dailyAdTotals] = await Promise.all([
         env.DB.prepare(`
           SELECT oi.product_title, SUM(oi.quantity) as sold, SUM(oi.revenue) as revenue
           FROM order_items oi JOIN orders o ON oi.order_id = o.id
@@ -1990,6 +2235,13 @@ export default {
           WHERE store_id=? AND date>=? AND date<=?
           GROUP BY product_title
         `).bind(storeId, prevStart, prevEnd).all(),
+
+        // Total spend from all campaigns (daily totals, incl. Search/non-Shopping)
+        env.DB.prepare(`
+          SELECT COALESCE(SUM(spend),0) as total_spend
+          FROM google_ads_daily
+          WHERE store_id=? AND date>=? AND date<=? AND (country='' OR country IS NULL)
+        `).bind(storeId, start, end).first(),
       ]);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1997,19 +2249,27 @@ export default {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       for (const r of (returnStats.results ?? []) as any[]) returnsMap.set(r.product_title, r);
 
-      // Build aggregated ad map + fuzzy prefix lookup (Google Ads adds variant/brand to titles)
+      // Google Shopping appends brand name as "- Storename" suffix to every product title.
+      // Strip it so "Produit X - Martaline" maps to the same key as Shopify's "Produit X".
+      const BRAND_RE = /\s*-\s*(martaline|ceofo|dorevy|melvoire)\s*$/i;
+      function normAdTitle(t: string): string {
+        return t.replace(BRAND_RE, "").trim();
+      }
+
+      // Build aggregated ad map keyed by normalised title (brand stripped)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       function buildAgg(rows: any[]): Map<string, any> {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const m = new Map<string, any>();
         for (const r of rows) {
-          const ex = m.get(r.product_title);
+          const key = normAdTitle(r.product_title);
+          const ex  = m.get(key);
           if (ex) {
             ex.ad_spend       += r.ad_spend       ?? 0;
             ex.ad_clicks      += r.ad_clicks      ?? 0;
             ex.ad_impressions += r.ad_impressions ?? 0;
           } else {
-            m.set(r.product_title, { ad_spend: r.ad_spend ?? 0, ad_clicks: r.ad_clicks ?? 0, ad_impressions: r.ad_impressions ?? 0 });
+            m.set(key, { ad_spend: r.ad_spend ?? 0, ad_clicks: r.ad_clicks ?? 0, ad_impressions: r.ad_impressions ?? 0 });
           }
         }
         return m;
@@ -2019,15 +2279,13 @@ export default {
       const claimedAdTitles = new Set<string>();
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      function fuzzyFind(agg: Map<string, any>, title: string, claimed?: Set<string>): any {
-        if (agg.has(title)) {
-          claimed?.add(title);
-          return agg.get(title);
-        }
+      function fuzzyFind(agg: Map<string, any>, rawTitle: string, claimed?: Set<string>): any {
+        // Normalise the Shopify title the same way we normalised Google Ads titles
+        const title = normAdTitle(rawTitle);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const hits: any[] = [];
         for (const [k, v] of agg) {
-          if (k.startsWith(title) || title.startsWith(k)) {
+          if (k === title || k.startsWith(title) || title.startsWith(k)) {
             hits.push(v);
             claimed?.add(k);
           }
@@ -2124,7 +2382,12 @@ export default {
         });
       }
 
-      return json({ products });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const totalSpendAllCampaigns = Math.round(((dailyAdTotals as any)?.total_spend ?? 0) * 100) / 100;
+      const shoppingSpend = Math.round(products.reduce((s, p) => s + (p.ad_spend ?? 0), 0) * 100) / 100;
+      const unattributedSpend = Math.round(Math.max(0, totalSpendAllCampaigns - shoppingSpend) * 100) / 100;
+
+      return json({ products, total_ad_spend: totalSpendAllCampaigns, shopping_ad_spend: shoppingSpend, unattributed_ad_spend: unattributedSpend });
     }
 
     // ── GET /api/ads/products ─────────────────────────────────────────────────
@@ -2272,7 +2535,7 @@ export default {
           VALUES (?,?,?,?,?,?,?,?,?,?)
         `).bind(`${orderId}-item-${item.id}`, orderId, String(item.product_id ?? ""),
                 String(item.variant_id ?? ""), item.title ?? "", item.variant_title ?? "",
-                item.quantity ?? 1, parseFloat(item.price ?? "0") * (item.quantity ?? 1),
+                item.quantity ?? 1, parseFloat(item.price ?? "0") * (item.quantity ?? 1) - parseFloat(item.total_discount ?? "0"),
                 0, storeId).run();
       }
 
@@ -2530,13 +2793,21 @@ export default {
       const costMap   = new Map((costsRows.results   ?? []) as any[]);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const returnMap = new Map(((returnsRows.results ?? []) as any[]).map((r: any) => [r.product_title, r]));
+      // Normalise Google Ads titles (strip brand suffix e.g. "- Martaline") when keying the map
+      const INSIGHTS_BRAND_RE = /\s*-\s*(martaline|ceofo|dorevy|melvoire)\s*$/i;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const adsMap    = new Map(((adsRows.results    ?? []) as any[]).map((r: any) => [r.product_title, r.ad_spend as number]));
+      const adsMap = new Map<string, number>();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const r of ((adsRows.results ?? []) as any[])) {
+        const key = (r.product_title as string).replace(INSIGHTS_BRAND_RE, "").trim();
+        adsMap.set(key, (adsMap.get(key) ?? 0) + (r.ad_spend as number ?? 0));
+      }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const insights = ((salesRows.results ?? []) as any[]).map((p: any) => {
         const cost       = (costMap.get(p.product_title) as { cost?: number })?.cost ?? 0;
         const totalCost  = cost * (p.sold as number);
+        // Shopify titles have no brand suffix, so direct lookup works after adsMap is normalised
         const adSpend    = adsMap.get(p.product_title) ?? 0;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const retData    = returnMap.get(p.product_title) as any;
@@ -3688,8 +3959,10 @@ export default {
     return json({ error: "Not found", path }, 404);
   },
 
-  // Cron: keep D1 in sync with Shopify cancellations so stock stays correct.
+  // Cron: sync recent orders (webhook fallback) + cancellations every 6h.
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(syncCancellations(env));
+    ctx.waitUntil(
+      Promise.all([syncRecentOrders(env), syncCancellations(env)]).then(() => undefined)
+    );
   },
 };

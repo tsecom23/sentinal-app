@@ -16,7 +16,7 @@ const API = "https://sentinel-api.tssheets1.workers.dev";
 
 const STORES = [
   { key: "all",       name: "All Stores", domain: "" },
-  { key: "ceofo",     name: "CEOFO",      domain: "c4r0ex-0k.myshopify.com" },
+  { key: "ceofo",     name: "Melvoire",   domain: "c4r0ex-0k.myshopify.com" },
   { key: "martaline", name: "Martaline",  domain: "cqb72v-if.myshopify.com" },
   { key: "dorevy",    name: "Dorevy",     domain: "gfauyv-wi.myshopify.com" },
 ];
@@ -25,7 +25,7 @@ const REAL_STORES = STORES.filter(s => s.key !== "all");
 // Per-store country config — same as ROAS tracker
 const STORE_COUNTRIES: Record<string, { code: string; name: string; flag: string }[]> = {
   ceofo:     [{ code: "FR", name: "France", flag: "🇫🇷" }, { code: "ES", name: "Spain", flag: "🇪🇸" }, { code: "IT", name: "Italy", flag: "🇮🇹" }],
-  dorevy:    [{ code: "CA", name: "Canada", flag: "🇨🇦" }, { code: "US", name: "USA",   flag: "🇺🇸" }],
+  dorevy:    [{ code: "UK", name: "United Kingdom", flag: "🇬🇧" }],
   martaline: [],
 };
 
@@ -74,6 +74,8 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
   const [spendEditing,  setSpendEditing]  = useState(false);
   const [spendSaving,   setSpendSaving]   = useState(false);
   const [adChannel,     setAdChannel]     = useState<"combined" | "google" | "meta">("combined");
+  const [campaign,      setCampaign]      = useState<string>("");
+  const [campaigns,     setCampaigns]     = useState<string[]>([]);
   const [metaSpendInput,   setMetaSpendInput]   = useState("");
   const [metaSpendEditing, setMetaSpendEditing] = useState(false);
   const [metaSpendSaving,  setMetaSpendSaving]  = useState(false);
@@ -165,20 +167,23 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
       }
 
       setStoreBreakdown([]);
-      const cc = country ? `&country=${country}` : "";
-      const q  = `store_id=${storeId}&${dq}${cc}`;
-      const [ov, al, pr, ms, st] = await Promise.all([
+      const cc   = country  ? `&country=${country}`   : "";
+      const camp = campaign ? `&campaign=${encodeURIComponent(campaign)}` : "";
+      const q    = `store_id=${storeId}&${dq}${cc}${camp}`;
+      const [ov, al, pr, ms, st, campaignsRes] = await Promise.all([
         fetch(`${API}/api/dashboard/overview?${q}`,           { cache: "no-store" }).then(r => r.json()),
         fetch(`${API}/api/product-alerts?store_id=${storeId}`, { cache: "no-store" }).then(r => r.json()),
         fetch(`${API}/api/products/top?${q}`,                 { cache: "no-store" }).then(r => r.json()),
         fetch(`${API}/api/milestones?store_id=${storeId}`,    { cache: "no-store" }).then(r => r.json()).catch(() => null),
         fetch(`${API}/api/stock`,                             { cache: "no-store" }).then(r => r.json()).catch(() => null),
+        fetch(`${API}/api/ads/campaigns?store_id=${storeId}`, { cache: "no-store" }).then(r => r.json()).catch(() => ({ campaigns: [] })),
       ]);
       setOverview(ov);
       setAlerts(al.alerts || []);
       setProducts(pr.products || []);
       if (ms && !ms.error) setMilestones(ms);
       if (st?.stock) setStock(st.stock);
+      if (campaignsRes?.campaigns) setCampaigns(campaignsRes.campaigns);
     } catch (e) {
       console.error(e); setError("Could not load dashboard data.");
     } finally { setLoading(false); }
@@ -192,9 +197,8 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
   }
 
   useEffect(() => { if (activeStoreId) setStoreId(activeStoreId); }, [activeStoreId]);
-  // Reset country when store changes
-  useEffect(() => { setCountry(""); }, [storeId]);
-  useEffect(() => { loadData(); }, [storeId, country, dateRange]); // eslint-disable-line
+  useEffect(() => { setCountry(""); setCampaign(""); }, [storeId]);
+  useEffect(() => { loadData(); }, [storeId, country, campaign, dateRange]); // eslint-disable-line
 
   const ov           = overview;
   const countries    = getCountries(storeId);
@@ -423,6 +427,36 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
               {revenueIsEstimated ? "Revenue is spend-weighted estimate — UTM attribution not yet available" : "Revenue attributed via UTM"}
             </span>
           )}
+        </div>
+      )}
+
+      {/* ── Campaign filter (Google only, when campaigns exist) ───── */}
+      {storeId !== "all" && adChannel === "google" && campaigns.length > 0 && (
+        <div className="flex items-center gap-1.5 mb-4 -mt-2">
+          <span className="text-[10px] text-gray-400 mr-1">Campaign:</span>
+          <button
+            onClick={() => setCampaign("")}
+            className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all border ${
+              campaign === ""
+                ? "bg-gray-900 border-gray-900 text-white"
+                : "bg-white border-gray-200 text-gray-500 hover:border-gray-400"
+            }`}
+          >
+            All
+          </button>
+          {campaigns.map(c => (
+            <button
+              key={c}
+              onClick={() => setCampaign(c === campaign ? "" : c)}
+              className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all border ${
+                campaign === c
+                  ? "bg-blue-600 border-blue-600 text-white"
+                  : "bg-white border-gray-200 text-gray-500 hover:border-gray-400"
+              }`}
+            >
+              {c}
+            </button>
+          ))}
         </div>
       )}
 
