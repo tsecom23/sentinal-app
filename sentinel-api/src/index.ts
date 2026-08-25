@@ -824,8 +824,12 @@ export default {
       // Revenue values come from orders stored in store's local currency — apply FX to get EUR
       const grossRevenue = fx((overview?.revenue as number) ?? 0);
       const orders = (overview?.orders as number) ?? 0;
-      const googleAdSpend = (adsRow?.adSpend as number) ?? 0;
-      const metaAdSpend   = (metaAdsRow?.metaSpend as number) ?? 0;
+      // Ad platforms bill in the merchant's own account currency, same as the store — apply the
+      // same store-currency→EUR FX as revenue/costs. Previously left unconverted, so any
+      // non-EUR store (e.g. Dorevy in GBP) had ad spend silently mixed in at face value inside
+      // a EUR profit figure.
+      const googleAdSpend = fx((adsRow?.adSpend as number) ?? 0);
+      const metaAdSpend   = fx((metaAdsRow?.metaSpend as number) ?? 0);
       const adSpend = googleAdSpend + metaAdSpend;
       const productCost = fx((costRow?.productCost as number) ?? 0); // COGs entered in store currency
       const returnAmount = fx((returnsRow?.returnAmount as number) ?? 0);
@@ -833,7 +837,8 @@ export default {
       const disputeAmount = fx((disputesRow?.disputeAmount as number) ?? 0);
       const disputeCount = (disputesRow?.disputeCount as number) ?? 0;
       const netRevenue = Math.max(0, grossRevenue - returnAmount);
-      const profit = netRevenue - adSpend - productCost;
+      const overhead = Math.round(adSpend * 0.0899 * 100) / 100;
+      const profit = netRevenue - adSpend - productCost - overhead;
       const aov = orders > 0 ? netRevenue / orders : 0;
       const roas = adSpend > 0 ? netRevenue / adSpend : 0;
       const returnRate = orders > 0 ? (returnCount / orders) * 100 : 0;
@@ -849,8 +854,8 @@ export default {
 
       const googleRoas   = googleAdSpend > 0 ? googleRevenue / googleAdSpend : 0;
       const metaRoas     = metaAdSpend   > 0 ? facebookRevenue / metaAdSpend : 0;
-      const googleProfit = googleRevenue   - googleAdSpend - (googleRevenue   / (netRevenue || 1)) * productCost;
-      const metaProfit   = facebookRevenue - metaAdSpend   - (facebookRevenue / (netRevenue || 1)) * productCost;
+      const googleProfit = googleRevenue   - googleAdSpend - (googleRevenue   / (netRevenue || 1)) * productCost - googleAdSpend * 0.0899;
+      const metaProfit   = facebookRevenue - metaAdSpend   - (facebookRevenue / (netRevenue || 1)) * productCost - metaAdSpend * 0.0899;
 
       // Break-even ROAS: the minimum ROAS needed to cover product costs
       // Formula: breakEven = revenue / (revenue - productCost) = 1 / gross_margin
@@ -869,11 +874,11 @@ export default {
       }
       const adsMap = new Map<string, number>();
       for (const r of (adsTrend.results ?? []) as { day: string; adSpend: number }[]) {
-        adsMap.set(r.day, r.adSpend);
+        adsMap.set(r.day, fx(r.adSpend));
       }
       const metaAdsMap = new Map<string, number>();
       for (const r of (metaAdsTrend.results ?? []) as { day: string; metaSpend: number }[]) {
-        metaAdsMap.set(r.day, r.metaSpend);
+        metaAdsMap.set(r.day, fx(r.metaSpend));
       }
 
       // Build trend with both revenue and daily profit estimate (revenue converted to EUR)
@@ -884,7 +889,8 @@ export default {
         const dayMetaSpend = metaAdsMap.get(row.day) ?? 0;
         const dayAdSpend = dayGoogleSpend + dayMetaSpend;
         const dayProductCost = dayRevenue * costRatio;
-        const dayProfit = Math.round((dayRevenue - dayAdSpend - dayProductCost) * 100) / 100;
+        const dayOverhead = dayAdSpend * 0.0899;
+        const dayProfit = Math.round((dayRevenue - dayAdSpend - dayProductCost - dayOverhead) * 100) / 100;
         return { day: row.day, revenue: dayRevenue, profit: dayProfit, googleSpend: dayGoogleSpend, metaSpend: dayMetaSpend };
       });
 
@@ -894,7 +900,7 @@ export default {
         netRevenue,
         orders, adSpend, googleAdSpend, metaAdSpend, productCost,
         returnAmount, returnCount, disputeAmount, disputeCount,
-        profit, aov, roas, breakEvenRoas, returnRate, cpc, ctr, clicks, impressions,
+        overhead, profit, aov, roas, breakEvenRoas, returnRate, cpc, ctr, clicks, impressions,
         googleRevenue, facebookRevenue, googleRoas, metaRoas, googleProfit, metaProfit, revenueIsEstimated,
         sessions: 0, cvr: 0,
         revenueTrend: netRevenueTrend,
@@ -1554,7 +1560,7 @@ export default {
               (id,store_id,date,country,campaign,spend,clicks,impressions,conversions,cpc,ctr,roas)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(id) DO UPDATE SET
-              spend       = CASE WHEN excluded.spend > spend THEN excluded.spend ELSE spend END,
+              spend       = excluded.spend,
               clicks      = excluded.clicks,
               impressions = excluded.impressions,
               conversions = excluded.conversions,
@@ -2396,7 +2402,7 @@ export default {
       if (!storeId) return json({ error: "Missing store_id" }, 400);
       const { start, end } = getDateFilter(url);
 
-      const [adsRows, orderRows] = await Promise.all([
+      const [adsRows, orderRows, totalSpendRow] = await Promise.all([
         env.DB.prepare(`
           SELECT product_title,
                  COALESCE(SUM(spend),0) as spend,
@@ -2420,6 +2426,14 @@ export default {
           WHERE o.store_id=? AND substr(o.created_at,1,10)>=? AND substr(o.created_at,1,10)<=?
           GROUP BY oi.product_title
         `).bind(storeId, start, end).all(),
+
+        // Total account spend across ALL campaign types (Search/PMax/Shopping combined),
+        // so we can show how much of the real Google Ads bill isn't attributable to a product.
+        env.DB.prepare(`
+          SELECT COALESCE(SUM(spend),0) as total_spend
+          FROM google_ads_daily
+          WHERE store_id=? AND date>=? AND date<=? AND (country='' OR country IS NULL)
+        `).bind(storeId, start, end).first(),
       ]);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2440,7 +2454,22 @@ export default {
         };
       });
 
-      return json({ products });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const totalSpendAllCampaigns = Math.round(((totalSpendRow as any)?.total_spend ?? 0) * 100) / 100;
+      const shoppingAdSpend = Math.round(products.reduce((s, p) => s + (p.spend ?? 0), 0) * 100) / 100;
+      // Shopping-level spend is a subset of total account spend, but the two are imported by
+      // separate scripts on separate schedules — floating-point/timing drift can make the
+      // "shopping" side look momentarily larger than "total" if one ran more recently than the
+      // other. Never show a negative unattributed figure; clamp at 0 and prefer total_spend as
+      // the source of truth once both are in sync.
+      const unattributedAdSpend = Math.round(Math.max(0, totalSpendAllCampaigns - shoppingAdSpend) * 100) / 100;
+
+      return json({
+        products,
+        total_ad_spend: totalSpendAllCampaigns,
+        shopping_ad_spend: shoppingAdSpend,
+        unattributed_ad_spend: unattributedAdSpend,
+      });
     }
 
     // ── POST /api/ads/products/import ─────────────────────────────────────────
@@ -2457,7 +2486,10 @@ export default {
       for (let i = 0; i < rows.length; i += CHUNK) {
         const chunk = rows.slice(i, i + CHUNK);
         const stmts = chunk.map(row => {
-          const id = `${row.store_id}-${row.date}-${row.product_title.slice(0, 40)}`;
+          // Full title, not truncated — a 40-char slice caused different products with the
+          // same prefix (common with auto-generated dropshipping titles) to collide on the
+          // same primary key, silently overwriting each other's spend.
+          const id = `${row.store_id}-${row.date}-${row.product_title}`;
           return env.DB.prepare(`
             INSERT OR REPLACE INTO google_ads_products
               (id,store_id,date,product_title,spend,clicks,impressions,conversions,cpc,ctr)
@@ -2813,7 +2845,7 @@ export default {
         const retData    = returnMap.get(p.product_title) as any;
         const returnAmt  = retData?.return_amount ?? 0;
         const netRev     = Math.max(0, (p.revenue as number) - returnAmt);
-        const profit     = netRev - totalCost - adSpend;
+        const profit     = netRev - totalCost - adSpend - (adSpend * 0.0899);
         const margin     = netRev > 0 ? Math.round((profit / netRev) * 100) : 0;
         const roas       = adSpend > 0 ? netRev / adSpend : null;
 
