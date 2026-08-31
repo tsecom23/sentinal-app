@@ -43,7 +43,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
   return (
     <div className="flex min-h-screen bg-[#07090F]">
       <Sidebar />
-      <main className="flex-1 ml-[240px] min-w-0 relative">
+      <main className="flex-1 ml-[220px] min-w-0 relative">
         {/* Subtle top glow line */}
         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-cyan-500/20 to-transparent pointer-events-none" />
         {children}
