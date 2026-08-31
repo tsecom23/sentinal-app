@@ -132,8 +132,8 @@ export default function Sidebar() {
           <div key={group.section}>
             {/* Section label */}
             <div
-              className="text-[8px] font-mono font-bold uppercase tracking-[0.25em] px-2 mb-1"
-              style={{ color: group.color, opacity: 0.5 }}
+              className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] px-2 mb-1.5"
+              style={{ color: group.color, opacity: 0.8 }}
             >
               {group.section}
             </div>
@@ -146,11 +146,11 @@ export default function Sidebar() {
                   <a
                     key={href}
                     href={href}
-                    className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[12px] font-mono transition-all duration-100 relative"
+                    className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] font-mono transition-all duration-100 relative"
                     style={{
-                      color: active ? group.color : "#52525b",
-                      background: active ? `${group.color}12` : "transparent",
-                      fontWeight: active ? 600 : 400,
+                      color: active ? group.color : "#9ca3af",
+                      background: active ? `${group.color}15` : "transparent",
+                      fontWeight: active ? 600 : 450,
                     }}
                   >
                     {/* Active bar */}
@@ -188,7 +188,7 @@ export default function Sidebar() {
           />
           <span className="text-[9px] font-mono font-bold text-cyan-400 uppercase tracking-widest">Agent Active</span>
         </div>
-        <p className="text-[9px] font-mono text-zinc-600 leading-relaxed">
+        <p className="text-[11px] font-mono text-zinc-400 leading-relaxed">
           Margins · kills · scaling
         </p>
       </div>
@@ -196,7 +196,7 @@ export default function Sidebar() {
       {/* ── Sign out ───────────────────────── */}
       <button
         onClick={signOut}
-        className="mx-3 mb-4 flex items-center gap-2 px-3 py-2 rounded-lg text-[11px] font-mono text-zinc-600 hover:text-rose-400 hover:bg-rose-400/5 transition-all"
+        className="mx-3 mb-4 flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] font-mono text-zinc-500 hover:text-rose-400 hover:bg-rose-400/5 transition-all"
       >
         <LogOut size={11} />
         Sign out

@@ -293,7 +293,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
                 {STORES.map(s => <option key={s.key} value={s.key}>{s.name}</option>)}
               </select>
               {activeStore?.domain && (
-                <span className="text-[10px] font-mono text-zinc-600">{activeStore.domain}</span>
+                <span className="text-xs font-mono text-zinc-400">{activeStore.domain}</span>
               )}
             </div>
           </div>
@@ -333,7 +333,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all border ${
               country === ""
                 ? "bg-zinc-700 border-zinc-600 text-white"
-                : "bg-transparent border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300"
+                : "bg-transparent border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
             }`}
           >
             🌍 All
@@ -345,7 +345,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all border ${
                 country === c.code
                   ? "bg-cyan-500/20 border-cyan-500/40 text-cyan-300"
-                  : "bg-transparent border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300"
+                  : "bg-transparent border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
               }`}
             >
               <span>{c.flag}</span>
@@ -359,14 +359,14 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
       {milestones && (
         <div className="rounded-2xl bg-zinc-900 border border-zinc-800 px-5 py-4 mb-5 flex items-center gap-5">
           <div className="shrink-0">
-            <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-[0.2em]">This month</p>
+            <p className="text-[11px] font-mono text-zinc-400 uppercase tracking-widest">This month</p>
             <p className="text-2xl font-mono font-black mt-0.5 text-white">
               {thisMonth}
-              <span className="text-sm font-normal text-zinc-500 ml-1.5">orders</span>
+              <span className="text-sm font-normal text-zinc-400 ml-1.5">orders</span>
             </p>
           </div>
           <div className="flex-1">
-            <div className="flex justify-between text-[9px] font-mono text-zinc-600 mb-1.5">
+            <div className="flex justify-between text-[11px] font-mono text-zinc-400 mb-1.5">
               <span>{thisMonth} reached</span>
               <span>Next: {nextMilestone}</span>
             </div>
@@ -404,20 +404,20 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all border ${
                 adChannel === ch
                   ? "bg-zinc-700 border-zinc-600 text-white"
-                  : "bg-transparent border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300"
+                  : "bg-transparent border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
               }`}
             >
               {ch === "google" && <GoogleLogo />}
               {ch === "meta"   && <MetaLogo />}
               {ch === "combined" ? "Combined" : ch === "google" ? (
-                <>Google{googleAdSpend > 0 && <span className="text-zinc-500 font-normal">€{fmt(googleAdSpend)}</span>}</>
+                <>Google{googleAdSpend > 0 && <span className="text-zinc-400 font-normal">€{fmt(googleAdSpend)}</span>}</>
               ) : (
-                <>Meta{metaAdSpend > 0 && <span className="text-zinc-500 font-normal">€{fmt(metaAdSpend)}</span>}</>
+                <>Meta{metaAdSpend > 0 && <span className="text-zinc-400 font-normal">€{fmt(metaAdSpend)}</span>}</>
               )}
             </button>
           ))}
           {adChannel !== "combined" && (
-            <span className="ml-2 text-[10px] font-mono text-zinc-600">
+            <span className="ml-2 text-xs font-mono text-zinc-400">
               {revenueIsEstimated ? "~spend-weighted estimate" : "UTM attributed"}
             </span>
           )}
@@ -427,7 +427,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
       {/* ── Campaign pills ─────────────────────────────────────────── */}
       {storeId !== "all" && adChannel === "google" && campaigns.length > 0 && (
         <div className="flex items-center gap-1.5 mb-4 -mt-2">
-          <span className="text-[9px] font-mono text-zinc-600 mr-1 uppercase tracking-widest">Campaign</span>
+          <span className="text-[11px] font-mono text-zinc-400 mr-1 uppercase tracking-widest">Campaign</span>
           {["", ...campaigns].map(c => (
             <button
               key={c || "__all"}
@@ -487,7 +487,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
 
         {/* Ad Spend */}
         <div className="rounded-xl bg-zinc-900 border border-zinc-800 p-4">
-          <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-[0.2em] mb-3">Ad Spend</p>
+          <p className="text-[11px] font-mono text-zinc-400 uppercase tracking-widest mb-3">Ad Spend</p>
           {loading ? <div className="h-5 w-20 rounded bg-zinc-800 animate-pulse" /> : (
             <>
               <div className="space-y-2 mb-2">
@@ -495,7 +495,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <GoogleLogo size={10} />
-                    <span className="text-[10px] font-mono text-zinc-500">Google</span>
+                    <span className="text-xs font-mono text-zinc-400">Google</span>
                   </div>
                   <div className="flex items-center gap-1">
                     {storeId !== "all" && !spendEditing && (
@@ -504,7 +504,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
                     )}
                     {spendEditing ? (
                       <div className="flex gap-0.5 items-center">
-                        <span className="text-[10px] font-mono text-zinc-500">€</span>
+                        <span className="text-xs font-mono text-zinc-400">€</span>
                         <input autoFocus type="text" value={spendInput} onChange={e => setSpendInput(e.target.value)}
                           onKeyDown={e => { if (e.key === "Enter") saveSpend(); if (e.key === "Escape") setSpendEditing(false); }}
                           className="w-16 text-[10px] font-mono bg-zinc-800 border border-cyan-500/40 rounded px-1 py-0.5 outline-none text-white" />
@@ -523,7 +523,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <MetaLogo size={10} />
-                    <span className="text-[10px] font-mono text-zinc-500">Meta</span>
+                    <span className="text-xs font-mono text-zinc-400">Meta</span>
                   </div>
                   <div className="flex items-center gap-1">
                     {storeId !== "all" && !metaSpendEditing && (
@@ -532,7 +532,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
                     )}
                     {metaSpendEditing ? (
                       <div className="flex gap-0.5 items-center">
-                        <span className="text-[10px] font-mono text-zinc-500">€</span>
+                        <span className="text-xs font-mono text-zinc-400">€</span>
                         <input autoFocus type="text" value={metaSpendInput} onChange={e => setMetaSpendInput(e.target.value)}
                           onKeyDown={e => { if (e.key === "Enter") saveMetaSpend(); if (e.key === "Escape") setMetaSpendEditing(false); }}
                           className="w-16 text-[10px] font-mono bg-zinc-800 border border-cyan-500/40 rounded px-1 py-0.5 outline-none text-white" />
@@ -550,11 +550,11 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
               </div>
               {totalAdSpend > 0 && (
                 <div className="pt-2 border-t border-zinc-800 flex justify-between items-center">
-                  <span className="text-[9px] font-mono text-zinc-600 uppercase tracking-widest">Total</span>
+                  <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-widest">Total</span>
                   <span className="text-base font-mono font-black text-white">€{fmt(totalAdSpend)}</span>
                 </div>
               )}
-              {cpc > 0 && <p className="text-[10px] font-mono text-zinc-600 mt-1.5">CPC €{cpc.toFixed(2)} · CTR {ctr.toFixed(2)}%</p>}
+              {cpc > 0 && <p className="text-xs font-mono text-zinc-400 mt-1.5">CPC €{cpc.toFixed(2)} · CTR {ctr.toFixed(2)}%</p>}
             </>
           )}
         </div>
@@ -570,7 +570,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
 
         {/* Break-even ROAS */}
         <div className="rounded-xl bg-zinc-900 border border-zinc-800 p-4">
-          <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-[0.2em] mb-2">Break-even ROAS</p>
+          <p className="text-[11px] font-mono text-zinc-400 uppercase tracking-widest mb-2">Break-even ROAS</p>
           {loading ? (
             <div className="h-5 w-16 rounded bg-zinc-800 animate-pulse" />
           ) : breakEvenRoas ? (
@@ -591,12 +591,12 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
                   />
                 </div>
               )}
-              <p className="text-[9px] font-mono text-zinc-600 mt-1.5">Based on product costs</p>
+              <p className="text-[11px] font-mono text-zinc-400 mt-1.5">Based on product costs</p>
             </>
           ) : (
             <>
               <p className="text-xl font-mono font-black text-zinc-700">—</p>
-              <p className="text-[9px] font-mono text-zinc-600 mt-1">Set product costs to calculate</p>
+              <p className="text-[11px] font-mono text-zinc-400 mt-1">Set product costs to calculate</p>
             </>
           )}
         </div>
@@ -606,8 +606,8 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
       <div className="rounded-2xl bg-zinc-900 border border-zinc-800 p-5 mb-5">
         <div className="flex items-center gap-2 mb-4">
           <Activity size={13} className="text-cyan-400" />
-          <h3 className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-zinc-500">Revenue &amp; Profit Trend</h3>
-          <div className="ml-auto flex items-center gap-4 text-[9px] font-mono text-zinc-600">
+          <h3 className="text-xs font-mono font-bold uppercase tracking-widest text-zinc-300">Revenue &amp; Profit Trend</h3>
+          <div className="ml-auto flex items-center gap-4 text-[11px] font-mono text-zinc-400">
             <span className="flex items-center gap-1.5">
               <span className="w-2 h-0.5 bg-cyan-400 inline-block rounded" />
               Revenue
@@ -660,7 +660,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
         <div className="rounded-2xl bg-zinc-900 border border-zinc-800 p-5 mb-5">
           <div className="flex items-center gap-2 mb-4">
             <Zap size={12} className="text-cyan-400" />
-            <h3 className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-zinc-500">Per Store</h3>
+            <h3 className="text-xs font-mono font-bold uppercase tracking-widest text-zinc-300">Per Store</h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs font-mono">
@@ -711,8 +711,8 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
           <div className="col-span-3 rounded-2xl bg-zinc-900 border border-zinc-800 p-5 flex flex-col">
             <div className="flex items-center gap-2 mb-4">
               <Box size={12} className="text-cyan-400" />
-              <h3 className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-zinc-500">Top Products</h3>
-              <span className="ml-auto text-[9px] font-mono text-zinc-600">
+              <h3 className="text-xs font-mono font-bold uppercase tracking-widest text-zinc-300">Top Products</h3>
+              <span className="ml-auto text-[11px] font-mono text-zinc-400">
                 {dateRange.start === dateRange.end ? dateRange.start : `${dateRange.start} → ${dateRange.end}`}
               </span>
             </div>
@@ -741,12 +741,12 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-mono font-medium text-zinc-200 truncate">{p.product_title}</p>
                           {p.variant_title && (
-                            <p className="text-[10px] font-mono text-zinc-600 truncate">{p.variant_title}</p>
+                            <p className="text-xs font-mono text-zinc-400 truncate">{p.variant_title}</p>
                           )}
                         </div>
                         <div className="text-right shrink-0">
                           <p className="text-xs font-mono font-bold text-white">€{fmt(p.revenue)}</p>
-                          <p className="text-[10px] font-mono text-zinc-600">{p.sold}× · {m.toFixed(0)}%</p>
+                          <p className="text-xs font-mono text-zinc-400">{p.sold}× · {m.toFixed(0)}%</p>
                         </div>
                       </div>
                     </div>
@@ -760,7 +760,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
           <div className="col-span-2 rounded-2xl bg-zinc-900 border border-zinc-800 p-5 flex flex-col">
             <div className="flex items-center gap-2 mb-4">
               <AlertTriangle size={12} className="text-cyan-400" />
-              <h3 className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-zinc-500">Alerts</h3>
+              <h3 className="text-xs font-mono font-bold uppercase tracking-widest text-zinc-300">Alerts</h3>
               {actionableAlerts.length > 0 && (
                 <span className="ml-auto text-[9px] font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full font-semibold">
                   {actionableAlerts.length}
@@ -786,8 +786,8 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
                         className={`mt-0.5 shrink-0 ${a.severity === "high" ? "text-rose-400" : "text-amber-400"}`}
                       />
                       <div className="min-w-0">
-                        <p className="text-[11px] font-mono font-medium text-zinc-200 truncate">{a.product_title}</p>
-                        <p className="text-[10px] font-mono text-zinc-500 mt-0.5">{a.message}</p>
+                        <p className="text-[12px] font-mono font-medium text-zinc-100 truncate">{a.product_title}</p>
+                        <p className="text-xs font-mono text-zinc-400 mt-0.5">{a.message}</p>
                       </div>
                     </div>
                   </div>
@@ -798,13 +798,13 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
             <div className="mt-4 pt-3 border-t border-zinc-800 flex gap-2">
               <a
                 href="/returns"
-                className="flex-1 h-8 rounded-lg bg-zinc-800/60 hover:bg-zinc-800 border border-zinc-700/50 transition-colors flex items-center justify-center gap-1.5 text-[10px] font-mono text-zinc-500 hover:text-zinc-200"
+                className="flex-1 h-8 rounded-lg bg-zinc-800/60 hover:bg-zinc-800 border border-zinc-700/50 transition-colors flex items-center justify-center gap-1.5 text-xs font-mono text-zinc-400 hover:text-zinc-200"
               >
                 <RotateCcw size={10} /> Returns
               </a>
               <a
                 href="/dead-stock"
-                className="flex-1 h-8 rounded-lg bg-zinc-800/60 hover:bg-zinc-800 border border-zinc-700/50 transition-colors flex items-center justify-center gap-1.5 text-[10px] font-mono text-zinc-500 hover:text-zinc-200"
+                className="flex-1 h-8 rounded-lg bg-zinc-800/60 hover:bg-zinc-800 border border-zinc-700/50 transition-colors flex items-center justify-center gap-1.5 text-xs font-mono text-zinc-400 hover:text-zinc-200"
               >
                 <Skull size={10} /> Dead Stock
               </a>
@@ -830,7 +830,7 @@ function MetricCard({
     cyan:    "bg-cyan-400",
     emerald: "bg-emerald-400",
     rose:    "bg-rose-400",
-    zinc:    "bg-zinc-700",
+    zinc:    "bg-zinc-600",
   }[color];
 
   const valueColor = {
@@ -843,7 +843,7 @@ function MetricCard({
   return (
     <div className="rounded-xl bg-zinc-900 border border-zinc-800 p-5 relative overflow-hidden">
       <div className={`absolute top-0 left-0 right-0 h-px ${accentLine}`} />
-      <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-[0.2em] mb-3">{label}</p>
+      <p className="text-[11px] font-mono text-zinc-400 uppercase tracking-widest mb-3">{label}</p>
       {loading ? (
         <div className="h-8 w-28 rounded bg-zinc-800 animate-pulse mb-1" />
       ) : (
@@ -853,7 +853,7 @@ function MetricCard({
           {trend === "down" && <ArrowDownRight size={16} className="text-rose-400 mb-1 shrink-0" />}
         </div>
       )}
-      {sub && <p className="text-[10px] font-mono text-zinc-600 mt-2 leading-relaxed">{sub}</p>}
+      {sub && <p className="text-xs font-mono text-zinc-400 mt-2 leading-relaxed">{sub}</p>}
     </div>
   );
 }
@@ -866,7 +866,7 @@ function StatBlock({
 }) {
   return (
     <div className="rounded-xl bg-zinc-900 border border-zinc-800 p-4">
-      <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-[0.2em] mb-2">{label}</p>
+      <p className="text-[11px] font-mono text-zinc-400 uppercase tracking-widest mb-2">{label}</p>
       {loading ? (
         <div className="h-6 w-20 rounded bg-zinc-800 animate-pulse mb-1" />
       ) : (
@@ -876,7 +876,7 @@ function StatBlock({
           {trend === "down" && <ArrowDownRight size={13} className="text-rose-400 shrink-0" />}
         </div>
       )}
-      {sub && <p className="text-[10px] font-mono text-zinc-600 mt-1 leading-relaxed">{sub}</p>}
+      {sub && <p className="text-xs font-mono text-zinc-400 mt-1 leading-relaxed">{sub}</p>}
     </div>
   );
 }
@@ -950,8 +950,8 @@ function AiTips({ ov, products, totalAdSpend }: { ov: Overview | null; products:
     <div className="rounded-2xl bg-zinc-900 border border-zinc-800 p-5">
       <div className="flex items-center gap-2 mb-4">
         <Lightbulb size={12} className="text-cyan-400" />
-        <h3 className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-zinc-500">Scaling Insights</h3>
-        <span className="ml-auto text-[9px] font-mono text-zinc-600">{tips.length} signal{tips.length !== 1 ? "s" : ""}</span>
+        <h3 className="text-xs font-mono font-bold uppercase tracking-widest text-zinc-300">Scaling Insights</h3>
+        <span className="ml-auto text-[11px] font-mono text-zinc-400">{tips.length} signal{tips.length !== 1 ? "s" : ""}</span>
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {tips.map((tip, i) => {
