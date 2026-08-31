@@ -1,26 +1,25 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
-  Activity, BarChart3, Bell, Bot, Box, ChevronRight,
-  LogOut, MessageCircle, Package, TableProperties,
+  Activity, BarChart3, Bell, Bot, Box,
+  LogOut, MessageCircle, Package,
   RotateCcw, ShoppingCart, Skull, Store, Target,
-  TrendingUp, Trophy, Users, Zap,
+  TrendingUp, Trophy, Users, Zap, Radio,
+  LayoutDashboard, LineChart,
 } from "lucide-react";
 import { createClient } from "../../utils/supabase/client";
 import { canAccess, defaultPath } from "../lib/roles";
 
-const GROUPS = [
+const SECTIONS = [
   {
-    id: "owner",
+    id: "overview",
     label: "Overview",
-    icon: Activity,
-    color: "text-emerald-400",
-    bg: "bg-emerald-500/10",
-    border: "border-emerald-500/20",
+    color: "#34d399",   // emerald
+    dimColor: "rgba(52,211,153,0.08)",
     items: [
-      { label: "Dashboard",  href: "/",           icon: Activity },
+      { label: "Dashboard",  href: "/",           icon: LayoutDashboard },
       { label: "Orders",     href: "/orders",     icon: ShoppingCart },
       { label: "P&L",        href: "/pnl",        icon: TrendingUp },
       { label: "Customers",  href: "/customers",  icon: Users },
@@ -31,38 +30,31 @@ const GROUPS = [
   {
     id: "buyer",
     label: "Media Buyer",
-    icon: Target,
-    color: "text-purple-400",
-    bg: "bg-purple-500/10",
-    border: "border-purple-500/20",
+    color: "#a78bfa",   // purple
+    dimColor: "rgba(167,139,250,0.08)",
     items: [
-      { label: "ROAS Tracker",      href: "/roas-tracker",     icon: TableProperties },
-      { label: "Google Ads",       href: "/google-ads",       icon: BarChart3 },
-      { label: "Product Ads",      href: "/product-ads",      icon: Package },
-      { label: "Product Stats",    href: "/product-insights", icon: Box },
-      { label: "Scale Command",    href: "/scale-command",    icon: Target },
+      { label: "ROAS Tracker",   href: "/roas-tracker",     icon: LineChart },
+      { label: "Google Ads",     href: "/google-ads",       icon: BarChart3 },
+      { label: "Product Ads",    href: "/product-ads",      icon: Package },
+      { label: "Product Stats",  href: "/product-insights", icon: Box },
+      { label: "Scale Command",  href: "/scale-command",    icon: Target },
     ],
   },
   {
     id: "ops",
     label: "Operations",
-    icon: RotateCcw,
-    color: "text-amber-400",
-    bg: "bg-amber-500/10",
-    border: "border-amber-500/20",
+    color: "#fbbf24",   // amber
+    dimColor: "rgba(251,191,36,0.08)",
     items: [
       { label: "Returns & Disputes", href: "/returns",    icon: RotateCcw },
-      { label: "Voorraad",           href: "/stock",      icon: Package },
       { label: "Dead Stock",         href: "/dead-stock", icon: Skull },
     ],
   },
   {
     id: "ai",
     label: "AI Tools",
-    icon: Bot,
-    color: "text-pink-400",
-    bg: "bg-pink-500/10",
-    border: "border-pink-500/20",
+    color: "#f472b6",   // pink
+    dimColor: "rgba(244,114,182,0.08)",
     items: [
       { label: "AI Chat",          href: "/ai-chat",            icon: MessageCircle },
       { label: "Recommendations",  href: "/ai-recommendations", icon: Bot },
@@ -71,10 +63,8 @@ const GROUPS = [
   {
     id: "settings",
     label: "Settings",
-    icon: Bell,
-    color: "text-zinc-400",
-    bg: "bg-zinc-500/10",
-    border: "border-zinc-500/20",
+    color: "#94a3b8",   // slate
+    dimColor: "rgba(148,163,184,0.06)",
     items: [
       { label: "Notifications", href: "/notifications", icon: Bell },
     ],
@@ -84,49 +74,26 @@ const GROUPS = [
 export default function Sidebar() {
   const pathname = usePathname();
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     const supabase = createClient();
     supabase.auth.getUser().then(({ data }) => {
       setUserEmail(data.user?.email ?? null);
     });
+    // Clock tick every minute for the live time display
+    const id = setInterval(() => setTick(t => t + 1), 60_000);
+    return () => clearInterval(id);
   }, []);
 
-  // Filter groups/items based on role
-  const visibleGroups = GROUPS.map(group => ({
-    ...group,
-    items: group.items.filter(item => canAccess(userEmail, item.href)),
-  })).filter(group => group.items.length > 0);
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  const dateStr = now.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 
-  const activeGroupId = visibleGroups.find(g =>
-    g.items.some(i => i.href === "/" ? pathname === "/" : pathname.startsWith(i.href))
-  )?.id ?? visibleGroups[0]?.id ?? "owner";
-
-  // Default: only active group open
-  const [open, setOpen] = useState<Record<string, boolean>>({});
-  const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem("sidebar-open") ?? "null");
-      if (saved) {
-        setOpen(saved);
-      } else {
-        setOpen({ [activeGroupId]: true });
-      }
-    } catch {
-      setOpen({ [activeGroupId]: true });
-    }
-    setHydrated(true);
-  }, []); // eslint-disable-line
-
-  function toggle(id: string) {
-    setOpen(prev => {
-      const next = { ...prev, [id]: !prev[id] };
-      try { localStorage.setItem("sidebar-open", JSON.stringify(next)); } catch { /* ignore */ }
-      return next;
-    });
-  }
+  const visibleSections = SECTIONS.map(sec => ({
+    ...sec,
+    items: sec.items.filter(item => canAccess(userEmail, item.href)),
+  })).filter(sec => sec.items.length > 0);
 
   async function signOut() {
     const supabase = createClient();
@@ -134,86 +101,154 @@ export default function Sidebar() {
     window.location.href = "/login";
   }
 
-  return (
-    <aside className="w-[220px] min-h-screen bg-white border-r border-black/8 py-5 flex flex-col shrink-0 fixed left-0 top-0 bottom-0 z-40 shadow-sm">
+  function isActive(href: string) {
+    return href === "/" ? pathname === "/" : pathname.startsWith(href);
+  }
 
-      {/* Logo */}
-      <a href="/" className="flex items-center gap-3 px-4 mb-5">
-        <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center shrink-0 shadow-lg shadow-blue-900/40">
-          <span className="text-white font-black text-xs tracking-tight">TS</span>
+  // Find which section the current page belongs to
+  const activeSection = visibleSections.find(sec => sec.items.some(i => isActive(i.href)));
+
+  return (
+    <aside
+      className="w-[240px] min-h-screen flex flex-col fixed left-0 top-0 bottom-0 z-40"
+      style={{
+        background: "linear-gradient(180deg, #0B0F1A 0%, #080B16 100%)",
+        borderRight: "1px solid rgba(255,255,255,0.04)",
+      }}
+    >
+      {/* ── Logo ──────────────────────────────────────────────── */}
+      <a href="/" className="flex items-center gap-3 px-5 pt-6 pb-5 group">
+        {/* Icon */}
+        <div
+          className="h-9 w-9 rounded-xl flex items-center justify-center shrink-0 relative overflow-hidden"
+          style={{
+            background: "linear-gradient(135deg, #22d3ee 0%, #6366f1 100%)",
+            boxShadow: "0 0 20px rgba(34,211,238,0.25)",
+          }}
+        >
+          <span className="text-white font-black text-[11px] tracking-tight font-mono relative z-10">TS</span>
+          {/* scan line animation */}
+          <div
+            className="absolute inset-x-0 h-px bg-white/30 animate-scan pointer-events-none"
+            style={{ top: 0 }}
+          />
         </div>
         <div>
-          <h1 className="text-sm font-black tracking-tight text-gray-900">TSecom</h1>
-          <p className="text-[10px] text-zinc-400">AI Commerce OS</p>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[13px] font-mono font-black tracking-tight text-white">Sentinel</span>
+          </div>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse-dot shrink-0" />
+            <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-[0.2em]">
+              {dateStr} · {timeStr}
+            </span>
+          </div>
         </div>
       </a>
 
-      {/* Groups */}
-      <nav className="flex-1 overflow-y-auto px-2 space-y-1">
-        {visibleGroups.map(group => {
-          const isOpen   = hydrated ? (open[group.id] ?? false) : group.id === activeGroupId;
-          const isActive = group.id === activeGroupId;
-          const Icon     = group.icon;
-
-          return (
-            <div key={group.id}>
-              {/* Group header button */}
-              <button
-                onClick={() => toggle(group.id)}
-                className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl transition-all text-[11px] font-semibold group
-                  ${isActive
-                    ? `${group.bg} ${group.border} border ${group.color}`
-                    : "text-zinc-500 hover:text-gray-700 hover:bg-black/5"
-                  }`}
+      {/* ── Nav ───────────────────────────────────────────────── */}
+      <nav className="flex-1 overflow-y-auto px-3 pb-4 space-y-5">
+        {visibleSections.map(sec => (
+          <div key={sec.id}>
+            {/* Section label */}
+            <div className="flex items-center gap-2 px-2 mb-1.5">
+              <div
+                className="h-1 w-1 rounded-full shrink-0"
+                style={{ background: sec.color, boxShadow: `0 0 6px ${sec.color}` }}
+              />
+              <span
+                className="text-[9px] font-mono font-bold uppercase tracking-[0.2em]"
+                style={{ color: sec.color, opacity: 0.7 }}
               >
-                <Icon size={13} className="shrink-0" />
-                <span className="flex-1 text-left tracking-wide">{group.label}</span>
-                <ChevronRight
-                  size={11}
-                  className={`shrink-0 transition-transform duration-200 ${isOpen ? "rotate-90" : ""} ${isActive ? group.color : "text-zinc-700"}`}
-                />
-              </button>
-
-              {/* Collapsible items */}
-              {isOpen && (
-                <div className="mt-0.5 mb-1 ml-2 space-y-0.5">
-                  {group.items.map(({ label, href, icon: ItemIcon }) => {
-                    const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
-                    return (
-                      <a key={href} href={href}
-                        className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg transition-all text-[12px] font-medium
-                          ${active
-                            ? "bg-black/8 text-gray-900"
-                            : "text-zinc-500 hover:bg-black/5 hover:text-gray-800"
-                          }`}
-                      >
-                        <ItemIcon size={12} className={`shrink-0 ${active ? "text-gray-800" : "text-zinc-400"}`} />
-                        {label}
-                        {active && <div className="ml-auto w-1 h-1 rounded-full bg-blue-400" />}
-                      </a>
-                    );
-                  })}
-                </div>
-              )}
+                {sec.label}
+              </span>
             </div>
-          );
-        })}
+
+            {/* Items */}
+            <div className="space-y-0.5">
+              {sec.items.map(({ label, href, icon: Icon }) => {
+                const active = isActive(href);
+                return (
+                  <a
+                    key={href}
+                    href={href}
+                    className="relative flex items-center gap-3 px-3 py-2 rounded-xl text-[12.5px] font-medium transition-all duration-150 group"
+                    style={active ? {
+                      background: sec.dimColor,
+                      color: sec.color,
+                    } : {
+                      color: "#71717a",
+                    }}
+                    onMouseEnter={e => {
+                      if (!active) {
+                        (e.currentTarget as HTMLElement).style.color = "#a1a1aa";
+                        (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.03)";
+                      }
+                    }}
+                    onMouseLeave={e => {
+                      if (!active) {
+                        (e.currentTarget as HTMLElement).style.color = "#71717a";
+                        (e.currentTarget as HTMLElement).style.background = "transparent";
+                      }
+                    }}
+                  >
+                    {/* Active left bar */}
+                    {active && (
+                      <div
+                        className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-r-full"
+                        style={{ background: sec.color, boxShadow: `0 0 8px ${sec.color}` }}
+                      />
+                    )}
+                    <Icon
+                      size={14}
+                      className="shrink-0 transition-colors"
+                      style={{ color: active ? sec.color : undefined }}
+                    />
+                    <span className="flex-1 truncate font-mono">{label}</span>
+                    {active && (
+                      <div
+                        className="h-1 w-1 rounded-full shrink-0"
+                        style={{ background: sec.color }}
+                      />
+                    )}
+                  </a>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
-      {/* AI badge */}
-      <div className="mx-2 mt-3 rounded-xl bg-gradient-to-br from-blue-600/10 to-purple-600/8 border border-blue-500/15 p-3">
-        <div className="flex items-center gap-1.5 text-blue-500 font-semibold text-[10px] mb-0.5">
-          <Zap size={9} /> AI Active
+      {/* ── AI Status ─────────────────────────────────────────── */}
+      <div className="mx-3 mb-3 rounded-xl border p-3 relative overflow-hidden"
+        style={{
+          background: "linear-gradient(135deg, rgba(34,211,238,0.05) 0%, rgba(99,102,241,0.05) 100%)",
+          borderColor: "rgba(34,211,238,0.1)",
+        }}
+      >
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center gap-1.5">
+            <Radio size={9} className="text-cyan-400 animate-pulse" />
+            <span className="text-[9px] font-mono font-bold text-cyan-400 uppercase tracking-[0.15em]">Agent Active</span>
+          </div>
+          <span className="text-[9px] font-mono text-zinc-600">v2</span>
         </div>
-        <p className="text-[10px] text-zinc-400 leading-relaxed">
-          Monitoring margins, stock & scaling signals.
+        <p className="text-[10px] font-mono text-zinc-500 leading-relaxed">
+          Monitoring margins · kills · scaling signals
         </p>
+        {/* Animated glow line */}
+        <div className="absolute bottom-0 left-0 right-0 h-px"
+          style={{ background: "linear-gradient(90deg, transparent, rgba(34,211,238,0.3), transparent)" }}
+        />
       </div>
 
-      {/* Sign out */}
+      {/* ── Sign out ──────────────────────────────────────────── */}
       <button
         onClick={signOut}
-        className="mx-2 mt-1 mb-2 flex items-center gap-2 px-3 py-2 rounded-xl text-zinc-600 hover:text-red-500 hover:bg-red-500/8 transition-all text-[12px] font-medium"
+        className="mx-3 mb-4 flex items-center gap-2.5 px-3 py-2 rounded-xl text-zinc-600 hover:text-rose-400 transition-colors text-[11px] font-mono font-medium"
+        style={{ background: "transparent" }}
+        onMouseEnter={e => (e.currentTarget.style.background = "rgba(244,63,94,0.06)")}
+        onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
       >
         <LogOut size={12} />
         Sign out
