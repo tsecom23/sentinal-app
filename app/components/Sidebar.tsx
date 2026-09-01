@@ -1,26 +1,22 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
-  Activity, BarChart3, Bell, Bot, Box, ChevronRight,
-  LogOut, MessageCircle, Package, TableProperties,
-  RotateCcw, ShoppingCart, Skull, Store, Target,
-  TrendingUp, Trophy, Users, Zap,
+  BarChart3, Bell, Bot, Box,
+  LayoutDashboard, LineChart, LogOut, MessageCircle, Package,
+  RotateCcw, ShoppingCart, Skull, Store,
+  Target, TrendingUp, Trophy, Users, Wifi,
 } from "lucide-react";
 import { createClient } from "../../utils/supabase/client";
-import { canAccess, defaultPath } from "../lib/roles";
+import { canAccess } from "../lib/roles";
 
-const GROUPS = [
+const NAV = [
   {
-    id: "owner",
-    label: "Overview",
-    icon: Activity,
-    color: "text-emerald-400",
-    bg: "bg-emerald-500/10",
-    border: "border-emerald-500/20",
+    section: "Command",
+    color: "#22d3ee",
     items: [
-      { label: "Dashboard",  href: "/",           icon: Activity },
+      { label: "Dashboard",  href: "/",           icon: LayoutDashboard },
       { label: "Orders",     href: "/orders",     icon: ShoppingCart },
       { label: "P&L",        href: "/pnl",        icon: TrendingUp },
       { label: "Customers",  href: "/customers",  icon: Users },
@@ -29,103 +25,54 @@ const GROUPS = [
     ],
   },
   {
-    id: "buyer",
-    label: "Media Buyer",
-    icon: Target,
-    color: "text-purple-400",
-    bg: "bg-purple-500/10",
-    border: "border-purple-500/20",
+    section: "Media",
+    color: "#a78bfa",
     items: [
-      { label: "ROAS Tracker",      href: "/roas-tracker",     icon: TableProperties },
-      { label: "Google Ads",       href: "/google-ads",       icon: BarChart3 },
-      { label: "Product Ads",      href: "/product-ads",      icon: Package },
-      { label: "Product Stats",    href: "/product-insights", icon: Box },
-      { label: "Scale Command",    href: "/scale-command",    icon: Target },
+      { label: "ROAS Tracker",  href: "/roas-tracker",     icon: LineChart },
+      { label: "Google Ads",    href: "/google-ads",       icon: BarChart3 },
+      { label: "Product Ads",   href: "/product-ads",      icon: Package },
+      { label: "Product Stats", href: "/product-insights", icon: Box },
+      { label: "Scale",         href: "/scale-command",    icon: Target },
     ],
   },
   {
-    id: "ops",
-    label: "Operations",
-    icon: RotateCcw,
-    color: "text-amber-400",
-    bg: "bg-amber-500/10",
-    border: "border-amber-500/20",
+    section: "Ops",
+    color: "#fb923c",
     items: [
-      { label: "Returns & Disputes", href: "/returns",    icon: RotateCcw },
-      { label: "Voorraad",           href: "/stock",      icon: Package },
-      { label: "Dead Stock",         href: "/dead-stock", icon: Skull },
+      { label: "Returns",    href: "/returns",    icon: RotateCcw },
+      { label: "Dead Stock", href: "/dead-stock", icon: Skull },
     ],
   },
   {
-    id: "ai",
-    label: "AI Tools",
-    icon: Bot,
-    color: "text-pink-400",
-    bg: "bg-pink-500/10",
-    border: "border-pink-500/20",
+    section: "AI",
+    color: "#f472b6",
     items: [
-      { label: "AI Chat",          href: "/ai-chat",            icon: MessageCircle },
-      { label: "Recommendations",  href: "/ai-recommendations", icon: Bot },
-    ],
-  },
-  {
-    id: "settings",
-    label: "Settings",
-    icon: Bell,
-    color: "text-zinc-400",
-    bg: "bg-zinc-500/10",
-    border: "border-zinc-500/20",
-    items: [
-      { label: "Notifications", href: "/notifications", icon: Bell },
+      { label: "AI Chat",         href: "/ai-chat",            icon: MessageCircle },
+      { label: "Recommendations", href: "/ai-recommendations", icon: Bot },
+      { label: "Notifications",   href: "/notifications",      icon: Bell },
     ],
   },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
+  const [time, setTime]   = useState("");
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getUser().then(({ data }) => {
-      setUserEmail(data.user?.email ?? null);
-    });
+    supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null));
+    const tick = () => {
+      const d = new Date();
+      setTime(d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }));
+    };
+    tick();
+    const id = setInterval(tick, 5000);
+    return () => clearInterval(id);
   }, []);
 
-  // Filter groups/items based on role
-  const visibleGroups = GROUPS.map(group => ({
-    ...group,
-    items: group.items.filter(item => canAccess(userEmail, item.href)),
-  })).filter(group => group.items.length > 0);
-
-  const activeGroupId = visibleGroups.find(g =>
-    g.items.some(i => i.href === "/" ? pathname === "/" : pathname.startsWith(i.href))
-  )?.id ?? visibleGroups[0]?.id ?? "owner";
-
-  // Default: only active group open
-  const [open, setOpen] = useState<Record<string, boolean>>({});
-  const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem("sidebar-open") ?? "null");
-      if (saved) {
-        setOpen(saved);
-      } else {
-        setOpen({ [activeGroupId]: true });
-      }
-    } catch {
-      setOpen({ [activeGroupId]: true });
-    }
-    setHydrated(true);
-  }, []); // eslint-disable-line
-
-  function toggle(id: string) {
-    setOpen(prev => {
-      const next = { ...prev, [id]: !prev[id] };
-      try { localStorage.setItem("sidebar-open", JSON.stringify(next)); } catch { /* ignore */ }
-      return next;
-    });
+  function isActive(href: string) {
+    return href === "/" ? pathname === "/" : pathname.startsWith(href);
   }
 
   async function signOut() {
@@ -134,88 +81,110 @@ export default function Sidebar() {
     window.location.href = "/login";
   }
 
+  const visibleNav = NAV.map(g => ({
+    ...g,
+    items: g.items.filter(i => canAccess(email, i.href)),
+  })).filter(g => g.items.length > 0);
+
   return (
-    <aside className="w-[220px] min-h-screen bg-white border-r border-black/8 py-5 flex flex-col shrink-0 fixed left-0 top-0 bottom-0 z-40 shadow-sm">
-
-      {/* Logo */}
-      <a href="/" className="flex items-center gap-3 px-4 mb-5">
-        <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center shrink-0 shadow-lg shadow-blue-900/40">
-          <span className="text-white font-black text-xs tracking-tight">TS</span>
-        </div>
-        <div>
-          <h1 className="text-sm font-black tracking-tight text-gray-900">TSecom</h1>
-          <p className="text-[10px] text-zinc-400">AI Commerce OS</p>
-        </div>
-      </a>
-
-      {/* Groups */}
-      <nav className="flex-1 overflow-y-auto px-2 space-y-1">
-        {visibleGroups.map(group => {
-          const isOpen   = hydrated ? (open[group.id] ?? false) : group.id === activeGroupId;
-          const isActive = group.id === activeGroupId;
-          const Icon     = group.icon;
-
-          return (
-            <div key={group.id}>
-              {/* Group header button */}
-              <button
-                onClick={() => toggle(group.id)}
-                className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl transition-all text-[11px] font-semibold group
-                  ${isActive
-                    ? `${group.bg} ${group.border} border ${group.color}`
-                    : "text-zinc-500 hover:text-gray-700 hover:bg-black/5"
-                  }`}
-              >
-                <Icon size={13} className="shrink-0" />
-                <span className="flex-1 text-left tracking-wide">{group.label}</span>
-                <ChevronRight
-                  size={11}
-                  className={`shrink-0 transition-transform duration-200 ${isOpen ? "rotate-90" : ""} ${isActive ? group.color : "text-zinc-700"}`}
-                />
-              </button>
-
-              {/* Collapsible items */}
-              {isOpen && (
-                <div className="mt-0.5 mb-1 ml-2 space-y-0.5">
-                  {group.items.map(({ label, href, icon: ItemIcon }) => {
-                    const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
-                    return (
-                      <a key={href} href={href}
-                        className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg transition-all text-[12px] font-medium
-                          ${active
-                            ? "bg-black/8 text-gray-900"
-                            : "text-zinc-500 hover:bg-black/5 hover:text-gray-800"
-                          }`}
-                      >
-                        <ItemIcon size={12} className={`shrink-0 ${active ? "text-gray-800" : "text-zinc-400"}`} />
-                        {label}
-                        {active && <div className="ml-auto w-1 h-1 rounded-full bg-blue-400" />}
-                      </a>
-                    );
-                  })}
-                </div>
-              )}
+    <aside
+      className="w-[220px] min-h-screen flex flex-col fixed left-0 top-0 bottom-0 z-40 select-none"
+      style={{ background: "#0A0D18", borderRight: "1px solid rgba(255,255,255,0.06)" }}
+    >
+      {/* ── Brand ──────────────────────────────── */}
+      <div className="px-4 pt-5 pb-4">
+        <a href="/" className="flex items-center gap-3 group">
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 overflow-hidden relative"
+            style={{
+              background: "linear-gradient(135deg, #22d3ee, #6366f1)",
+              boxShadow: "0 0 16px rgba(34,211,238,0.3)",
+            }}
+          >
+            <span className="text-white text-[11px] font-black tracking-tight font-mono z-10 relative">TS</span>
+            <div
+              className="absolute inset-0 opacity-30"
+              style={{
+                background: "linear-gradient(135deg, transparent 30%, rgba(255,255,255,0.4) 50%, transparent 70%)",
+                animation: "shine 3s ease-in-out infinite",
+              }}
+            />
+          </div>
+          <div>
+            <div className="text-[13px] font-mono font-bold text-white tracking-tight">Sentinel</div>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span
+                className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400"
+                style={{ animation: "pulse-dot 2.5s ease-in-out infinite" }}
+              />
+              <span className="text-[9px] font-mono text-zinc-500 tabular-nums">{time}</span>
             </div>
-          );
-        })}
-      </nav>
-
-      {/* AI badge */}
-      <div className="mx-2 mt-3 rounded-xl bg-gradient-to-br from-blue-600/10 to-purple-600/8 border border-blue-500/15 p-3">
-        <div className="flex items-center gap-1.5 text-blue-500 font-semibold text-[10px] mb-0.5">
-          <Zap size={9} /> AI Active
-        </div>
-        <p className="text-[10px] text-zinc-400 leading-relaxed">
-          Monitoring margins, stock & scaling signals.
-        </p>
+          </div>
+        </a>
       </div>
 
-      {/* Sign out */}
+      {/* ── Nav ────────────────────────────────── */}
+      <nav className="flex-1 overflow-y-auto px-3 space-y-4 pb-2">
+        {visibleNav.map(group => (
+          <div key={group.section}>
+            <div
+              className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] px-2 mb-1.5"
+              style={{ color: group.color, opacity: 0.85 }}
+            >
+              {group.section}
+            </div>
+            <div className="space-y-px">
+              {group.items.map(({ label, href, icon: Icon }) => {
+                const active = isActive(href);
+                return (
+                  <a
+                    key={href}
+                    href={href}
+                    className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] font-mono transition-all duration-100 relative"
+                    style={{
+                      color: active ? group.color : "#9ca3af",
+                      background: active ? `${group.color}15` : "transparent",
+                      fontWeight: active ? 600 : 450,
+                    }}
+                  >
+                    {active && (
+                      <div
+                        className="absolute left-0 inset-y-1.5 w-[2px] rounded-r"
+                        style={{ background: group.color, boxShadow: `0 0 6px ${group.color}` }}
+                      />
+                    )}
+                    <Icon size={13} className="shrink-0" />
+                    {label}
+                  </a>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </nav>
+
+      {/* ── Agent pulse card ───────────────────── */}
+      <div
+        className="mx-3 mb-3 rounded-xl p-3 relative overflow-hidden"
+        style={{ background: "rgba(34,211,238,0.05)", border: "1px solid rgba(34,211,238,0.1)" }}
+      >
+        <div className="flex items-center gap-1.5 mb-1">
+          <Wifi
+            size={9}
+            className="text-cyan-400"
+            style={{ animation: "pulse-dot 2s ease-in-out infinite" }}
+          />
+          <span className="text-[9px] font-mono font-bold text-cyan-400 uppercase tracking-widest">Agent Active</span>
+        </div>
+        <p className="text-[11px] font-mono text-zinc-400 leading-relaxed">Margins · kills · scaling</p>
+      </div>
+
+      {/* ── Sign out ───────────────────────────── */}
       <button
         onClick={signOut}
-        className="mx-2 mt-1 mb-2 flex items-center gap-2 px-3 py-2 rounded-xl text-zinc-600 hover:text-red-500 hover:bg-red-500/8 transition-all text-[12px] font-medium"
+        className="mx-3 mb-4 flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] font-mono text-zinc-500 hover:text-rose-400 hover:bg-rose-400/5 transition-all"
       >
-        <LogOut size={12} />
+        <LogOut size={11} />
         Sign out
       </button>
     </aside>

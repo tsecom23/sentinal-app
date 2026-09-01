@@ -1,31 +1,66 @@
 @import "tailwindcss";
 
-/* Force class-based dark mode — dashboard is always light */
 @variant dark (&:where(.dark, .dark *));
 
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
-/* ── CSS Design Tokens (light only) ───────────────────────── */
 :root {
-  --bg:        #f6f7f9;
-  --surface:   #ffffff;
-  --surface-2: #f1f5f9;
-  --border:    rgba(15, 23, 42, 0.08);
-  --text:      #0f172a;
-  --muted:     #64748b;
-  --dim:       #94a3b8;
-  color-scheme: light;
+  --bg:        #07090F;
+  --surface:   #0C1020;
+  --surface-2: #111827;
+  --border:    rgba(255,255,255,0.06);
+  --text:      #f1f5f9;
+  --muted:     #94a3b8;
+  --dim:       #52525b;
+  color-scheme: dark;
 }
 
-html {
-  background: var(--bg);
-}
+html { background: var(--bg); }
 
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Dark scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #27272a #0C1020;
+}
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: #0C1020; }
+::-webkit-scrollbar-thumb { background: #27272a; border-radius: 4px; }
+
+/* Dark date inputs */
+input[type="date"] { color-scheme: dark; }
+input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1) opacity(0.4); }
+
+/* ── Keyframe animations ─────────────────────────────────── */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.3; transform: scale(0.7); }
+}
+
+@keyframes scan-line {
+  0%   { transform: translateY(-100%); opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { transform: translateY(600%); opacity: 0; }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(34,211,238,0.2); }
+  50%       { box-shadow: 0 0 16px rgba(34,211,238,0.5); }
+}
+
+@keyframes shine {
+  0%       { transform: translateX(-100%); }
+  50%, 100% { transform: translateX(100%); }
 }
