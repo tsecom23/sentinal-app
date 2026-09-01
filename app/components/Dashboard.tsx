@@ -5,7 +5,7 @@ import {
   AlertTriangle, Bell, Box, CheckCircle,
   RefreshCw, RotateCcw, ShieldAlert, TrendingUp,
   ArrowUpRight, ArrowDownRight, Lightbulb, Skull,
-  Target, Zap, Package,
+  Target, Zap,
 } from "lucide-react";
 import {
   Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -67,7 +67,6 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
   const [alerts,        setAlerts]        = useState<ProductAlert[]>([]);
   const [products,      setProducts]      = useState<TopProduct[]>([]);
   const [milestones,    setMilestones]    = useState<MilestoneData | null>(null);
-  const [stock,         setStock]         = useState<any[]>([]);
   const [error,         setError]         = useState("");
   const [storeBreakdown, setStoreBreakdown] = useState<{ key: string; name: string; ov: Overview }[]>([]);
   const [spendInput,    setSpendInput]    = useState("");
@@ -170,19 +169,17 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
       const cc   = country  ? `&country=${country}`   : "";
       const camp = campaign ? `&campaign=${encodeURIComponent(campaign)}` : "";
       const q    = `store_id=${storeId}&${dq}${cc}${camp}`;
-      const [ov, al, pr, ms, st, campaignsRes] = await Promise.all([
+      const [ov, al, pr, ms, campaignsRes] = await Promise.all([
         fetch(`${API}/api/dashboard/overview?${q}`,           { cache: "no-store" }).then(r => r.json()),
         fetch(`${API}/api/product-alerts?store_id=${storeId}`, { cache: "no-store" }).then(r => r.json()),
         fetch(`${API}/api/products/top?${q}`,                 { cache: "no-store" }).then(r => r.json()),
         fetch(`${API}/api/milestones?store_id=${storeId}`,    { cache: "no-store" }).then(r => r.json()).catch(() => null),
-        fetch(`${API}/api/stock`,                             { cache: "no-store" }).then(r => r.json()).catch(() => null),
         fetch(`${API}/api/ads/campaigns?store_id=${storeId}`, { cache: "no-store" }).then(r => r.json()).catch(() => ({ campaigns: [] })),
       ]);
       setOverview(ov);
       setAlerts(al.alerts || []);
       setProducts(pr.products || []);
       if (ms && !ms.error) setMilestones(ms);
-      if (st?.stock) setStock(st.stock);
       if (campaignsRes?.campaigns) setCampaigns(campaignsRes.campaigns);
     } catch (e) {
       console.error(e); setError("Could not load dashboard data.");
@@ -814,41 +811,6 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
                   </div>
                 </div>
               ))}
-            </div>
-          )}
-
-          {/* Stock widget */}
-          {stock.length > 0 && (
-            <div className="mt-4 pt-3 border-t border-zinc-800">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-[10px] font-mono text-zinc-400 uppercase tracking-widest flex items-center gap-1">
-                  <Package size={10} /> Voorraad
-                </p>
-                <a href="/stock" className="text-[10px] text-blue-400 hover:text-blue-600">Beheer →</a>
-              </div>
-              <div className="space-y-2">
-                {stock.map((item: any) => {
-                  const pct = item.purchased_qty > 0 ? (item.remaining / item.purchased_qty) * 100 : 0;
-                  const isLow = item.remaining <= item.low_stock_alert && item.remaining > 0;
-                  const isEmpty = item.remaining <= 0;
-                  return (
-                    <div key={item.id} className="rounded-xl bg-zinc-800/60 border border-zinc-700 px-3 py-2">
-                      <div className="flex items-center justify-between mb-1">
-                        <p className="text-[11px] font-medium text-zinc-300 truncate max-w-[160px]">{item.product_title}</p>
-                        <span className={`text-[11px] font-black ${isEmpty ? "text-red-400" : isLow ? "text-amber-400" : "text-emerald-500"}`}>
-                          {item.remaining} / {item.purchased_qty}
-                        </span>
-                      </div>
-                      <div className="w-full h-1 bg-black/8 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${isEmpty ? "bg-red-400" : isLow ? "bg-amber-400" : "bg-emerald-500"}`}
-                          style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
             </div>
           )}
 
