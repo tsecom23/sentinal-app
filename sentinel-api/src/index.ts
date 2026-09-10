@@ -151,6 +151,169 @@ async function syncRecentOrders(env: Env): Promise<number> {
   return imported;
 }
 
+// ─── Product Health Sync ──────────────────────────────────────────────────────
+
+const AW_KEYWORDS = ["coat","manteau","knitwear","pull","boots","bottes","robe","dress","veste",
+  "jacket","doudoune","trench","accessoire","scarf","écharpe","glove","gant","thermal","gilet",
+  "blazer","cardigan","sweat","hoodie","pantalon","jeans","legging"];
+const OFF_SEASON_KEYWORDS = ["airco","climatiseur","koeler","ventilateur","cooling","fan",
+  "summer","été","plage","beach","maillot","bikini","sandal","sandales","sandales","pool","piscine"];
+
+function calcHealthScore(p: {
+  image_width: number; image_height: number;
+  variant_count: number; variants_with_images: number;
+  seo_title: string; seo_description: string; product_type: string; tags: string;
+  orders_30d: number; revenue_30d: number; orders_7d: number; revenue_7d: number;
+  product_title: string;
+}): number {
+  let score = 0;
+  const maxDim = Math.max(p.image_width, p.image_height);
+  if (maxDim >= 1500) score += 20; else if (maxDim >= 800) score += 8;
+  const varImgRatio = p.variant_count > 0 ? p.variants_with_images / p.variant_count : 0;
+  if (varImgRatio >= 1) score += 15; else if (varImgRatio >= 0.5) score += 7;
+  const seoTitleOk = p.seo_title && p.seo_title !== p.product_title && p.seo_title.length > 10;
+  if (seoTitleOk) score += 15;
+  if (p.seo_description && p.seo_description.length > 20) score += 10;
+  if (p.product_type && p.product_type.length > 0) score += 5;
+  if (p.orders_30d > 0) score += 10; if (p.orders_30d >= 3) score += 5; if (p.orders_30d >= 10) score += 5;
+  const titleLower = (p.product_title + " " + p.tags).toLowerCase();
+  const isAW = AW_KEYWORDS.some(k => titleLower.includes(k));
+  const isOff = OFF_SEASON_KEYWORDS.some(k => titleLower.includes(k));
+  if (isAW && !isOff) score += 10; else if (isOff) score -= 5;
+  const momentum = p.orders_7d > 0 && p.orders_30d > 0
+    ? (p.orders_7d / 7) / (p.orders_30d / 30) : 0;
+  if (momentum >= 1.2) score += 5; else if (momentum <= 0.3 && p.orders_30d >= 3) score -= 5;
+  return Math.max(0, Math.min(100, score));
+}
+
+async function syncProductHealth(env: Env, storeId?: string): Promise<number> {
+  const q = storeId
+    ? env.DB.prepare(`SELECT id, shopify_domain, shopify_access_token FROM stores WHERE id=?`).bind(storeId)
+    : env.DB.prepare(`SELECT id, shopify_domain, shopify_access_token FROM stores`);
+  const stores = (await q.all()).results as Array<{ id: string; shopify_domain: string; shopify_access_token: string }>;
+
+  let synced = 0;
+  const now = new Date().toISOString();
+  const date30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const date7  = new Date(Date.now() -  7 * 86400000).toISOString().slice(0, 10);
+
+  for (const store of stores) {
+    if (!store.shopify_domain || !store.shopify_access_token) continue;
+    const gqlUrl = `https://${store.shopify_domain}/admin/api/2024-01/graphql.json`;
+    const headers = {
+      "X-Shopify-Access-Token": store.shopify_access_token,
+      "Content-Type": "application/json",
+    };
+
+    // Paginate through all products via GraphQL
+    let cursor: string | null = null;
+    let hasNext = true;
+    while (hasNext) {
+      const afterClause = cursor ? `, after: "${cursor}"` : "";
+      const gql = `{
+        products(first: 50, query: "status:active"${afterClause}) {
+          pageInfo { hasNextPage endCursor }
+          edges {
+            node {
+              id title handle productType tags
+              seo { title description }
+              media(first: 30) {
+                edges { node { ... on MediaImage { image { width height } } } }
+              }
+              variants(first: 30) {
+                edges { node { image { id } } }
+              }
+            }
+          }
+        }
+      }`;
+      const res = await fetch(gqlUrl, { method: "POST", headers, body: JSON.stringify({ query: gql }) });
+      if (!res.ok) break;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const body = await res.json() as any;
+      const productsConn = body?.data?.products;
+      if (!productsConn) break;
+      hasNext = productsConn.pageInfo?.hasNextPage ?? false;
+      cursor  = productsConn.pageInfo?.endCursor ?? null;
+
+      for (const edge of productsConn.edges ?? []) {
+        const p = edge.node;
+        const productId = p.id.replace("gid://shopify/Product/", "");
+
+        // Find best image dimensions across all media
+        let imgW = 0, imgH = 0;
+        for (const mEdge of p.media?.edges ?? []) {
+          const img = mEdge.node?.image;
+          if (img?.width > imgW) { imgW = img.width; imgH = img.height; }
+        }
+
+        // Count variants + how many have images
+        const variants = (p.variants?.edges ?? []).map((e: { node: { image: { id: string } | null } }) => e.node);
+        const varCount = variants.length;
+        const varWithImg = variants.filter((v: { image: { id: string } | null }) => v.image?.id).length;
+
+        // Get 30d + 7d sales from D1 orders
+        const row30 = await env.DB.prepare(
+          `SELECT COUNT(*) as cnt, COALESCE(SUM(oi.revenue),0) as rev
+           FROM order_items oi
+           JOIN orders o ON o.id=oi.order_id
+           WHERE oi.store_id=? AND oi.product_id=?
+             AND o.created_at >= ? AND o.financial_status != 'cancelled'`
+        ).bind(store.id, productId, date30 + "T00:00:00Z").first() as { cnt: number; rev: number } | null;
+
+        const row7 = await env.DB.prepare(
+          `SELECT COUNT(*) as cnt, COALESCE(SUM(oi.revenue),0) as rev
+           FROM order_items oi
+           JOIN orders o ON o.id=oi.order_id
+           WHERE oi.store_id=? AND oi.product_id=?
+             AND o.created_at >= ? AND o.financial_status != 'cancelled'`
+        ).bind(store.id, productId, date7 + "T00:00:00Z").first() as { cnt: number; rev: number } | null;
+
+        const orders30 = row30?.cnt ?? 0;
+        const rev30 = row30?.rev ?? 0;
+        const orders7 = row7?.cnt ?? 0;
+        const rev7 = row7?.rev ?? 0;
+
+        const healthScore = calcHealthScore({
+          image_width: imgW, image_height: imgH,
+          variant_count: varCount, variants_with_images: varWithImg,
+          seo_title: p.seo?.title ?? "", seo_description: p.seo?.description ?? "",
+          product_type: p.productType ?? "", tags: (p.tags ?? []).join(" "),
+          orders_30d: orders30, revenue_30d: rev30, orders_7d: orders7, revenue_7d: rev7,
+          product_title: p.title ?? "",
+        });
+
+        await env.DB.prepare(`
+          INSERT INTO product_health_signals
+            (store_id, product_id, product_title, handle,
+             image_width, image_height, has_variant_images, variant_count, variants_with_images,
+             seo_title, seo_description, product_type, tags,
+             orders_30d, revenue_30d, orders_7d, revenue_7d, health_score, last_synced)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          ON CONFLICT(store_id, product_id) DO UPDATE SET
+            product_title=excluded.product_title, handle=excluded.handle,
+            image_width=excluded.image_width, image_height=excluded.image_height,
+            has_variant_images=excluded.has_variant_images, variant_count=excluded.variant_count,
+            variants_with_images=excluded.variants_with_images,
+            seo_title=excluded.seo_title, seo_description=excluded.seo_description,
+            product_type=excluded.product_type, tags=excluded.tags,
+            orders_30d=excluded.orders_30d, revenue_30d=excluded.revenue_30d,
+            orders_7d=excluded.orders_7d, revenue_7d=excluded.revenue_7d,
+            health_score=excluded.health_score, last_synced=excluded.last_synced
+        `).bind(
+          store.id, productId, p.title ?? "", p.handle ?? "",
+          imgW, imgH, varWithImg === varCount && varCount > 0 ? 1 : 0, varCount, varWithImg,
+          p.seo?.title ?? "", p.seo?.description ?? "", p.productType ?? "",
+          (p.tags ?? []).join(","),
+          orders30, rev30, orders7, rev7, healthScore, now
+        ).run();
+        synced++;
+      }
+    }
+  }
+  return synced;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getAmsterdamDate(offsetDays = 0): string {
@@ -367,6 +530,30 @@ const MIGRATIONS = [
   `ALTER TABLE orders ADD COLUMN utm_source TEXT DEFAULT ''`,
   `ALTER TABLE orders ADD COLUMN utm_medium TEXT DEFAULT ''`,
   `ALTER TABLE meta_ads_daily ADD COLUMN conversion_value REAL DEFAULT 0`,
+  // Product health signals — daily Shopify GraphQL sync
+  `CREATE TABLE IF NOT EXISTS product_health_signals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_id TEXT NOT NULL,
+    product_id TEXT NOT NULL,
+    product_title TEXT NOT NULL,
+    handle TEXT DEFAULT '',
+    image_width INTEGER DEFAULT 0,
+    image_height INTEGER DEFAULT 0,
+    has_variant_images INTEGER DEFAULT 0,
+    variant_count INTEGER DEFAULT 0,
+    variants_with_images INTEGER DEFAULT 0,
+    seo_title TEXT DEFAULT '',
+    seo_description TEXT DEFAULT '',
+    product_type TEXT DEFAULT '',
+    tags TEXT DEFAULT '',
+    orders_30d INTEGER DEFAULT 0,
+    revenue_30d REAL DEFAULT 0,
+    orders_7d INTEGER DEFAULT 0,
+    revenue_7d REAL DEFAULT 0,
+    health_score INTEGER DEFAULT 0,
+    last_synced TEXT,
+    UNIQUE(store_id, product_id)
+  )`,
 ];
 
 async function runMigrations(db: D1Database) {
@@ -3988,13 +4175,152 @@ export default {
       return json({ ok: true, marked });
     }
 
+    // ── GET /api/product-health — product health scores ──────────────────────
+    if (path === "/api/product-health" && method === "GET") {
+      const storeId = url.searchParams.get("store_id");
+      const sort = url.searchParams.get("sort") || "score_asc";
+      const limit = Math.min(parseInt(url.searchParams.get("limit") || "200"), 500);
+
+      const orderClause = sort === "score_asc"  ? "health_score ASC" :
+                          sort === "score_desc" ? "health_score DESC" :
+                          sort === "revenue"    ? "revenue_30d DESC" :
+                          "orders_30d DESC";
+
+      const q = storeId
+        ? env.DB.prepare(
+            `SELECT * FROM product_health_signals WHERE store_id=? ORDER BY ${orderClause} LIMIT ?`
+          ).bind(storeId, limit)
+        : env.DB.prepare(
+            `SELECT * FROM product_health_signals ORDER BY ${orderClause} LIMIT ?`
+          ).bind(limit);
+
+      const rows = (await q.all()).results;
+
+      // Compute signal breakdown per product
+      const products = rows.map((r: Record<string, unknown>) => {
+        const signals: string[] = [];
+        const imgMax = Math.max(Number(r.image_width) || 0, Number(r.image_height) || 0);
+        if (imgMax < 1500) signals.push("photo_quality");
+        const varCount = Number(r.variant_count) || 0;
+        const varImg = Number(r.variants_with_images) || 0;
+        if (varCount > 1 && varImg < varCount) signals.push("variant_images");
+        if (!r.seo_title || String(r.seo_title).length < 5) signals.push("seo_title");
+        if (!r.seo_description || String(r.seo_description).length < 10) signals.push("seo_description");
+        if (!r.product_type) signals.push("product_type");
+        const titleTags = (String(r.product_title || "") + " " + String(r.tags || "")).toLowerCase();
+        const isOff = OFF_SEASON_KEYWORDS.some(k => titleTags.includes(k));
+        if (isOff) signals.push("off_season");
+        if (Number(r.orders_30d) === 0) signals.push("no_sales");
+        const orders30 = Number(r.orders_30d) || 0;
+        const orders7 = Number(r.orders_7d) || 0;
+        const momentum = orders30 >= 3 ? (orders7 / 7) / (orders30 / 30) : 1;
+        if (momentum <= 0.3 && orders30 >= 3) signals.push("declining");
+        return { ...r, failed_signals: signals };
+      });
+
+      return json({ products, total: products.length });
+    }
+
+    // ── POST /api/product-health/sync — trigger manual sync ─────────────────
+    if (path === "/api/product-health/sync" && method === "POST") {
+      const body = await request.json() as { store_id?: string };
+      const synced = await syncProductHealth(env, body.store_id);
+      return json({ ok: true, synced });
+    }
+
+    // ── POST /api/product-health/import — bulk import from external source ───
+    if (path === "/api/product-health/import" && method === "POST") {
+      const body = await request.json() as { store_id: string; products: Array<{
+        product_id: string; product_title: string; handle: string;
+        image_width: number; image_height: number;
+        variant_count: number; variants_with_images: number;
+        seo_title: string; seo_description: string;
+        product_type: string; tags: string;
+      }> };
+      if (!body.store_id || !Array.isArray(body.products)) return json({ error: "missing store_id or products" }, 400);
+      const now = new Date().toISOString();
+      const date30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+      const date7  = new Date(Date.now() -  7 * 86400000).toISOString().slice(0, 10);
+      let synced = 0;
+      for (const p of body.products) {
+        const row30 = await env.DB.prepare(
+          `SELECT COUNT(*) as cnt, COALESCE(SUM(oi.revenue),0) as rev
+           FROM order_items oi JOIN orders o ON o.id=oi.order_id
+           WHERE oi.store_id=? AND oi.product_id=? AND o.created_at>=? AND o.financial_status!='cancelled'`
+        ).bind(body.store_id, p.product_id, date30 + "T00:00:00Z").first() as { cnt: number; rev: number } | null;
+        const row7 = await env.DB.prepare(
+          `SELECT COUNT(*) as cnt, COALESCE(SUM(oi.revenue),0) as rev
+           FROM order_items oi JOIN orders o ON o.id=oi.order_id
+           WHERE oi.store_id=? AND oi.product_id=? AND o.created_at>=? AND o.financial_status!='cancelled'`
+        ).bind(body.store_id, p.product_id, date7 + "T00:00:00Z").first() as { cnt: number; rev: number } | null;
+        const orders30 = row30?.cnt ?? 0; const rev30 = row30?.rev ?? 0;
+        const orders7 = row7?.cnt ?? 0;   const rev7 = row7?.rev ?? 0;
+        const healthScore = calcHealthScore({
+          image_width: p.image_width, image_height: p.image_height,
+          variant_count: p.variant_count, variants_with_images: p.variants_with_images,
+          seo_title: p.seo_title, seo_description: p.seo_description,
+          product_type: p.product_type, tags: p.tags,
+          orders_30d: orders30, revenue_30d: rev30, orders_7d: orders7, revenue_7d: rev7,
+          product_title: p.product_title,
+        });
+        await env.DB.prepare(`
+          INSERT INTO product_health_signals
+            (store_id,product_id,product_title,handle,image_width,image_height,has_variant_images,
+             variant_count,variants_with_images,seo_title,seo_description,product_type,tags,
+             orders_30d,revenue_30d,orders_7d,revenue_7d,health_score,last_synced)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          ON CONFLICT(store_id,product_id) DO UPDATE SET
+            product_title=excluded.product_title, handle=excluded.handle,
+            image_width=excluded.image_width, image_height=excluded.image_height,
+            has_variant_images=excluded.has_variant_images, variant_count=excluded.variant_count,
+            variants_with_images=excluded.variants_with_images, seo_title=excluded.seo_title,
+            seo_description=excluded.seo_description, product_type=excluded.product_type,
+            tags=excluded.tags, orders_30d=excluded.orders_30d, revenue_30d=excluded.revenue_30d,
+            orders_7d=excluded.orders_7d, revenue_7d=excluded.revenue_7d,
+            health_score=excluded.health_score, last_synced=excluded.last_synced
+        `).bind(
+          body.store_id, p.product_id, p.product_title, p.handle,
+          p.image_width, p.image_height,
+          p.variants_with_images === p.variant_count && p.variant_count > 0 ? 1 : 0,
+          p.variant_count, p.variants_with_images,
+          p.seo_title, p.seo_description, p.product_type, p.tags,
+          orders30, rev30, orders7, rev7, healthScore, now
+        ).run();
+        synced++;
+      }
+      return json({ ok: true, synced });
+    }
+
+    // ── GET /api/product-health/debug — test Shopify GraphQL connection ──────
+    if (path === "/api/product-health/debug" && method === "GET") {
+      const storeId = url.searchParams.get("store_id") || "ceofo";
+      const store = (await env.DB.prepare(
+        `SELECT id, shopify_domain, shopify_access_token FROM stores WHERE id=?`
+      ).bind(storeId).first()) as { id: string; shopify_domain: string; shopify_access_token: string } | null;
+      if (!store) return json({ error: "store not found" }, 404);
+      if (!store.shopify_access_token) return json({ error: "no token", domain: store.shopify_domain });
+      const gqlUrl = `https://${store.shopify_domain}/admin/api/2024-01/graphql.json`;
+      const gql = `{ products(first: 3) { edges { node { id title } } } }`;
+      const res = await fetch(gqlUrl, {
+        method: "POST",
+        headers: { "X-Shopify-Access-Token": store.shopify_access_token, "Content-Type": "application/json" },
+        body: JSON.stringify({ query: gql }),
+      });
+      const text = await res.text();
+      return json({ status: res.status, ok: res.ok, domain: store.shopify_domain, body: text.slice(0, 2000) });
+    }
+
     return json({ error: "Not found", path }, 404);
   },
 
-  // Cron: sync recent orders (webhook fallback) + cancellations every 6h.
+  // Cron: sync recent orders + cancellations + product health every 6h.
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(
-      Promise.all([syncRecentOrders(env), syncCancellations(env)]).then(() => undefined)
+      Promise.all([
+        syncRecentOrders(env),
+        syncCancellations(env),
+        syncProductHealth(env),
+      ]).then(() => undefined)
     );
   },
 };

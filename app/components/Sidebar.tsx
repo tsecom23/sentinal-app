@@ -6,15 +6,16 @@ import {
   BarChart3, Bell, Bot, Box,
   LayoutDashboard, LineChart, LogOut, MessageCircle,
   RotateCcw, ShoppingCart, Skull, Store,
-  Target, TrendingUp, Trophy, Users, Wifi,
+  Target, TrendingUp, Trophy, Users, Wifi, Heart,
 } from "lucide-react";
+import ThemeToggle from "./ThemeToggle";
 import { createClient } from "../../utils/supabase/client";
 import { canAccess } from "../lib/roles";
 
 const NAV = [
   {
     section: "COMMAND",
-    color: "#22d3ee",
+    color: "#8b5cf6",
     items: [
       { label: "Dashboard",  href: "/",           icon: LayoutDashboard },
       { label: "Orders",     href: "/orders",     icon: ShoppingCart },
@@ -26,7 +27,7 @@ const NAV = [
   },
   {
     section: "MEDIA",
-    color: "#a78bfa",
+    color: "#a855f7",
     items: [
       { label: "ROAS Tracker",  href: "/roas-tracker",     icon: LineChart },
       { label: "Google Ads",    href: "/google-ads",       icon: BarChart3 },
@@ -39,8 +40,9 @@ const NAV = [
     section: "OPS",
     color: "#fb923c",
     items: [
-      { label: "Returns",    href: "/returns",    icon: RotateCcw },
-      { label: "Dead Stock", href: "/dead-stock", icon: Skull },
+      { label: "Product Health", href: "/product-health", icon: Heart },
+      { label: "Returns",        href: "/returns",        icon: RotateCcw },
+      { label: "Dead Stock",     href: "/dead-stock",     icon: Skull },
     ],
   },
   {
@@ -92,8 +94,8 @@ export default function Sidebar() {
     <aside
       className="w-[220px] min-h-screen flex flex-col fixed left-0 top-0 bottom-0 z-40 select-none"
       style={{
-        background: "linear-gradient(180deg, #040810 0%, #030609 100%)",
-        borderRight: "1px solid rgba(34,211,238,0.08)",
+        background: "var(--sidebar-bg)",
+        borderRight: "1px solid var(--sidebar-border)",
       }}
     >
       {/* ── Brand ──────────────────────────────── */}
@@ -102,8 +104,8 @@ export default function Sidebar() {
           <div
             className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 overflow-hidden relative"
             style={{
-              background: "linear-gradient(135deg, #06b6d4, #4f46e5)",
-              boxShadow: "0 0 20px rgba(6,182,212,0.35), 0 0 40px rgba(6,182,212,0.1)",
+              background: "linear-gradient(135deg, #8b5cf6, #6d28d9)",
+              boxShadow: "0 0 20px rgba(139,92,246,0.40), 0 0 40px rgba(139,92,246,0.12)",
             }}
           >
             <span className="text-white text-[11px] font-black tracking-tight font-mono z-10 relative">TS</span>
@@ -118,11 +120,11 @@ export default function Sidebar() {
           <div>
             <div
               className="text-[14px] font-mono font-black tracking-tight"
-              style={{ color: "#e2e8f0", letterSpacing: "-0.01em" }}
+              style={{ color: "var(--text)", letterSpacing: "-0.01em" }}
             >
               Sentinel
             </div>
-            <div className="text-[9px] font-mono tracking-[0.15em] mt-0.5" style={{ color: "#22d3ee", opacity: 0.7 }}>
+            <div className="text-[9px] font-mono tracking-[0.15em] mt-0.5" style={{ color: "#8b5cf6", opacity: 0.8 }}>
               AI COMMERCE OS
             </div>
           </div>
@@ -131,21 +133,24 @@ export default function Sidebar() {
         {/* Live clock */}
         <div
           className="mt-3 rounded-lg px-3 py-2 font-mono"
-          style={{ background: "rgba(34,211,238,0.04)", border: "1px solid rgba(34,211,238,0.08)" }}
+          style={{ background: "var(--clock-bg)", border: "1px solid var(--clock-border)" }}
         >
           <div className="flex items-center justify-between">
             <div
               className="text-[13px] font-bold tabular-nums"
-              style={{ color: "#22d3ee", fontVariantNumeric: "tabular-nums" }}
+              style={{ color: "var(--clock-color)", fontVariantNumeric: "tabular-nums" }}
             >
               {time}
             </div>
-            <span
-              className="inline-block w-1.5 h-1.5 rounded-full"
-              style={{ background: "#22c55e", boxShadow: "0 0 6px #22c55e", animation: "pulse-dot 2s ease-in-out infinite" }}
-            />
+            <div className="flex items-center gap-1.5">
+              <ThemeToggle />
+              <span
+                className="inline-block w-1.5 h-1.5 rounded-full"
+                style={{ background: "#22c55e", boxShadow: "0 0 6px #22c55e", animation: "pulse-dot 2s ease-in-out infinite" }}
+              />
+            </div>
           </div>
-          <div className="text-[9px] mt-0.5" style={{ color: "#475569" }}>{date}</div>
+          <div className="text-[9px] mt-0.5" style={{ color: "var(--date-color)" }}>{date}</div>
         </div>
       </div>
 
@@ -153,19 +158,11 @@ export default function Sidebar() {
       <nav className="flex-1 overflow-y-auto px-3 space-y-4 pb-2">
         {visibleNav.map(group => (
           <div key={group.section}>
-            <div
-              className="flex items-center gap-1.5 px-2 mb-1.5"
-            >
-              <span
-                className="text-[9px] font-mono font-black tracking-[0.25em]"
-                style={{ color: group.color, opacity: 0.5 }}
-              >
+            <div className="flex items-center gap-1.5 px-2 mb-1.5">
+              <span className="text-[9px] font-mono font-black tracking-[0.25em]" style={{ color: group.color, opacity: 0.5 }}>
                 //
               </span>
-              <span
-                className="text-[9px] font-mono font-black tracking-[0.2em]"
-                style={{ color: group.color, opacity: 0.7 }}
-              >
+              <span className="text-[9px] font-mono font-black tracking-[0.2em]" style={{ color: group.color, opacity: 0.7 }}>
                 {group.section}
               </span>
             </div>
@@ -178,8 +175,8 @@ export default function Sidebar() {
                     href={href}
                     className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[12px] font-mono transition-all duration-100 relative"
                     style={{
-                      color: active ? group.color : "#64748b",
-                      background: active ? `${group.color}12` : "transparent",
+                      color: active ? group.color : "#6b7280",
+                      background: active ? `${group.color}14` : "transparent",
                       fontWeight: active ? 700 : 400,
                     }}
                   >
@@ -206,30 +203,30 @@ export default function Sidebar() {
       <div
         className="mx-3 mb-3 rounded-xl p-3 relative overflow-hidden"
         style={{
-          background: "linear-gradient(135deg, rgba(34,211,238,0.05) 0%, rgba(34,211,238,0.02) 100%)",
-          border: "1px solid rgba(34,211,238,0.1)",
+          background: "var(--system-bg)",
+          border: "1px solid var(--system-border)",
         }}
       >
         <div className="flex items-center gap-1.5 mb-2">
           <Wifi
             size={9}
-            className="text-cyan-400"
+            className="text-violet-400"
             style={{ animation: "pulse-dot 2s ease-in-out infinite" }}
           />
-          <span className="text-[9px] font-mono font-black text-cyan-400 tracking-[0.2em]">AGENT ONLINE</span>
+          <span className="text-[9px] font-mono font-black text-violet-400 tracking-[0.2em]">AGENT ONLINE</span>
         </div>
         <div className="space-y-1">
           <div className="flex items-center justify-between">
-            <span className="text-[9px] font-mono" style={{ color: "#475569" }}>STATUS</span>
-            <span className="text-[9px] font-mono text-emerald-400 font-bold">ACTIVE</span>
+            <span className="text-[9px] font-mono" style={{ color: "var(--status-label)" }}>STATUS</span>
+            <span className="text-[9px] font-mono text-emerald-500 font-bold">ACTIVE</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-[9px] font-mono" style={{ color: "#475569" }}>STORES</span>
-            <span className="text-[9px] font-mono text-cyan-400 font-bold">3 LIVE</span>
+            <span className="text-[9px] font-mono" style={{ color: "var(--status-label)" }}>STORES</span>
+            <span className="text-[9px] font-mono text-violet-500 font-bold">3 LIVE</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-[9px] font-mono" style={{ color: "#475569" }}>ENGINE</span>
-            <span className="text-[9px] font-mono" style={{ color: "#64748b" }}>ZenoX · PMax</span>
+            <span className="text-[9px] font-mono" style={{ color: "var(--status-label)" }}>ENGINE</span>
+            <span className="text-[9px] font-mono" style={{ color: "var(--muted)" }}>ZenoX · PMax</span>
           </div>
         </div>
       </div>
@@ -238,9 +235,9 @@ export default function Sidebar() {
       <button
         onClick={signOut}
         className="mx-3 mb-4 flex items-center gap-2 px-3 py-2 rounded-lg text-[11px] font-mono transition-all"
-        style={{ color: "#475569" }}
+        style={{ color: "var(--muted)" }}
         onMouseEnter={e => { e.currentTarget.style.color = "#ef4444"; e.currentTarget.style.background = "rgba(239,68,68,0.05)"; }}
-        onMouseLeave={e => { e.currentTarget.style.color = "#475569"; e.currentTarget.style.background = "transparent"; }}
+        onMouseLeave={e => { e.currentTarget.style.color = "var(--muted)"; e.currentTarget.style.background = "transparent"; }}
       >
         <LogOut size={10} />
         Sign out

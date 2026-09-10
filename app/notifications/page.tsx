@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Bell } from "lucide-react";
 
 const STORES = [
-  { key: "ceofo",     name: "CEOFO"     },
+  { key: "ceofo",     name: "Melvoire"  },
   { key: "martaline", name: "Martaline" },
 ];
 

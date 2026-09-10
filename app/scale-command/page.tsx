@@ -9,7 +9,7 @@ import { DateRangePicker, DateRange, initRange, toQueryString } from "../compone
 
 const API = "https://sentinel-api.tssheets1.workers.dev";
 const STORES = [
-  { key: "ceofo",     name: "CEOFO" },
+  { key: "ceofo",     name: "Melvoire" },
   { key: "martaline", name: "Martaline" },
 ];
 

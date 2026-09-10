@@ -10,7 +10,7 @@ const WITH_SIDEBAR = [
   "/", "/orders", "/product-insights", "/returns", "/dead-stock", "/stores",
   "/ai-chat", "/ai-recommendations", "/google-ads", "/product-ads",
   "/scale-command", "/milestones", "/pnl", "/customers", "/notifications",
-  "/roas-tracker", "/inbox", "/customer-service",
+  "/roas-tracker", "/inbox", "/customer-service", "/product-health",
 ];
 
 export default function LayoutShell({ children }: { children: React.ReactNode }) {
@@ -41,10 +41,10 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
   if (!ready) return null;
 
   return (
-    <div className="flex min-h-screen bg-[#020408]">
+    <div className="flex min-h-screen" style={{ backgroundColor: "var(--bg)" }}>
       <Sidebar />
       <main className="flex-1 ml-[220px] min-w-0 relative">
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-cyan-500/20 to-transparent pointer-events-none" />
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-violet-500/20 to-transparent pointer-events-none" />
         {children}
       </main>
     </div>

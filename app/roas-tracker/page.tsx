@@ -12,7 +12,7 @@ const API = "https://sentinel-api.tssheets1.workers.dev";
 // ─── Country config per store ─────────────────────────────────────────────────
 const STORE_COUNTRIES: Record<string, { code: string; name: string; flag: string }[]> = {
   ceofo:     [{ code: "FR", name: "France",  flag: "🇫🇷" }, { code: "ES", name: "Spain",  flag: "🇪🇸" }, { code: "IT", name: "Italy",  flag: "🇮🇹" }],
-  dorevy:    [{ code: "CA", name: "Canada",  flag: "🇨🇦" }, { code: "US", name: "USA",    flag: "🇺🇸" }],
+  dorevy:    [{ code: "UK", name: "United Kingdom", flag: "🇬🇧" }],
   martaline: [{ code: "FR", name: "France",  flag: "🇫🇷" }],
 };
 

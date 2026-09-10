@@ -13,7 +13,11 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${geist.variable} h-full antialiased`}>
-      <body className="min-h-full bg-[#020408] text-slate-300">
+      <head>
+        {/* Prevent flash of wrong theme */}
+        <script dangerouslySetInnerHTML={{ __html: `(function(){try{if(localStorage.getItem('sentinel-theme')==='light')document.documentElement.classList.add('light')}catch(e){}})()` }} />
+      </head>
+      <body className="min-h-full" style={{ backgroundColor: "var(--bg)", color: "var(--text)" }}>
         <LayoutShell>{children}</LayoutShell>
       </body>
     </html>

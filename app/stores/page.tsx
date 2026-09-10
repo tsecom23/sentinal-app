@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "../../utils/supabase/client";
 import { Store, useStores } from "../hooks/useStores";
-import { Plus, Pencil, Check, X, ExternalLink, Link2 } from "lucide-react";
+import { Plus, Pencil, Check, X, ExternalLink, Link2, RefreshCw } from "lucide-react";
 
 const API = "https://sentinel-api.tssheets1.workers.dev";
 
@@ -30,6 +30,8 @@ export default function StoresPage() {
   const [message, setMessage]     = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<EditDraft>(EMPTY_DRAFT);
+  const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [syncMessage, setSyncMessage] = useState<Record<string, string>>({});
 
   async function addStore() {
     if (!draft.name) { setMessage("Store name is required."); return; }
@@ -75,6 +77,29 @@ export default function StoresPage() {
       setEditingId(null);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function syncOrders(id: string) {
+    setSyncingId(id);
+    setSyncMessage(p => ({ ...p, [id]: "" }));
+    try {
+      const r = await fetch(`${API}/api/shopify/sync-orders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ store_id: id, days: 2 }),
+      });
+      const d = await r.json() as { ok?: boolean; imported?: number; error?: string };
+      if (d.ok) {
+        setSyncMessage(p => ({ ...p, [id]: `Synced ${d.imported} orders` }));
+        invalidate();
+      } else {
+        setSyncMessage(p => ({ ...p, [id]: d.error ?? "Sync failed" }));
+      }
+    } catch {
+      setSyncMessage(p => ({ ...p, [id]: "Network error" }));
+    } finally {
+      setSyncingId(null);
     }
   }
 
@@ -247,6 +272,11 @@ export default function StoresPage() {
                       className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-xs font-medium rounded-lg transition-all">
                       <ExternalLink size={11} /> Open dashboard
                     </a>
+                    <button onClick={() => syncOrders(s.id)} disabled={syncingId === s.id}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-black/5 hover:bg-black/8 text-gray-500 hover:text-gray-900 disabled:opacity-50 text-xs font-medium rounded-lg transition-all">
+                      <RefreshCw size={11} className={syncingId === s.id ? "animate-spin" : ""} />
+                      {syncingId === s.id ? "Syncing…" : "Sync orders"}
+                    </button>
                     {!s.google_ads_customer_id && (
                       <button onClick={() => startEdit(s)}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-black/5 hover:bg-black/8 text-gray-500 hover:text-gray-900 text-xs font-medium rounded-lg transition-all">
@@ -254,6 +284,11 @@ export default function StoresPage() {
                       </button>
                     )}
                   </div>
+                  {syncMessage[s.id] && (
+                    <p className={`text-xs mt-1 ${syncMessage[s.id].includes("error") || syncMessage[s.id].includes("failed") || syncMessage[s.id].includes("not configured") ? "text-yellow-500" : "text-emerald-500"}`}>
+                      {syncMessage[s.id]}
+                    </p>
+                  )}
                 </>
               )}
             </div>

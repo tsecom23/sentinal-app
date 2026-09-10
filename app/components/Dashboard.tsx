@@ -271,7 +271,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
               value={storeId}
               onChange={e => changeStore(e.target.value)}
               className="rounded-xl px-3 py-2 text-sm font-mono font-semibold text-slate-200 min-w-[160px] cursor-pointer focus:outline-none"
-              style={{ background: "rgba(34,211,238,0.05)", border: "1px solid rgba(34,211,238,0.12)" }}
+              style={{ background: "rgba(139,92,246,0.05)", border: "1px solid rgba(139,92,246,0.12)" }}
             >
               {STORES.map(s => <option key={s.key} value={s.key}>{s.name}</option>)}
             </select>
@@ -283,14 +283,14 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
           <DateRangePicker value={dateRange} onChange={setDateRange} />
           <button
             onClick={loadData}
-            className="h-9 w-9 rounded-lg flex items-center justify-center text-slate-500 hover:text-slate-200 transition" style={{background:"rgba(34,211,238,0.05)",border:"1px solid rgba(34,211,238,0.1)"}}
+            className="h-9 w-9 rounded-lg flex items-center justify-center text-slate-500 hover:text-slate-200 transition" style={{background:"rgba(139,92,246,0.05)",border:"1px solid rgba(139,92,246,0.1)"}}
           >
             <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
           </button>
           {storeId !== "all" && (
             <button
               onClick={scanAlerts}
-              className="h-9 px-4 rounded-lg text-[11px] font-mono font-bold flex items-center gap-1.5 transition" style={{background:"rgba(34,211,238,0.1)",border:"1px solid rgba(34,211,238,0.25)",color:"#22d3ee"}}
+              className="h-9 px-4 rounded-lg text-[11px] font-mono font-bold flex items-center gap-1.5 transition" style={{background:"rgba(139,92,246,0.1)",border:"1px solid rgba(139,92,246,0.25)",color:"#8b5cf6"}}
             >
               <Bell size={13} />{scanning ? "Scanning…" : "Scan Alerts"}
             </button>
@@ -311,8 +311,8 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
             onClick={() => setCountry("")}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all"
             style={country === ""
-              ? { background: "#22d3ee", color: "#020408", border: "1px solid #22d3ee", boxShadow: "0 0 12px rgba(34,211,238,0.3)" }
-              : { background: "rgba(34,211,238,0.04)", color: "#64748b", border: "1px solid rgba(34,211,238,0.1)" }}
+              ? { background: "#8b5cf6", color: "#13131a", border: "1px solid #8b5cf6", boxShadow: "0 0 12px rgba(139,92,246,0.3)" }
+              : { background: "rgba(139,92,246,0.04)", color: "#64748b", border: "1px solid rgba(139,92,246,0.1)" }}
           >
             🌍 All
           </button>
@@ -322,8 +322,8 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
               onClick={() => setCountry(c.code)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all"
               style={country === c.code
-                ? { background: "#22d3ee", color: "#020408", border: "1px solid #22d3ee", boxShadow: "0 0 12px rgba(34,211,238,0.3)" }
-                : { background: "rgba(34,211,238,0.04)", color: "#64748b", border: "1px solid rgba(34,211,238,0.1)" }}
+                ? { background: "#8b5cf6", color: "#13131a", border: "1px solid #8b5cf6", boxShadow: "0 0 12px rgba(139,92,246,0.3)" }
+                : { background: "rgba(139,92,246,0.04)", color: "#64748b", border: "1px solid rgba(139,92,246,0.1)" }}
             >
               <span>{c.flag}</span>
               <span>{c.name}</span>
@@ -354,7 +354,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
             </div>
             <div className="h-1.5 rounded-full overflow-hidden" style={{background:"rgba(255,255,255,0.06)"}}>
               <div
-                className="h-full bg-cyan-500 rounded-full transition-all duration-700"
+                className="h-full bg-violet-500 rounded-full transition-all duration-700"
                 style={{ width: `${milestoneProgress}%` }}
               />
             </div>
@@ -365,7 +365,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
                 key={m}
                 className={`text-[10px] font-mono px-2 py-1 rounded-md font-bold transition-all ${
                   thisMonth >= m
-                    ? "text-cyan-400 font-bold"
+                    ? "text-violet-400 font-bold"
                     : "text-slate-600"
                 }`}
               >
@@ -383,8 +383,8 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
             onClick={() => setAdChannel("combined")}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all"
             style={adChannel === "combined"
-              ? { background: "#22d3ee", color: "#020408", border: "1px solid #22d3ee", boxShadow: "0 0 12px rgba(34,211,238,0.3)" }
-              : { background: "rgba(34,211,238,0.04)", color: "#64748b", border: "1px solid rgba(34,211,238,0.1)" }}
+              ? { background: "#8b5cf6", color: "#13131a", border: "1px solid #8b5cf6", boxShadow: "0 0 12px rgba(139,92,246,0.3)" }
+              : { background: "rgba(139,92,246,0.04)", color: "#64748b", border: "1px solid rgba(139,92,246,0.1)" }}
           >
             Combined
           </button>
@@ -393,7 +393,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all"
             style={adChannel === "google"
               ? { background: "#4285F4", color: "#fff", border: "1px solid #4285F4", boxShadow: "0 0 12px rgba(66,133,244,0.3)" }
-              : { background: "rgba(34,211,238,0.04)", color: "#64748b", border: "1px solid rgba(34,211,238,0.1)" }}
+              : { background: "rgba(139,92,246,0.04)", color: "#64748b", border: "1px solid rgba(139,92,246,0.1)" }}
           >
             <svg viewBox="0 0 24 24" width="12" height="12" fill="none" className="shrink-0">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -408,7 +408,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all"
             style={adChannel === "meta"
               ? { background: "#1877F2", color: "#fff", border: "1px solid #1877F2", boxShadow: "0 0 12px rgba(24,119,242,0.3)" }
-              : { background: "rgba(34,211,238,0.04)", color: "#64748b", border: "1px solid rgba(34,211,238,0.1)" }}
+              : { background: "rgba(139,92,246,0.04)", color: "#64748b", border: "1px solid rgba(139,92,246,0.1)" }}
           >
             <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" className="shrink-0">
               <path d="M12 2.04C6.5 2.04 2 6.53 2 12.06C2 17.06 5.66 21.21 10.44 21.96V14.96H7.9V12.06H10.44V9.85C10.44 7.34 11.93 5.96 14.22 5.96C15.31 5.96 16.45 6.15 16.45 6.15V8.62H15.19C13.95 8.62 13.56 9.39 13.56 10.18V12.06H16.34L15.89 14.96H13.56V21.96A10 10 0 0 0 22 12.06C22 6.53 17.5 2.04 12 2.04Z"/>
@@ -431,8 +431,8 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
             onClick={() => setCampaign("")}
             className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold transition-all"
             style={campaign === ""
-              ? { background: "#22d3ee", color: "#020408", border: "1px solid #22d3ee" }
-              : { background: "rgba(34,211,238,0.04)", color: "#64748b", border: "1px solid rgba(34,211,238,0.1)" }}
+              ? { background: "#8b5cf6", color: "#13131a", border: "1px solid #8b5cf6" }
+              : { background: "rgba(139,92,246,0.04)", color: "#64748b", border: "1px solid rgba(139,92,246,0.1)" }}
           >
             All
           </button>
@@ -442,8 +442,8 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
               onClick={() => setCampaign(c === campaign ? "" : c)}
               className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold transition-all"
               style={campaign === c
-                ? { background: "#22d3ee", color: "#020408", border: "1px solid #22d3ee" }
-                : { background: "rgba(34,211,238,0.04)", color: "#64748b", border: "1px solid rgba(34,211,238,0.1)" }}
+                ? { background: "#8b5cf6", color: "#13131a", border: "1px solid #8b5cf6" }
+                : { background: "rgba(139,92,246,0.04)", color: "#64748b", border: "1px solid rgba(139,92,246,0.1)" }}
             >
               {c}
             </button>
@@ -492,9 +492,9 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
         />
         <div
           className="rounded-2xl p-4 relative overflow-hidden"
-          style={{ background: "linear-gradient(135deg, #070F22 0%, #060C1A 100%)", border: "1px solid rgba(34,211,238,0.1)" }}
+          style={{ background: "linear-gradient(135deg, #1e1e2e 0%, #1a1a28 100%)", border: "1px solid rgba(139,92,246,0.1)" }}
         >
-          <div style={{ position: "absolute", top: 0, left: "10%", right: "10%", height: "1px", background: "linear-gradient(90deg, transparent, rgba(34,211,238,0.25), transparent)" }} />
+          <div style={{ position: "absolute", top: 0, left: "10%", right: "10%", height: "1px", background: "linear-gradient(90deg, transparent, rgba(139,92,246,0.25), transparent)" }} />
           <div className="flex items-center justify-between mb-2">
             <p className="font-mono uppercase" style={{ fontSize: "9px", letterSpacing: "0.22em", color: "#475569" }}>Ad Spend</p>
           </div>
@@ -523,9 +523,9 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
                         <span className="text-[10px] font-mono text-slate-500">€</span>
                         <input autoFocus type="text" value={spendInput} onChange={e => setSpendInput(e.target.value)}
                           onKeyDown={e => { if (e.key === "Enter") saveSpend(); if (e.key === "Escape") setSpendEditing(false); }}
-                          className="w-16 text-[10px] border border-cyan-600 rounded px-1 py-0.5 outline-none bg-zinc-800 text-zinc-100" />
+                          className="w-16 text-[10px] border border-violet-600 rounded px-1 py-0.5 outline-none bg-zinc-800 text-zinc-100" />
                         <button onClick={saveSpend} disabled={spendSaving}
-                          className="text-[10px] bg-cyan-500 text-white px-1.5 py-0.5 rounded disabled:opacity-50">
+                          className="text-[10px] bg-violet-500 text-white px-1.5 py-0.5 rounded disabled:opacity-50">
                           {spendSaving ? "…" : "OK"}
                         </button>
                         <button onClick={() => setSpendEditing(false)} className="text-[10px] font-mono text-slate-500">✕</button>
@@ -553,9 +553,9 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
                         <span className="text-[10px] font-mono text-slate-500">€</span>
                         <input autoFocus type="text" value={metaSpendInput} onChange={e => setMetaSpendInput(e.target.value)}
                           onKeyDown={e => { if (e.key === "Enter") saveMetaSpend(); if (e.key === "Escape") setMetaSpendEditing(false); }}
-                          className="w-16 text-[10px] border border-cyan-600 rounded px-1 py-0.5 outline-none bg-zinc-800 text-zinc-100" />
+                          className="w-16 text-[10px] border border-violet-600 rounded px-1 py-0.5 outline-none bg-zinc-800 text-zinc-100" />
                         <button onClick={saveMetaSpend} disabled={metaSpendSaving}
-                          className="text-[10px] bg-cyan-500 text-white px-1.5 py-0.5 rounded disabled:opacity-50">
+                          className="text-[10px] bg-violet-500 text-white px-1.5 py-0.5 rounded disabled:opacity-50">
                           {metaSpendSaving ? "…" : "OK"}
                         </button>
                         <button onClick={() => setMetaSpendEditing(false)} className="text-[10px] font-mono text-slate-500">✕</button>
@@ -567,7 +567,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
                 </div>
               </div>
               {totalAdSpend > 0 && (
-                <div className="pt-1.5" style={{ borderTop: "1px solid rgba(34,211,238,0.08)" }}>
+                <div className="pt-1.5" style={{ borderTop: "1px solid rgba(139,92,246,0.08)" }}>
                   <div className="flex justify-between items-center">
                     <span className="text-[9px] font-mono tracking-widest" style={{ color: "#475569" }}>TOTAL</span>
                     <span className="text-base font-black tabular-nums" style={{ color: "#e2e8f0" }}>€{fmt(totalAdSpend)}</span>
@@ -589,9 +589,9 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
         {/* Break-even ROAS card */}
         <div
           className="rounded-2xl p-4 relative overflow-hidden"
-          style={{ background: "linear-gradient(135deg, #070F22 0%, #060C1A 100%)", border: "1px solid rgba(34,211,238,0.1)" }}
+          style={{ background: "linear-gradient(135deg, #1e1e2e 0%, #1a1a28 100%)", border: "1px solid rgba(139,92,246,0.1)" }}
         >
-          <div style={{ position: "absolute", top: 0, left: "10%", right: "10%", height: "1px", background: "linear-gradient(90deg, transparent, rgba(34,211,238,0.25), transparent)" }} />
+          <div style={{ position: "absolute", top: 0, left: "10%", right: "10%", height: "1px", background: "linear-gradient(90deg, transparent, rgba(139,92,246,0.25), transparent)" }} />
           <p className="font-mono uppercase mb-2" style={{ fontSize: "9px", letterSpacing: "0.22em", color: "#475569" }}>Break-even ROAS</p>
           {loading ? (
             <div className="h-6 w-16 rounded-lg" style={{ background: "rgba(255,255,255,0.04)", animation: "pulse 2s cubic-bezier(0.4,0,0.6,1) infinite" }} />
@@ -627,11 +627,11 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
       {/* ── Chart ──────────────────────────────────────────────── */}
       <div className="card p-6 mb-6">
         <div className="flex items-center gap-2 mb-5">
-          <TrendingUp size={14} className="text-cyan-400" />
+          <TrendingUp size={14} className="text-violet-400" />
           <h3 className="text-[10px] font-mono font-bold uppercase tracking-widest text-slate-400">Revenue &amp; Profit Trend</h3>
           <div className="ml-auto flex items-center gap-4 text-[10px] text-zinc-400">
             <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-cyan-500 inline-block" />
+              <span className="w-2 h-2 rounded-full bg-violet-500 inline-block" />
               Revenue
             </span>
             <span className="flex items-center gap-1.5">
@@ -645,8 +645,8 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
             <AreaChart data={chartData} margin={{ left: -20, right: 10 }}>
               <defs>
                 <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%"   stopColor="#22d3ee" stopOpacity={0.15} />
-                  <stop offset="100%" stopColor="#22d3ee" stopOpacity={0} />
+                  <stop offset="0%"   stopColor="#8b5cf6" stopOpacity={0.15} />
+                  <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="profGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%"   stopColor="#10b981" stopOpacity={0.15} />
@@ -657,19 +657,19 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
               <YAxis stroke="transparent" tick={{ fill: "#71717a", fontSize: 10 }} />
               <Tooltip
                 contentStyle={{
-                  background: "#060D1A",
-                  border: "1px solid rgba(34,211,238,0.15)",
+                  background: "#1c1c26",
+                  border: "1px solid rgba(139,92,246,0.15)",
                   borderRadius: 10,
                   fontSize: 12,
                   boxShadow: "0 4px 24px rgba(0,0,0,0.6)",
                 }}
-                labelStyle={{ color: "#22d3ee", fontWeight: 600 }}
+                labelStyle={{ color: "#8b5cf6", fontWeight: 600 }}
                 formatter={(v: number, name: string) => [
                   `€${v.toFixed(2)}`,
                   name === "revenue" ? "Revenue" : "Net Profit",
                 ]}
               />
-              <Area type="monotone" dataKey="revenue" stroke="#22d3ee" strokeWidth={2}  fill="url(#revGrad)"  dot={false} />
+              <Area type="monotone" dataKey="revenue" stroke="#8b5cf6" strokeWidth={2}  fill="url(#revGrad)"  dot={false} />
               <Area type="monotone" dataKey="profit"  stroke="#10b981" strokeWidth={1.5} fill="url(#profGrad)" dot={false} />
             </AreaChart>
           </ResponsiveContainer>
@@ -704,7 +704,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
                   const sProfit = sov.profit ?? (sRev - sCog - sAds);
                   const sRoas   = sov.roas ?? (sAds > 0 ? sRev / sAds : 0);
                   return (
-                    <tr key={key} className="hover:bg-cyan-500/5 transition-colors">
+                    <tr key={key} className="hover:bg-violet-500/5 transition-colors">
                       <td className="py-3 pr-6 font-semibold text-slate-300">{name}</td>
                       <td className="py-3 px-4 text-right text-slate-400">{sov.orders ?? 0}</td>
                       <td className="py-3 px-4 text-right text-slate-300 font-medium tabular-nums">€{fmt(sRev)}</td>
@@ -731,7 +731,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
         {/* Top Products */}
         <div className="col-span-3 card p-5 flex flex-col">
           <div className="flex items-center gap-2 mb-4">
-            <Box size={13} className="text-cyan-400" />
+            <Box size={13} className="text-violet-400" />
             <h3 className="text-[10px] font-mono font-bold uppercase tracking-widest text-slate-400">Top Products</h3>
             <span className="ml-auto text-[10px] text-zinc-400">
               {dateRange.start === dateRange.end ? dateRange.start : `${dateRange.start} → ${dateRange.end}`}
@@ -752,9 +752,9 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
                 const pct = (p.revenue / (products[0]?.revenue || 1)) * 100;
                 const m   = p.revenue > 0 ? (p.profit / p.revenue) * 100 : 0;
                 return (
-                  <div key={i} className="relative group rounded-xl px-3 py-2.5 hover:bg-cyan-500/5 transition-colors">
+                  <div key={i} className="relative group rounded-xl px-3 py-2.5 hover:bg-violet-500/5 transition-colors">
                     <div
-                      className="absolute inset-y-0 left-0 rounded-xl bg-cyan-500/5"
+                      className="absolute inset-y-0 left-0 rounded-xl bg-violet-500/5"
                       style={{ width: `${pct}%` }}
                     />
                     <div className="relative flex items-center gap-3">
@@ -800,7 +800,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
           ) : (
             <div className="space-y-1.5 overflow-y-auto flex-1">
               {actionableAlerts.slice(0, 12).map(a => (
-                <div key={a.id} className="rounded-xl px-3 py-2.5" style={{background:"rgba(34,211,238,0.03)",border:"1px solid rgba(34,211,238,0.08)"}}>
+                <div key={a.id} className="rounded-xl px-3 py-2.5" style={{background:"rgba(139,92,246,0.03)",border:"1px solid rgba(139,92,246,0.08)"}}>
                   <div className="flex items-start gap-2">
                     <AlertTriangle
                       size={11}
@@ -816,16 +816,16 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
             </div>
           )}
 
-          <div className="mt-4 pt-3 flex gap-2" style={{borderTop:"1px solid rgba(34,211,238,0.08)"}}>
+          <div className="mt-4 pt-3 flex gap-2" style={{borderTop:"1px solid rgba(139,92,246,0.08)"}}>
             <a
               href="/returns"
-              className="flex-1 h-8 rounded-lg transition flex items-center justify-center gap-1.5 text-[11px] font-mono text-slate-500 hover:text-slate-200" style={{background:"rgba(34,211,238,0.03)",border:"1px solid rgba(34,211,238,0.08)"}}
+              className="flex-1 h-8 rounded-lg transition flex items-center justify-center gap-1.5 text-[11px] font-mono text-slate-500 hover:text-slate-200" style={{background:"rgba(139,92,246,0.03)",border:"1px solid rgba(139,92,246,0.08)"}}
             >
               <RotateCcw size={11} /> Returns
             </a>
             <a
               href="/dead-stock"
-              className="flex-1 h-8 rounded-lg transition flex items-center justify-center gap-1.5 text-[11px] font-mono text-slate-500 hover:text-slate-200" style={{background:"rgba(34,211,238,0.03)",border:"1px solid rgba(34,211,238,0.08)"}}
+              className="flex-1 h-8 rounded-lg transition flex items-center justify-center gap-1.5 text-[11px] font-mono text-slate-500 hover:text-slate-200" style={{background:"rgba(139,92,246,0.03)",border:"1px solid rgba(139,92,246,0.08)"}}
             >
               <Skull size={11} /> Dead Stock
             </a>
@@ -848,17 +848,17 @@ function KpiCard({
   trend?: "up" | "down"; accent?: "blue" | "green" | "red" | "gray"; loading?: boolean;
 }) {
   const cfg = {
-    blue:  { border: "rgba(34,211,238,0.2)",  glow: "rgba(34,211,238,0.06)",  line: "#22d3ee", value: "#e2e8f0" },
+    blue:  { border: "rgba(139,92,246,0.2)",  glow: "rgba(139,92,246,0.06)",  line: "#8b5cf6", value: "#e2e8f0" },
     green: { border: "rgba(52,211,153,0.2)",  glow: "rgba(52,211,153,0.06)",  line: "#34d399", value: "#e2e8f0" },
     red:   { border: "rgba(248,113,113,0.2)", glow: "rgba(248,113,113,0.06)", line: "#f87171", value: "#e2e8f0" },
-    gray:  { border: "rgba(34,211,238,0.08)", glow: "transparent",            line: "rgba(255,255,255,0.1)", value: "#e2e8f0" },
+    gray:  { border: "rgba(139,92,246,0.08)", glow: "transparent",            line: "rgba(255,255,255,0.1)", value: "#e2e8f0" },
   }[accent];
 
   return (
     <div
       className="relative overflow-hidden rounded-2xl p-5"
       style={{
-        background: "linear-gradient(135deg, #070F22 0%, #060C1A 100%)",
+        background: "linear-gradient(135deg, #1e1e2e 0%, #1a1a28 100%)",
         border: `1px solid ${cfg.border}`,
         boxShadow: `0 0 24px ${cfg.glow}`,
       }}
@@ -907,13 +907,13 @@ function StatCard({
     <div
       className="rounded-2xl p-4 relative overflow-hidden"
       style={{
-        background: "linear-gradient(135deg, #070F22 0%, #060C1A 100%)",
-        border: "1px solid rgba(34,211,238,0.1)",
+        background: "linear-gradient(135deg, #1e1e2e 0%, #1a1a28 100%)",
+        border: "1px solid rgba(139,92,246,0.1)",
       }}
     >
       <div style={{
         position: "absolute", top: 0, left: "10%", right: "10%", height: "1px",
-        background: "linear-gradient(90deg, transparent, rgba(34,211,238,0.25), transparent)",
+        background: "linear-gradient(90deg, transparent, rgba(139,92,246,0.25), transparent)",
       }} />
       <p className="font-mono uppercase mb-2" style={{ fontSize: "9px", letterSpacing: "0.22em", color: "#475569" }}>
         {label}

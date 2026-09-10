@@ -53,25 +53,25 @@ function getAction(p: ProductAd): Action {
 }
 
 function roasColor(r: number) {
-  if (r >= 5) return "text-emerald-400 font-bold";
-  if (r >= 3) return "text-blue-400 font-semibold";
-  if (r >= 1.5) return "text-amber-400";
-  if (r > 0)  return "text-red-400";
+  if (r >= 5) return "text-emerald-600 font-bold";
+  if (r >= 3) return "text-blue-600 font-semibold";
+  if (r >= 1.5) return "text-amber-600";
+  if (r > 0)  return "text-red-500";
   return "text-gray-400";
 }
 
 function cpcColor(cpc: number) {
-  if (cpc < 0.3) return "text-emerald-400";
+  if (cpc < 0.3) return "text-emerald-600";
   if (cpc < 0.7) return "text-gray-600";
-  if (cpc < 1.5) return "text-amber-400";
-  return "text-red-400";
+  if (cpc < 1.5) return "text-amber-600";
+  return "text-red-500";
 }
 
 function ctrColor(ctr: number) {
-  if (ctr >= 1.5) return "text-emerald-400";
+  if (ctr >= 1.5) return "text-emerald-600";
   if (ctr >= 0.8) return "text-gray-600";
-  if (ctr >= 0.4) return "text-amber-400";
-  return "text-red-400";
+  if (ctr >= 0.4) return "text-amber-600";
+  return "text-red-500";
 }
 
 export default function ProductAdsPage() {
@@ -89,12 +89,22 @@ export default function ProductAdsPage() {
   const [sort, setSort]           = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "spend", dir: "desc" });
   const [search, setSearch]       = useState("");
   const [actionFilter, setActionFilter] = useState<string | null>(null);
+  // Reconciliation against the real Google Ads account total — the table below can only ever
+  // show Shopping-campaign spend (product-level data isn't available for Search/PMax), so this
+  // tells you how much of the real bill isn't represented per-product.
+  const [totalAccountSpend, setTotalAccountSpend] = useState(0);
+  const [unattributedSpend, setUnattributedSpend]  = useState(0);
 
   useEffect(() => {
     setLoading(true);
     fetch(`${API}/api/ads/products?store_id=${store}&${toQueryString(dateRange)}`)
       .then(r => r.json())
-      .then((d: { products?: ProductAd[] }) => { setProducts(d.products ?? []); setLoading(false); })
+      .then((d: { products?: ProductAd[]; total_ad_spend?: number; unattributed_ad_spend?: number }) => {
+        setProducts(d.products ?? []);
+        setTotalAccountSpend(d.total_ad_spend ?? 0);
+        setUnattributedSpend(d.unattributed_ad_spend ?? 0);
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   }, [store, dateRange]);
 
@@ -133,29 +143,29 @@ export default function ProductAdsPage() {
   function SortBtn({ k }: { k: SortKey }) {
     const active = sort.key === k;
     return (
-      <button onClick={() => toggleSort(k)} className={`ml-1 transition-opacity ${active ? "opacity-100 text-blue-400" : "opacity-40 hover:opacity-80"}`}>
+      <button onClick={() => toggleSort(k)} className={`ml-1 transition-opacity ${active ? "opacity-100 text-blue-600" : "opacity-40 hover:opacity-80"}`}>
         <ArrowUpDown size={10} />
       </button>
     );
   }
 
   return (
-    <div className="p-6 space-y-5 min-h-screen">
+    <div className="p-6 space-y-5 min-h-screen bg-[#f6f7f9]">
 
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-black tracking-tight flex items-center gap-2">
-            <Package size={22} className="text-blue-400" /> Feed Optimisation
+          <h1 className="text-2xl font-black tracking-tight flex items-center gap-2 text-gray-900">
+            <Package size={22} className="text-blue-600" /> Feed Optimisation
           </h1>
           <p className="text-gray-500 text-sm mt-0.5">Ad performance per product — CPC · CTR · ROAS · Actions</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <DateRangePicker value={dateRange} onChange={setDateRange} />
-          <div className="flex gap-1 bg-black/5 rounded-xl p-1">
+          <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
             {stores.map(s => (
               <button key={s.id} onClick={() => setStore(s.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${store === s.id ? "bg-blue-600 text-gray-900" : "text-gray-500 hover:text-gray-900"}`}>
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${store === s.id ? "bg-blue-600 text-white shadow-sm" : "text-gray-500 hover:text-gray-800"}`}>
                 {s.name}
               </button>
             ))}
@@ -166,12 +176,12 @@ export default function ProductAdsPage() {
       {/* KPI cards */}
       <div className="grid grid-cols-4 gap-3">
         {[
-          { label: "Total spend",   value: fmt(totalSpend),        sub: `${fmtN(totalClicks)} clicks`,     color: "text-red-400" },
-          { label: "Total revenue", value: fmt(totalRevenue),      sub: `${totalOrders} conversions`,      color: "text-emerald-400" },
+          { label: "Shopping spend", value: fmt(totalSpend),        sub: `${fmtN(totalClicks)} clicks`,     color: "text-red-500" },
+          { label: "Total revenue", value: fmt(totalRevenue),      sub: `${totalOrders} conversions`,      color: "text-emerald-600" },
           { label: "Avg ROAS",      value: `${avgRoas.toFixed(2)}x`, sub: avgRoas >= 3 ? "✓ healthy" : avgRoas >= 2 ? "needs work" : "⚠ low", color: roasColor(avgRoas) },
           { label: "Avg CTR",       value: fmtPct(avgCtr),         sub: `CPC ${fmt(avgCpc)}`,              color: ctrColor(avgCtr) },
         ].map(c => (
-          <div key={c.label} className="bg-black/3 border border-black/5 rounded-2xl p-4">
+          <div key={c.label} className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
             <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-2">{c.label}</p>
             <p className={`text-xl font-black ${c.color}`}>{c.value}</p>
             <p className="text-[11px] text-gray-400 mt-1">{c.sub}</p>
@@ -179,31 +189,43 @@ export default function ProductAdsPage() {
         ))}
       </div>
 
+      {/* Reconciliation vs real Google Ads account total */}
+      {!loading && totalAccountSpend > 0 && unattributedSpend > 0.5 && (
+        <div className="bg-amber-50 border border-amber-400/30 rounded-2xl px-5 py-3.5 flex items-center gap-3">
+          <AlertTriangle size={18} className="text-amber-600 shrink-0" />
+          <p className="text-[12px] text-amber-800">
+            <strong>{fmt(unattributedSpend)}</strong> of the <strong>{fmt(totalAccountSpend)}</strong> real Google Ads account
+            spend this period isn&apos;t shown below — Search &amp; Performance Max campaigns don&apos;t report
+            product-level data, only Shopping does. This table&apos;s totals will always undercount vs. the full account.
+          </p>
+        </div>
+      )}
+
       {/* Action alerts */}
       {!loading && products.length > 0 && (killSignals > 0 || scaleWinners > 0) && (
         <div className="flex gap-3">
           {killSignals > 0 && (
             <div className="flex-1 bg-red-50 border border-red-500/30 rounded-2xl px-5 py-4 flex items-center gap-4">
-              <XCircle size={22} className="text-red-400 shrink-0" />
+              <XCircle size={22} className="text-red-500 shrink-0" />
               <div>
                 <p className="font-bold text-red-700 text-sm">{killSignals} kill signal{killSignals > 1 ? "s" : ""} — pause now</p>
                 <p className="text-[11px] text-red-500 mt-0.5">Products spending budget with zero orders this period</p>
               </div>
               <button onClick={() => setActionFilter(actionFilter === "KILL" ? null : "KILL")}
-                className={`ml-auto text-[11px] px-3 py-1.5 rounded-lg font-semibold transition-all ${actionFilter === "KILL" ? "bg-red-500 text-gray-900" : "bg-red-500/20 text-red-700 hover:bg-red-500/30"}`}>
+                className={`ml-auto text-[11px] px-3 py-1.5 rounded-lg font-semibold transition-all ${actionFilter === "KILL" ? "bg-red-500 text-white" : "bg-red-500/20 text-red-700 hover:bg-red-500/30"}`}>
                 {actionFilter === "KILL" ? "Show all" : "View only"}
               </button>
             </div>
           )}
           {scaleWinners > 0 && (
             <div className="flex-1 bg-emerald-50 border border-emerald-500/20 rounded-2xl px-5 py-4 flex items-center gap-4">
-              <TrendingUp size={22} className="text-emerald-400 shrink-0" />
+              <TrendingUp size={22} className="text-emerald-600 shrink-0" />
               <div>
                 <p className="font-bold text-emerald-700 text-sm">{scaleWinners} winner{scaleWinners > 1 ? "s" : ""} — scale budget</p>
                 <p className="text-[11px] text-emerald-600 mt-0.5">Strong ROAS — increase bids by 20–30%</p>
               </div>
               <button onClick={() => setActionFilter(actionFilter === "SCALE" ? null : "SCALE")}
-                className={`ml-auto text-[11px] px-3 py-1.5 rounded-lg font-semibold transition-all ${actionFilter === "SCALE" ? "bg-emerald-500 text-gray-900" : "bg-emerald-500/20 text-emerald-700 hover:bg-emerald-500/30"}`}>
+                className={`ml-auto text-[11px] px-3 py-1.5 rounded-lg font-semibold transition-all ${actionFilter === "SCALE" ? "bg-emerald-600 text-white" : "bg-emerald-500/20 text-emerald-700 hover:bg-emerald-500/30"}`}>
                 {actionFilter === "SCALE" ? "Show all" : "View only"}
               </button>
             </div>
@@ -217,7 +239,7 @@ export default function ProductAdsPage() {
           <div className="relative flex-1 min-w-[200px]">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search product…"
-              className="w-full bg-black/5 border border-black/8 rounded-xl pl-8 pr-3 py-2 text-xs text-gray-900 placeholder-zinc-600 outline-none focus:border-blue-500/40" />
+              className="w-full bg-white border border-gray-200 rounded-xl pl-8 pr-3 py-2 text-xs text-gray-900 placeholder-gray-400 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100" />
           </div>
           <div className="flex gap-1 flex-wrap">
             {actionGroups.map(a => {
@@ -225,7 +247,7 @@ export default function ProductAdsPage() {
               if (count === 0) return null;
               return (
                 <button key={a} onClick={() => setActionFilter(actionFilter === a ? null : a)}
-                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all border ${actionFilter === a ? "bg-black/20 text-gray-900 border-black/30" : "bg-black/3 text-gray-500 border-black/8 hover:border-black/20 hover:text-gray-900"}`}>
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all border ${actionFilter === a ? "bg-gray-700 text-white border-gray-700" : "bg-white text-gray-500 border-gray-200 hover:border-gray-400 hover:text-gray-800"}`}>
                   {a} <span className="opacity-60">{count}</span>
                 </button>
               );
@@ -244,18 +266,18 @@ export default function ProductAdsPage() {
       )}
 
       {!loading && products.length === 0 && (
-        <div className="rounded-2xl bg-black/3 border border-black/10 p-10 text-center space-y-4">
-          <Package size={40} className="mx-auto text-gray-400" />
-          <h2 className="text-lg font-bold">No product-level ad data yet</h2>
+        <div className="rounded-2xl bg-white border border-gray-100 p-10 text-center space-y-4 shadow-sm">
+          <Package size={40} className="mx-auto text-gray-300" />
+          <h2 className="text-lg font-bold text-gray-900">No product-level ad data yet</h2>
           <p className="text-gray-500 text-sm max-w-md mx-auto">
             Add the Google Ads Products Script to your account. It reads Shopping campaign data per product and sends it here automatically.
           </p>
-          <div className="bg-[#111] rounded-xl p-4 text-left text-xs text-gray-500 border border-black/8 max-w-lg mx-auto">
-            <p className="text-gray-600 font-semibold mb-2">Setup:</p>
+          <div className="bg-gray-50 rounded-xl p-4 text-left text-xs text-gray-600 border border-gray-200 max-w-lg mx-auto">
+            <p className="text-gray-700 font-semibold mb-2">Setup:</p>
             <ol className="space-y-1 list-decimal list-inside">
               <li><strong className="text-gray-900">ads.google.com</strong> → Settings → Scripts → + New script</li>
               <li>Paste the TSecom Products Script</li>
-              <li>Set <code className="text-blue-400">STORE_ID = &quot;{store}&quot;</code></li>
+              <li>Set <code className="text-blue-600">STORE_ID = &quot;{store}&quot;</code></li>
               <li>Authorise → Frequency: <strong className="text-gray-900">Hourly</strong></li>
             </ol>
           </div>
@@ -263,11 +285,11 @@ export default function ProductAdsPage() {
       )}
 
       {!loading && products.length > 0 && (
-        <div className="rounded-2xl border border-black/5 overflow-hidden">
+        <div className="rounded-2xl border border-gray-100 overflow-hidden bg-white shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-black/5 bg-gray-50">
+                <tr className="border-b border-gray-100 bg-gray-50">
                   <th className="text-left px-4 py-3 text-gray-500 font-semibold">Product</th>
                   <th className="text-right px-3 py-3 text-gray-500 font-semibold whitespace-nowrap">Spend<SortBtn k="spend" /></th>
                   <th className="text-right px-3 py-3 text-gray-500 font-semibold whitespace-nowrap">Impr.<SortBtn k="impressions" /></th>
@@ -287,7 +309,7 @@ export default function ProductAdsPage() {
                   const isKill = p.action.label === "KILL";
                   const isTop  = p.action.label === "SCALE" || p.action.label === "TOP";
                   return (
-                    <tr key={i} className={`border-b border-black/5 transition-colors ${isKill ? "bg-red-50 hover:bg-red-50" : isTop ? "bg-emerald-50 hover:bg-emerald-50" : "hover:bg-black/3"}`}>
+                    <tr key={i} className={`border-b border-gray-100 transition-colors ${isKill ? "bg-red-50 hover:bg-red-50 border-l-2 border-l-red-400" : isTop ? "bg-emerald-50 hover:bg-emerald-50 border-l-2 border-l-emerald-500" : "hover:bg-gray-50"}`}>
                       <td className="px-4 py-3 max-w-[240px]">
                         <span className="line-clamp-2 text-gray-700 leading-snug font-medium">{p.product_title}</span>
                       </td>
@@ -297,7 +319,7 @@ export default function ProductAdsPage() {
                       <td className={`px-3 py-3 text-right font-semibold ${ctrColor(p.ctr)}`}>{fmtPct(p.ctr)}</td>
                       <td className={`px-3 py-3 text-right font-semibold ${cpcColor(p.cpc)}`}>{fmt(p.cpc)}</td>
                       <td className="px-3 py-3 text-right text-gray-700 font-semibold">{p.orders}</td>
-                      <td className={`px-3 py-3 text-right ${convRate >= 1.5 ? "text-emerald-400" : convRate >= 0.5 ? "text-gray-500" : p.clicks > 50 ? "text-amber-400" : "text-gray-400"}`}>
+                      <td className={`px-3 py-3 text-right ${convRate >= 1.5 ? "text-emerald-600" : convRate >= 0.5 ? "text-gray-500" : p.clicks > 50 ? "text-amber-600" : "text-gray-400"}`}>
                         {p.clicks > 0 ? fmtPct(convRate) : "—"}
                       </td>
                       <td className="px-3 py-3 text-right text-emerald-700 font-semibold">{p.revenue > 0 ? fmt(p.revenue) : "—"}</td>
@@ -315,7 +337,7 @@ export default function ProductAdsPage() {
               </tbody>
             </table>
           </div>
-          <div className="px-4 py-2.5 border-t border-black/5 flex items-center justify-between text-[10px] text-gray-400">
+          <div className="px-4 py-2.5 border-t border-gray-100 flex items-center justify-between text-[10px] text-gray-400">
             <span>{sorted.length} of {products.length} products{actionFilter ? ` · filtered: ${actionFilter}` : ""}</span>
             <span className="flex items-center gap-1"><Zap size={10} /> Hover action badge for tip</span>
           </div>

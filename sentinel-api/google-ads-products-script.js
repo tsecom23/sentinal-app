@@ -22,14 +22,16 @@ function main() {
 
   // Build explicit date range — DURING keyword not supported in shopping_performance_view
   // 14 days is enough for daily updates; run hourly to keep data fresh
+  // Use the ad account's own timezone (not the script sandbox's) so "today" lines up with
+  // what segments.date actually reports — otherwise spend near midnight can land on the
+  // wrong calendar day relative to Sentinel's date-range picker.
+  var tz = AdsApp.currentAccount().getTimeZone();
+  function fmt(d) {
+    return Utilities.formatDate(d, tz, "yyyy-MM-dd");
+  }
   var today = new Date();
   var startDate = new Date(today);
   startDate.setDate(today.getDate() - 14);
-  function fmt(d) {
-    var mm = String(d.getMonth() + 1).padStart(2, "0");
-    var dd = String(d.getDate()).padStart(2, "0");
-    return d.getFullYear() + "-" + mm + "-" + dd;
-  }
   var dateRange = "segments.date >= '" + fmt(startDate) + "' AND segments.date <= '" + fmt(today) + "'";
 
   try {

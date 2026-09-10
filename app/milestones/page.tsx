@@ -5,7 +5,7 @@ import { Bell, BellOff, CheckCheck, ChevronRight, Trophy } from "lucide-react";
 
 const API = "https://sentinel-api.tssheets1.workers.dev";
 const STORES = [
-  { key: "ceofo",     name: "CEOFO" },
+  { key: "ceofo",     name: "Melvoire" },
   { key: "martaline", name: "Martaline" },
 ];
 
