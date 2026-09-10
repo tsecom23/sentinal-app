@@ -247,7 +247,7 @@ export default function GoogleAdsPage() {
             <ResponsiveContainer width="100%" height="100%">
               {chart === "spend" ? (
                 <AreaChart data={chartData} margin={{ left: -20, right: 8 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--surface-subtle)" />
                   <XAxis dataKey="date" stroke="transparent" tick={{ fill: "#3f3f46", fontSize: 10 }} tickFormatter={d => d.slice(5)} />
                   <YAxis stroke="transparent" tick={{ fill: "#3f3f46", fontSize: 10 }} />
                   <Tooltip contentStyle={{ background: "#ffffff", border: "1px solid rgba(15,23,42,0.08)", borderRadius: 12, fontSize: 11 }}
@@ -263,7 +263,7 @@ export default function GoogleAdsPage() {
                 </AreaChart>
               ) : chart === "clicks" ? (
                 <LineChart data={chartData} margin={{ left: -20, right: 8 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--surface-subtle)" />
                   <XAxis dataKey="date" stroke="transparent" tick={{ fill: "#3f3f46", fontSize: 10 }} tickFormatter={d => d.slice(5)} />
                   <YAxis stroke="transparent" tick={{ fill: "#3f3f46", fontSize: 10 }} />
                   <Tooltip contentStyle={{ background: "#ffffff", border: "1px solid rgba(15,23,42,0.08)", borderRadius: 12, fontSize: 11 }}
@@ -273,7 +273,7 @@ export default function GoogleAdsPage() {
                 </LineChart>
               ) : (
                 <AreaChart data={chartData} margin={{ left: -20, right: 8 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--surface-subtle)" />
                   <XAxis dataKey="date" stroke="transparent" tick={{ fill: "#3f3f46", fontSize: 10 }} tickFormatter={d => d.slice(5)} />
                   <YAxis stroke="transparent" tick={{ fill: "#3f3f46", fontSize: 10 }} />
                   <Tooltip contentStyle={{ background: "#ffffff", border: "1px solid rgba(15,23,42,0.08)", borderRadius: 12, fontSize: 11 }}

@@ -25,6 +25,10 @@
   --system-bg:    linear-gradient(135deg, rgba(139,92,246,0.06) 0%, rgba(139,92,246,0.03) 100%);
   --system-border: rgba(139,92,246,0.12);
   --status-label: #4b5563;
+  --surface-subtle:    rgba(255,255,255,0.05);
+  --surface-subtle-hi: rgba(255,255,255,0.08);
+  --card-gradient:     linear-gradient(135deg,#1e1e2e 0%,#1a1a28 100%);
+  --text-primary:      #e2e8f0;
   color-scheme: dark;
 }
 
@@ -49,6 +53,10 @@ html.light {
   --system-bg:    linear-gradient(135deg, rgba(139,92,246,0.06) 0%, rgba(139,92,246,0.02) 100%);
   --system-border: rgba(139,92,246,0.16);
   --status-label: #9ca3af;
+  --surface-subtle:    rgba(0,0,0,0.04);
+  --surface-subtle-hi: rgba(0,0,0,0.07);
+  --card-gradient:     #ffffff;
+  --text-primary:      #1e1b4b;
   color-scheme: light;
 }
 
@@ -220,6 +228,31 @@ html.light .card-surface {
   border-color: rgba(255,255,255,0.10);
   color: #9ca3af;
 }
+
+/* ── Light mode Tailwind text overrides ─────────────────── */
+/* Tailwind classes with hardcoded light text: flip to dark in light mode  */
+html.light .text-white    { color: var(--text)  !important; }
+html.light .text-slate-50 { color: var(--text)  !important; }
+html.light .text-slate-100{ color: var(--text)  !important; }
+html.light .text-slate-200{ color: var(--text)  !important; }
+html.light .text-slate-300{ color: var(--muted) !important; }
+html.light .text-zinc-100 { color: var(--text)  !important; }
+html.light .text-zinc-200 { color: var(--text)  !important; }
+html.light .text-zinc-300 { color: var(--muted) !important; }
+
+/* Input and select overrides */
+html.light .bg-zinc-800,
+html.light .bg-zinc-900,
+html.light .bg-slate-800,
+html.light .bg-slate-900,
+html.light [class*="bg-zinc-800\/"],
+html.light [class*="bg-zinc-900\/"],
+html.light [class*="bg-black\/"] {
+  background-color: var(--surface-subtle) !important;
+}
+
+/* Drop-down / select border */
+html.light select { border-color: var(--border); color: var(--text); background: var(--surface); }
 
 /* ── Light mode tag-pill overrides ─────────────────────── */
 html.light .tag-pill-violet { background: rgba(139,92,246,0.10); border-color: rgba(139,92,246,0.25); color: #7c3aed; }

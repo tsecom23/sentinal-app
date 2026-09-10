@@ -213,11 +213,11 @@ export default function PnLPage() {
                   <Tooltip
                     contentStyle={{ background: "#ffffff", border: "1px solid rgba(15,23,42,0.08)", borderRadius: 10, fontSize: 12, color: "#0f172a" }}
                     formatter={(v: number) => [fmt(v), "Profit"]}
-                    cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                    cursor={{ fill: "var(--surface-subtle)" }}
                   />
                   <Bar dataKey="profit" radius={[4, 4, 0, 0]}>
                     {chartData.map((e, i) => (
-                      <Cell key={i} fill={!e.active ? "rgba(255,255,255,0.05)" : e.profit >= 0 ? "#10b981" : "#ef4444"} />
+                      <Cell key={i} fill={!e.active ? "var(--surface-subtle)" : e.profit >= 0 ? "#10b981" : "#ef4444"} />
                     ))}
                   </Bar>
                 </BarChart>

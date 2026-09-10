@@ -352,7 +352,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
               <span>{thisMonth} reached</span>
               <span>Next milestone: {nextMilestone}</span>
             </div>
-            <div className="h-1.5 rounded-full overflow-hidden" style={{background:"rgba(255,255,255,0.06)"}}>
+            <div className="h-1.5 rounded-full overflow-hidden" style={{background:"var(--surface-subtle)"}}>
               <div
                 className="h-full bg-violet-500 rounded-full transition-all duration-700"
                 style={{ width: `${milestoneProgress}%` }}
@@ -492,13 +492,13 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
         />
         <div
           className="rounded-2xl p-4 relative overflow-hidden"
-          style={{ background: "linear-gradient(135deg, #1e1e2e 0%, #1a1a28 100%)", border: "1px solid rgba(139,92,246,0.1)" }}
+          style={{ background: "var(--card-gradient)", border: "1px solid rgba(139,92,246,0.1)" }}
         >
           <div style={{ position: "absolute", top: 0, left: "10%", right: "10%", height: "1px", background: "linear-gradient(90deg, transparent, rgba(139,92,246,0.25), transparent)" }} />
           <div className="flex items-center justify-between mb-2">
             <p className="font-mono uppercase" style={{ fontSize: "9px", letterSpacing: "0.22em", color: "#475569" }}>Ad Spend</p>
           </div>
-          {loading ? <div className="h-6 w-20 rounded-lg animate-pulse" style={{ background: "rgba(255,255,255,0.04)" }} /> : (
+          {loading ? <div className="h-6 w-20 rounded-lg animate-pulse" style={{ background: "var(--surface-subtle)" }} /> : (
             <>
               {/* Channel rows */}
               <div className="space-y-1.5 mb-2">
@@ -570,7 +570,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
                 <div className="pt-1.5" style={{ borderTop: "1px solid rgba(139,92,246,0.08)" }}>
                   <div className="flex justify-between items-center">
                     <span className="text-[9px] font-mono tracking-widest" style={{ color: "#475569" }}>TOTAL</span>
-                    <span className="text-base font-black tabular-nums" style={{ color: "#e2e8f0" }}>€{fmt(totalAdSpend)}</span>
+                    <span className="text-base font-black tabular-nums" style={{ color: "var(--text-primary)" }}>€{fmt(totalAdSpend)}</span>
                   </div>
                 </div>
               )}
@@ -589,16 +589,16 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
         {/* Break-even ROAS card */}
         <div
           className="rounded-2xl p-4 relative overflow-hidden"
-          style={{ background: "linear-gradient(135deg, #1e1e2e 0%, #1a1a28 100%)", border: "1px solid rgba(139,92,246,0.1)" }}
+          style={{ background: "var(--card-gradient)", border: "1px solid rgba(139,92,246,0.1)" }}
         >
           <div style={{ position: "absolute", top: 0, left: "10%", right: "10%", height: "1px", background: "linear-gradient(90deg, transparent, rgba(139,92,246,0.25), transparent)" }} />
           <p className="font-mono uppercase mb-2" style={{ fontSize: "9px", letterSpacing: "0.22em", color: "#475569" }}>Break-even ROAS</p>
           {loading ? (
-            <div className="h-6 w-16 rounded-lg" style={{ background: "rgba(255,255,255,0.04)", animation: "pulse 2s cubic-bezier(0.4,0,0.6,1) infinite" }} />
+            <div className="h-6 w-16 rounded-lg" style={{ background: "var(--surface-subtle)", animation: "pulse 2s cubic-bezier(0.4,0,0.6,1) infinite" }} />
           ) : breakEvenRoas ? (
             <>
               <div className="flex items-end gap-2">
-                <span className="text-xl font-black tabular-nums" style={{ color: "#e2e8f0" }}>{breakEvenRoas.toFixed(2)}×</span>
+                <span className="text-xl font-black tabular-nums" style={{ color: "var(--text-primary)" }}>{breakEvenRoas.toFixed(2)}×</span>
                 {adSpend > 0 && (
                   <span className={`text-xs font-mono font-bold mb-0.5 ${isProfitable ? "text-emerald-400" : "text-red-400"}`}>
                     {isProfitable ? "✓ Profitable" : "✗ Below"}
@@ -606,7 +606,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
                 )}
               </div>
               {adSpend > 0 && (
-                <div className="mt-2 h-1 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
+                <div className="mt-2 h-1 rounded-full overflow-hidden" style={{ background: "var(--surface-subtle)" }}>
                   <div
                     className={`h-full rounded-full transition-all ${isProfitable ? "bg-emerald-400" : "bg-red-400"}`}
                     style={{ width: `${Math.min((roasVsBreakEven ?? 0) * 50, 100)}%` }}
@@ -848,17 +848,17 @@ function KpiCard({
   trend?: "up" | "down"; accent?: "blue" | "green" | "red" | "gray"; loading?: boolean;
 }) {
   const cfg = {
-    blue:  { border: "rgba(139,92,246,0.2)",  glow: "rgba(139,92,246,0.06)",  line: "#8b5cf6", value: "#e2e8f0" },
-    green: { border: "rgba(52,211,153,0.2)",  glow: "rgba(52,211,153,0.06)",  line: "#34d399", value: "#e2e8f0" },
-    red:   { border: "rgba(248,113,113,0.2)", glow: "rgba(248,113,113,0.06)", line: "#f87171", value: "#e2e8f0" },
-    gray:  { border: "rgba(139,92,246,0.08)", glow: "transparent",            line: "rgba(255,255,255,0.1)", value: "#e2e8f0" },
+    blue:  { border: "rgba(139,92,246,0.2)",  glow: "rgba(139,92,246,0.06)",  line: "#8b5cf6", value: "var(--text-primary)" },
+    green: { border: "rgba(52,211,153,0.2)",  glow: "rgba(52,211,153,0.06)",  line: "#34d399", value: "var(--text-primary)" },
+    red:   { border: "rgba(248,113,113,0.2)", glow: "rgba(248,113,113,0.06)", line: "#f87171", value: "var(--text-primary)" },
+    gray:  { border: "rgba(139,92,246,0.08)", glow: "transparent",            line: "var(--border-dim)", value: "var(--text-primary)" },
   }[accent];
 
   return (
     <div
       className="relative overflow-hidden rounded-2xl p-5"
       style={{
-        background: "linear-gradient(135deg, #1e1e2e 0%, #1a1a28 100%)",
+        background: "var(--card-gradient)",
         border: `1px solid ${cfg.border}`,
         boxShadow: `0 0 24px ${cfg.glow}`,
       }}
@@ -875,7 +875,7 @@ function KpiCard({
         {label}
       </p>
       {loading ? (
-        <div className="h-9 w-32 rounded-lg mb-1" style={{ background: "rgba(255,255,255,0.04)", animation: "pulse 2s cubic-bezier(0.4,0,0.6,1) infinite" }} />
+        <div className="h-9 w-32 rounded-lg mb-1" style={{ background: "var(--surface-subtle)", animation: "pulse 2s cubic-bezier(0.4,0,0.6,1) infinite" }} />
       ) : (
         <div className="flex items-end gap-2">
           <h3
@@ -907,7 +907,7 @@ function StatCard({
     <div
       className="rounded-2xl p-4 relative overflow-hidden"
       style={{
-        background: "linear-gradient(135deg, #1e1e2e 0%, #1a1a28 100%)",
+        background: "var(--card-gradient)",
         border: "1px solid rgba(139,92,246,0.1)",
       }}
     >
@@ -919,10 +919,10 @@ function StatCard({
         {label}
       </p>
       {loading ? (
-        <div className="h-6 w-20 rounded-lg mb-1" style={{ background: "rgba(255,255,255,0.04)", animation: "pulse 2s cubic-bezier(0.4,0,0.6,1) infinite" }} />
+        <div className="h-6 w-20 rounded-lg mb-1" style={{ background: "var(--surface-subtle)", animation: "pulse 2s cubic-bezier(0.4,0,0.6,1) infinite" }} />
       ) : (
         <div className="flex items-center gap-1.5">
-          <h3 className="text-xl font-black tracking-tight tabular-nums" style={{ color: "#e2e8f0", fontVariantNumeric: "tabular-nums" }}>
+          <h3 className="text-xl font-black tracking-tight tabular-nums" style={{ color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>
             {value}
           </h3>
           {trend === "up"   && <ArrowUpRight   size={13} className="text-emerald-400 shrink-0" />}

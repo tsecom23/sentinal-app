@@ -43,7 +43,7 @@ function ScoreRing({ score }: { score: number }) {
   return (
     <div className="relative inline-flex items-center justify-center w-14 h-14 shrink-0">
       <svg width="56" height="56" className="absolute inset-0" style={{ transform: "rotate(-90deg)" }}>
-        <circle cx="28" cy="28" r={r} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="4" />
+        <circle cx="28" cy="28" r={r} fill="none" stroke="var(--surface-subtle)" strokeWidth="4" />
         <circle cx="28" cy="28" r={r} fill="none" stroke={color} strokeWidth="4"
           strokeDasharray={`${fill} ${circ - fill}`}
           strokeLinecap="round"
@@ -79,7 +79,7 @@ function DetailPanel({ p, onClose }: { p: Product; onClose: () => void }) {
       <div
         className="w-full max-w-xl rounded-2xl p-6 relative animate-float-in"
         style={{
-          background: "linear-gradient(135deg, #1e1e2e 0%, #1a1a28 100%)",
+          background: "var(--card-gradient)",
           border: "1px solid rgba(139,92,246,0.20)",
           boxShadow: "0 24px 80px rgba(0,0,0,0.6), 0 0 40px rgba(139,92,246,0.10)",
         }}
@@ -305,7 +305,7 @@ export default function ProductHealthPage() {
                   className="tag-pill transition"
                   style={filter === signal
                     ? { background: meta.bg, borderColor: meta.border, color: meta.color, opacity: 1 }
-                    : { background: "rgba(255,255,255,0.03)", borderColor: "rgba(255,255,255,0.08)", color: "#6b7280" }
+                    : { background: "var(--surface-subtle)", borderColor: "var(--surface-subtle-hi)", color: "#6b7280" }
                   }
                 >
                   <Filter size={8} />
@@ -335,7 +335,7 @@ export default function ProductHealthPage() {
                 onClick={() => setSelected(p)}
                 className="flex items-center gap-4 p-4 rounded-2xl cursor-pointer transition-all group"
                 style={{
-                  background: "linear-gradient(135deg, #1e1e2e 0%, #1a1a28 100%)",
+                  background: "var(--card-gradient)",
                   border: "1px solid rgba(139,92,246,0.10)",
                   animation: `fade-in-up 0.2s ease ${i * 0.02}s both`,
                 }}

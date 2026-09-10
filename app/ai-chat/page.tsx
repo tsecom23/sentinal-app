@@ -118,7 +118,7 @@ export default function AIChatPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen" style={{ background: "#08080f" }}>
+    <div className="flex flex-col min-h-screen" style={{ background: "var(--bg)" }}>
       {/* Header */}
       <div className="shrink-0 px-6 pt-6 pb-4 space-y-4 border-b border-black/5">
         <div className="flex items-center justify-between flex-wrap gap-4">
