@@ -16,7 +16,7 @@ var DAYS_BACK    = 90;
 // Detecteer campagne-categorie op naam (pas aan op jouw campaign-namen)
 var CAMPAIGN_CATEGORIES = [
   { keywords: ["fashion", "mode", "vêtement", "vetement", "kleding", "clothing"], label: "Fashion" },
-  { keywords: ["home", "maison", "décor", "decor", "intérieur", "interieur", "woon"], label: "Home & Décor" },
+  { keywords: ["kids", "kind", "kinderen", "enfant", "enfants", "children", "baby", "toys", "jouets", "speelgoed"], label: "Kids" },
 ];
 
 function detectCampaignCategory(name) {

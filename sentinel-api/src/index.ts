@@ -892,9 +892,7 @@ export default {
       // to only orders that contain items tagged with the matching category.
       const CAMPAIGN_CATEGORY_MAP: Record<string, string> = {
         "fashion": "fashion",
-        "home & decor": "home",
-        "home decor": "home",
-        "home": "home",
+        "kids": "kids",
       };
       const productCategory = campaign ? (CAMPAIGN_CATEGORY_MAP[campaign.toLowerCase()] ?? "") : "";
       // Category filter: join order_items with product_costs to filter by tag
