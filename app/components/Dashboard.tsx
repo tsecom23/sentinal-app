@@ -194,7 +194,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
   }
 
   useEffect(() => { if (activeStoreId) setStoreId(activeStoreId); }, [activeStoreId]);
-  useEffect(() => { setCountry(""); setCampaign(""); }, [storeId]);
+  useEffect(() => { setCountry(""); setCampaign(""); setAdChannel("combined"); }, [storeId]);
   useEffect(() => { loadData(); }, [storeId, country, campaign, dateRange]); // eslint-disable-line
 
   const ov           = overview;
