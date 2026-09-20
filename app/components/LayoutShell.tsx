@@ -23,7 +23,13 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
     supabase.auth.getUser().then(({ data }) => {
       const email = data.user?.email ?? null;
       if (email && !canAccess(email, pathname)) {
-        router.replace(defaultPath(email));
+        const dest = defaultPath(email);
+        if (dest === pathname) {
+          // blocked (no allowed paths) — sign out
+          supabase.auth.signOut().then(() => router.replace("/login"));
+        } else {
+          router.replace(dest);
+        }
       } else {
         setReady(true);
       }

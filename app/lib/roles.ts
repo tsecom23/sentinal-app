@@ -3,6 +3,7 @@
 
 const RESTRICTED: Record<string, string[]> = {
   "zulicajasmine16@gmail.com": ["/returns"],
+  "mitch.caluzakpg07@gmail.com": [], // blocked
 };
 
 export function getAllowedPaths(email?: string | null): string[] | null {
