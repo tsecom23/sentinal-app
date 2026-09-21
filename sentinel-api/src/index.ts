@@ -554,6 +554,8 @@ const MIGRATIONS = [
     last_synced TEXT,
     UNIQUE(store_id, product_id)
   )`,
+  `ALTER TABLE product_costs ADD COLUMN category TEXT DEFAULT ''`,
+  `ALTER TABLE product_costs ADD COLUMN variant_title TEXT DEFAULT ''`,
 ];
 
 async function runMigrations(db: D1Database) {
@@ -917,16 +919,18 @@ export default {
 
         env.DB.prepare(`
           SELECT COALESCE(SUM(
-            oi.quantity * COALESCE(pc.cost, oi.cost, 0)
+            oi.quantity * COALESCE(pc.cost, pc_base.cost, oi.cost, 0)
           ), 0) as productCost
           FROM order_items oi
           JOIN orders o ON oi.order_id = o.id
           LEFT JOIN product_costs pc
-            ON pc.product_title = oi.product_title AND pc.store_id = o.store_id
+            ON pc.id = o.store_id||'::'||oi.product_title||'::'||oi.variant_title AND pc.store_id = o.store_id
+          LEFT JOIN product_costs pc_base
+            ON pc_base.id = o.store_id||'::'||oi.product_title AND pc_base.store_id = o.store_id
           WHERE o.store_id=? AND substr(o.created_at,1,10)>=? AND substr(o.created_at,1,10)<=?
             ${orderCC}
             AND o.revenue > 0
-            ${productCategory ? `AND pc.category = '${productCategory.replace(/'/g,"''")}'` : ""}
+            ${productCategory ? `AND COALESCE(pc.category, pc_base.category, '') = '${productCategory.replace(/'/g,"''")}'` : ""}
             AND NOT EXISTS (
               SELECT 1 FROM orders o2
               WHERE o2.shopify_order_id = o.shopify_order_id
@@ -1170,8 +1174,9 @@ export default {
         SELECT oi.product_title, SUM(oi.revenue) as revenue
         FROM order_items oi
         JOIN orders o ON oi.order_id = o.id
-        LEFT JOIN product_costs pc ON pc.product_title = oi.product_title AND pc.store_id = o.store_id
-        WHERE o.store_id = ? AND (pc.cost IS NULL OR pc.cost = 0)
+        LEFT JOIN product_costs pc ON pc.id = o.store_id||'::'||oi.product_title||'::'||oi.variant_title AND pc.store_id = o.store_id
+        LEFT JOIN product_costs pc_base ON pc_base.id = o.store_id||'::'||oi.product_title AND pc_base.store_id = o.store_id
+        WHERE o.store_id = ? AND (COALESCE(pc.cost, pc_base.cost) IS NULL OR COALESCE(pc.cost, pc_base.cost) = 0)
         GROUP BY oi.product_title
         HAVING revenue > 500
         ORDER BY revenue DESC
@@ -2168,20 +2173,27 @@ export default {
       const storeId = url.searchParams.get("store_id");
       if (!storeId) return json({ error: "Missing store_id" }, 400);
 
-      // Return all unique product titles sold + their saved cost
+      // Return all unique product+variant combinations sold + their saved cost
+      // Prefer variant-specific cost; fall back to product-level cost (variant_title='')
       const products = await env.DB.prepare(`
         SELECT
           oi.product_title,
+          oi.variant_title,
           SUM(oi.quantity) as total_sold,
           SUM(oi.revenue) as total_revenue,
-          COALESCE(pc.cost, 0) as cost,
-          pc.updated_at
+          COALESCE(pc.cost, pc_base.cost, 0) as cost,
+          COALESCE(pc.updated_at, pc_base.updated_at) as updated_at,
+          COALESCE(pc.category, pc_base.category, '') as category
         FROM order_items oi
         JOIN orders o ON oi.order_id = o.id
         LEFT JOIN product_costs pc
-          ON pc.product_title = oi.product_title AND pc.store_id = o.store_id
+          ON pc.id = o.store_id||'::'||oi.product_title||'::'||oi.variant_title
+          AND pc.store_id = o.store_id
+        LEFT JOIN product_costs pc_base
+          ON pc_base.id = o.store_id||'::'||oi.product_title
+          AND pc_base.store_id = o.store_id
         WHERE o.store_id = ?
-        GROUP BY oi.product_title
+        GROUP BY oi.product_title, oi.variant_title
         ORDER BY total_revenue DESC
       `).bind(storeId).all();
 
@@ -2193,13 +2205,15 @@ export default {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const body = await request.json() as any;
       const { store_id, product_title, cost } = body;
+      const variantTitle: string = body.variant_title ?? "";
       if (!store_id || !product_title) return json({ error: "Missing fields" }, 400);
 
-      const id = `${store_id}::${product_title}`;
+      const id = variantTitle ? `${store_id}::${product_title}::${variantTitle}` : `${store_id}::${product_title}`;
       await env.DB.prepare(`
-        INSERT OR REPLACE INTO product_costs (id, store_id, product_title, cost, updated_at)
-        VALUES (?, ?, ?, ?, ?)
-      `).bind(id, store_id, product_title, parseFloat(cost) || 0, new Date().toISOString()).run();
+        INSERT INTO product_costs (id, store_id, product_title, variant_title, cost, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET cost=excluded.cost, variant_title=excluded.variant_title, updated_at=excluded.updated_at
+      `).bind(id, store_id, product_title, variantTitle, parseFloat(cost) || 0, new Date().toISOString()).run();
 
       return json({ ok: true });
     }
@@ -2208,23 +2222,25 @@ export default {
     if (path === "/api/product-costs/bulk" && method === "POST") {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const body = await request.json() as any;
-      const items = body.items as Array<{ store_id: string; product_title: string; cost: number; category?: string }>;
+      const items = body.items as Array<{ store_id: string; product_title: string; cost: number; category?: string; variant_title?: string }>;
       let count = 0;
       for (const item of items ?? []) {
-        const id = `${item.store_id}::${item.product_title}`;
+        const vt = item.variant_title ?? "";
+        const id = vt ? `${item.store_id}::${item.product_title}::${vt}` : `${item.store_id}::${item.product_title}`;
         const cat = item.category ?? null;
         if (cat !== null) {
           await env.DB.prepare(`
-            INSERT OR REPLACE INTO product_costs (id, store_id, product_title, cost, category, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-          `).bind(id, item.store_id, item.product_title, parseFloat(String(item.cost)) || 0, cat, new Date().toISOString()).run();
+            INSERT INTO product_costs (id, store_id, product_title, variant_title, cost, category, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET cost=excluded.cost, variant_title=excluded.variant_title, category=excluded.category, updated_at=excluded.updated_at
+          `).bind(id, item.store_id, item.product_title, vt, parseFloat(String(item.cost)) || 0, cat, new Date().toISOString()).run();
         } else {
           // Preserve existing category when not provided
           await env.DB.prepare(`
-            INSERT INTO product_costs (id, store_id, product_title, cost, updated_at)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET cost=excluded.cost, updated_at=excluded.updated_at
-          `).bind(id, item.store_id, item.product_title, parseFloat(String(item.cost)) || 0, new Date().toISOString()).run();
+            INSERT INTO product_costs (id, store_id, product_title, variant_title, cost, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET cost=excluded.cost, variant_title=excluded.variant_title, updated_at=excluded.updated_at
+          `).bind(id, item.store_id, item.product_title, vt, parseFloat(String(item.cost)) || 0, new Date().toISOString()).run();
         }
         count++;
       }
@@ -2234,18 +2250,56 @@ export default {
     // ── POST /api/product-costs/set-category ─────────────────────────────────
     if (path === "/api/product-costs/set-category" && method === "POST") {
       const body = await request.json() as any;
-      const items = body.items as Array<{ store_id: string; product_title: string; category: string }>;
+      const items = body.items as Array<{ store_id: string; product_title: string; category: string; variant_title?: string }>;
       let count = 0;
       for (const item of items ?? []) {
-        const id = `${item.store_id}::${item.product_title}`;
+        const vt = item.variant_title ?? "";
+        const id = vt ? `${item.store_id}::${item.product_title}::${vt}` : `${item.store_id}::${item.product_title}`;
         await env.DB.prepare(`
-          INSERT INTO product_costs (id, store_id, product_title, cost, category, updated_at)
-          VALUES (?, ?, ?, 0, ?, ?)
-          ON CONFLICT(id) DO UPDATE SET category=excluded.category, updated_at=excluded.updated_at
-        `).bind(id, item.store_id, item.product_title, item.category, new Date().toISOString()).run();
+          INSERT INTO product_costs (id, store_id, product_title, variant_title, cost, category, updated_at)
+          VALUES (?, ?, ?, ?, 0, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET category=excluded.category, variant_title=excluded.variant_title, updated_at=excluded.updated_at
+        `).bind(id, item.store_id, item.product_title, vt, item.category, new Date().toISOString()).run();
         count++;
       }
       return json({ ok: true, updated: count });
+    }
+
+    // ── POST /api/products/sync-tags-to-categories ───────────────────────────
+    // Uses local shopify_products table (populated via webhooks) to map tags → product_costs.category
+    if (path === "/api/products/sync-tags-to-categories" && method === "POST") {
+      const body = await request.json() as any;
+      const storeId = body.store_id;
+      if (!storeId) return json({ error: "Missing store_id" }, 400);
+
+      // Read products with tags from product_health_signals (populated via Shopify sync)
+      const shopifyProds = await env.DB.prepare(
+        `SELECT product_title, tags FROM product_health_signals WHERE store_id = ? AND tags IS NOT NULL AND tags != ''`
+      ).bind(storeId).all();
+      const products = (shopifyProds.results ?? []) as Array<{ product_title: string; tags: string }>;
+
+      let fashionCount = 0;
+      let kidsCount = 0;
+
+      for (const product of products) {
+        const tagList = (product.tags ?? "").split(",").map((t: string) => t.trim().toLowerCase());
+        let category: string | null = null;
+        if (tagList.includes("fashion")) category = "fashion";
+        else if (tagList.includes("kids")) category = "kids";
+        if (category) {
+          const title = (product as any).product_title || (product as any).title || "";
+          const id = `${storeId}::${title}`;
+          await env.DB.prepare(`
+            INSERT INTO product_costs (id, store_id, product_title, variant_title, cost, category, updated_at)
+            VALUES (?, ?, ?, '', 0, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET category = excluded.category, updated_at = excluded.updated_at
+          `).bind(id, storeId, title, category, new Date().toISOString()).run();
+          if (category === "fashion") fashionCount++;
+          else kidsCount++;
+        }
+      }
+
+      return json({ ok: true, fashion: fashionCount, kids: kidsCount, scanned: products.length });
     }
 
     // ── GET /api/product-costs/debug ──────────────────────────────────────────
@@ -3288,9 +3342,10 @@ export default {
 
         env.DB.prepare(`
           SELECT substr(o.created_at,1,7) as month,
-                 SUM(oi.quantity * COALESCE(pc.cost, oi.cost, 0)) as product_cost
+                 SUM(oi.quantity * COALESCE(pc.cost, pc_base.cost, oi.cost, 0)) as product_cost
           FROM order_items oi JOIN orders o ON oi.order_id=o.id
-          LEFT JOIN product_costs pc ON pc.product_title=oi.product_title AND pc.store_id=o.store_id
+          LEFT JOIN product_costs pc ON pc.id=o.store_id||'::'||oi.product_title||'::'||oi.variant_title AND pc.store_id=o.store_id
+          LEFT JOIN product_costs pc_base ON pc_base.id=o.store_id||'::'||oi.product_title AND pc_base.store_id=o.store_id
           WHERE o.store_id=? AND substr(o.created_at,1,4)=?
             AND o.revenue > 0
             AND NOT EXISTS (SELECT 1 FROM orders o2 WHERE o2.shopify_order_id=o.shopify_order_id AND o2.store_id=o.store_id AND o2.rowid<o.rowid AND o.shopify_order_id IS NOT NULL AND o.shopify_order_id!='')

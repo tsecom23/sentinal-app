@@ -78,6 +78,31 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
   const [metaSpendInput,   setMetaSpendInput]   = useState("");
   const [metaSpendEditing, setMetaSpendEditing] = useState(false);
   const [metaSpendSaving,  setMetaSpendSaving]  = useState(false);
+  const [tagSyncing,       setTagSyncing]        = useState(false);
+  const [tagSyncResult,    setTagSyncResult]     = useState<string>("");
+
+  async function syncCampaignTags() {
+    setTagSyncing(true);
+    setTagSyncResult("");
+    try {
+      const res = await fetch(`${API}/api/products/sync-tags-to-categories`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ store_id: storeId }),
+      });
+      const data = await res.json() as { ok?: boolean; fashion?: number; kids?: number; error?: string };
+      if (data.ok) {
+        setTagSyncResult(`✓ ${data.fashion ?? 0} fashion, ${data.kids ?? 0} kids`);
+        loadData();
+      } else {
+        setTagSyncResult(data.error ?? "Error");
+      }
+    } catch {
+      setTagSyncResult("Error");
+    } finally {
+      setTagSyncing(false);
+    }
+  }
 
   async function saveSpend() {
     const val = parseFloat(spendInput.replace(",", "."));
@@ -260,7 +285,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
   }
 
   return (
-    <div className="px-8 py-7 min-h-screen max-w-[1400px]">
+    <div className="px-4 py-5 md:px-8 md:py-7 min-h-screen max-w-[1400px]">
 
       {/* ── Header ─────────────────────────────────────────────── */}
       <div className="flex items-center justify-between mb-8 gap-4 flex-wrap">
@@ -275,7 +300,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
             >
               {STORES.map(s => <option key={s.key} value={s.key}>{s.name}</option>)}
             </select>
-            <span className="text-[11px] text-zinc-400">{activeStore?.domain}</span>
+            <span className="hidden sm:inline text-[11px] text-zinc-400">{activeStore?.domain}</span>
           </div>
         </div>
 
@@ -306,7 +331,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
 
       {/* ── Country tabs (multi-country stores only) ───────────── */}
       {multiCountry && (
-        <div className="flex items-center gap-1.5 mb-6">
+        <div className="flex items-center gap-1.5 mb-6 flex-wrap">
           <button
             onClick={() => setCountry("")}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all"
@@ -359,7 +384,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
               />
             </div>
           </div>
-          <div className="shrink-0 flex gap-1">
+          <div className="shrink-0 hidden md:flex gap-1">
             {MILESTONES_LIST.map(m => (
               <div
                 key={m}
@@ -378,7 +403,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
 
       {/* ── Channel toggle ─────────────────────────────────────── */}
       {storeId !== "all" && (
-        <div className="flex items-center gap-1.5 mb-6">
+        <div className="flex items-center gap-1.5 mb-6 flex-wrap">
           <button
             onClick={() => setAdChannel("combined")}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all"
@@ -416,7 +441,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
             Meta{metaAdSpend > 0 && <span className="opacity-60">€{fmt(metaAdSpend)}</span>}
           </button>
           {adChannel !== "combined" && (
-            <span className="ml-2 text-[10px] text-zinc-400">
+            <span className="hidden sm:inline ml-2 text-[10px] text-zinc-400">
               {revenueIsEstimated ? "Revenue is spend-weighted estimate — UTM attribution not yet available" : "Revenue attributed via UTM"}
             </span>
           )}
@@ -425,7 +450,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
 
       {/* ── Campaign filter (Google only, when campaigns exist) ───── */}
       {storeId !== "all" && adChannel === "google" && campaigns.length > 0 && (
-        <div className="flex items-center gap-1.5 mb-4 -mt-2">
+        <div className="flex items-center gap-1.5 mb-4 -mt-2 flex-wrap">
           <span className="text-[10px] text-zinc-400 mr-1">Campaign:</span>
           <button
             onClick={() => setCampaign("")}
@@ -448,11 +473,24 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
               {c}
             </button>
           ))}
+          {storeId === "ceofo" && (
+            <button
+              onClick={syncCampaignTags}
+              disabled={tagSyncing}
+              className="ml-2 px-2.5 py-1 rounded-full text-[10px] font-mono font-bold transition-all"
+              style={{ background: "rgba(34,197,94,0.1)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.2)" }}
+            >
+              {tagSyncing ? "Syncing…" : "Sync Tags"}
+            </button>
+          )}
+          {tagSyncResult && (
+            <span className="text-[9px] font-mono" style={{ color: "#22c55e" }}>{tagSyncResult}</span>
+          )}
         </div>
       )}
 
       {/* ── Primary KPIs ───────────────────────────────────────── */}
-      <div className="grid grid-cols-3 gap-4 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
         <KpiCard
           label={adChannel === "google" ? "Revenue — Google (UTM)" : adChannel === "meta" ? "Revenue — Meta (UTM)" : "Net Revenue"}
           value={`€${fmt(revenue)}`}
@@ -483,7 +521,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
       </div>
 
       {/* ── Secondary metrics ──────────────────────────────────── */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <StatCard
           label="Orders"
           value={orders.toString()}
@@ -727,9 +765,9 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
 
       {/* ── Bottom: Products + Alerts ──────────────────────────── */}
       {storeId !== "all" && (
-      <div className="grid grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
         {/* Top Products */}
-        <div className="col-span-3 card p-5 flex flex-col">
+        <div className="col-span-1 md:col-span-3 card p-5 flex flex-col">
           <div className="flex items-center gap-2 mb-4">
             <Box size={13} className="text-violet-400" />
             <h3 className="text-[10px] font-mono font-bold uppercase tracking-widest text-slate-400">Top Products</h3>
@@ -778,7 +816,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
         </div>
 
         {/* Alerts */}
-        <div className="col-span-2 card p-5 flex flex-col">
+        <div className="col-span-1 md:col-span-2 card p-5 flex flex-col">
           <div className="flex items-center gap-2 mb-4">
             <ShieldAlert size={13} className="text-amber-400" />
             <h3 className="text-[10px] font-mono font-bold uppercase tracking-widest text-slate-400">Alerts</h3>

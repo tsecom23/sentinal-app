@@ -6,7 +6,7 @@ import {
   BarChart3, Bell, Bot, Box,
   LayoutDashboard, LineChart, LogOut, MessageCircle,
   RotateCcw, ShoppingCart, Skull, Store,
-  Target, TrendingUp, Trophy, Users, Wifi, Heart,
+  Target, TrendingUp, Trophy, Users, Wifi, Heart, X,
 } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 import { createClient } from "../../utils/supabase/client";
@@ -56,7 +56,7 @@ const NAV = [
   },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () => void }) {
   const pathname = usePathname();
   const [email, setEmail] = useState<string | null>(null);
   const [time, setTime]   = useState("");
@@ -91,8 +91,17 @@ export default function Sidebar() {
   })).filter(g => g.items.length > 0);
 
   return (
+    <>
+      {/* Mobile backdrop */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-30 md:hidden"
+          onClick={onClose}
+        />
+      )}
     <aside
-      className="w-[220px] min-h-screen flex flex-col fixed left-0 top-0 bottom-0 z-40 select-none"
+      className={`w-[220px] min-h-screen flex flex-col fixed left-0 top-0 bottom-0 z-40 select-none transition-transform duration-200
+        ${isOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0`}
       style={{
         background: "var(--sidebar-bg)",
         borderRight: "1px solid var(--sidebar-border)",
@@ -100,7 +109,8 @@ export default function Sidebar() {
     >
       {/* ── Brand ──────────────────────────────── */}
       <div className="px-4 pt-5 pb-4">
-        <a href="/" className="flex items-center gap-3 group">
+        <div className="flex items-center justify-between mb-1">
+          <a href="/" className="flex items-center gap-3 group flex-1">
           <div
             className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 overflow-hidden relative"
             style={{
@@ -129,6 +139,15 @@ export default function Sidebar() {
             </div>
           </div>
         </a>
+          {/* Mobile close button */}
+          <button
+            className="md:hidden p-1.5 rounded-lg"
+            style={{ color: "var(--muted)" }}
+            onClick={onClose}
+          >
+            <X size={16} />
+          </button>
+        </div>
 
         {/* Live clock */}
         <div
@@ -243,5 +262,6 @@ export default function Sidebar() {
         Sign out
       </button>
     </aside>
+    </>
   );
 }
