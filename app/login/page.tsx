@@ -26,6 +26,24 @@ export default function LoginPage() {
     window.location.href = "/";
   }
 
+  async function sendMagicLink() {
+    if (!email) return;
+    setLoading(true);
+    setMessage("");
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+    });
+    if (error) {
+      setMessage(error.message);
+      setIsError(true);
+    } else {
+      setMessage("Magic link sent — check your email.");
+      setIsError(false);
+    }
+    setLoading(false);
+  }
+
   async function signUp() {
     setLoading(true);
     setMessage("");
@@ -92,6 +110,14 @@ export default function LoginPage() {
             className="w-full bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-40 disabled:cursor-not-allowed py-3 rounded-xl text-sm font-semibold transition-colors"
           >
             {loading ? "Signing in…" : "Sign in"}
+          </button>
+
+          <button
+            onClick={sendMagicLink}
+            disabled={loading || !email}
+            className="w-full bg-black/5 hover:bg-black/10 disabled:opacity-40 disabled:cursor-not-allowed py-3 rounded-xl text-sm font-medium transition-colors text-gray-600"
+          >
+            {loading ? "Sending…" : "Send magic link"}
           </button>
 
           <div className="border-t border-black/5 pt-4">
