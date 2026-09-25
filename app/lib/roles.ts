@@ -2,7 +2,7 @@
 // null = full access, string[] = restricted to these paths only
 
 const RESTRICTED: Record<string, string[]> = {
-  "ksantos17.1999@gmail.com": ["/customer-service", "/returns", "/orders"],
+  "ksantos17.1999@gmail.com": ["/customer-service", "/returns"],
 };
 
 export function getAllowedPaths(email?: string | null): string[] | null {
