@@ -3,6 +3,7 @@
 
 const RESTRICTED: Record<string, string[]> = {
   "ksantos17.1999@gmail.com": ["/customer-service", "/returns"],
+  "schilderwerktk@gmail.com": ["/customer-service", "/returns"],
 };
 
 export function getAllowedPaths(email?: string | null): string[] | null {
