@@ -25,7 +25,7 @@ const REAL_STORES = STORES.filter(s => s.key !== "all");
 // Per-store country config — same as ROAS tracker
 const STORE_COUNTRIES: Record<string, { code: string; name: string; flag: string }[]> = {
   ceofo:     [{ code: "FR", name: "France", flag: "🇫🇷" }, { code: "ES", name: "Spain", flag: "🇪🇸" }, { code: "IT", name: "Italy", flag: "🇮🇹" }],
-  dorevy:    [{ code: "UK", name: "United Kingdom", flag: "🇬🇧" }],
+  dorevy:    [{ code: "UK", name: "United Kingdom", flag: "🇬🇧" }, { code: "IT", name: "Italy", flag: "🇮🇹" }],
   martaline: [],
 };
 
@@ -45,10 +45,11 @@ type Overview = {
   googleProfit: number; metaProfit: number;
   revenueIsEstimated?: boolean;
   revenueTrend: { day: string; revenue: number; profit: number; googleSpend?: number; metaSpend?: number }[];
+  storeCurrency?: string; fxRate?: number;
 };
 
 type ProductAlert = { id: string; product_title: string; message: string; severity: string; alert_type?: string };
-type TopProduct   = { product_title: string; variant_title?: string; sold: number; revenue: number; profit: number };
+type TopProduct   = { product_title: string; variant_title?: string; sold: number; revenue: number; profit: number; ad_spend?: number; ad_clicks?: number; ad_impressions?: number; ad_conversions?: number; ad_conversions_value?: number; roas?: number };
 type MilestoneData = { totalThisMonth: number; next: number | null; reached: number[] };
 
 function fmt(n: number) {
@@ -799,13 +800,20 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
                       <span className="text-[10px] text-slate-600 w-4 text-right shrink-0 font-mono font-bold">{i + 1}</span>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium text-slate-300 truncate">{p.product_title}</p>
-                        {p.variant_title && (
-                          <p className="text-[10px] text-slate-500 truncate">{p.variant_title}</p>
+                        {(p.ad_impressions ?? 0) > 0 && (
+                          <p className="text-[10px] text-slate-500 truncate font-mono">
+                            {p.ad_impressions!.toLocaleString()} impr · {p.ad_clicks} clicks
+                          </p>
                         )}
                       </div>
                       <div className="text-right shrink-0">
                         <p className="text-xs font-bold tabular-nums text-slate-200">€{fmt(p.revenue)}</p>
                         <p className="text-[10px] font-mono text-slate-500">{p.sold}× · {m.toFixed(0)}% margin</p>
+                        {(p.ad_spend ?? 0) > 0 && (
+                          <p className="text-[10px] font-mono text-violet-400/80">
+                            Ads €{fmt(p.ad_spend!)} · ROAS {(p.roas ?? 0).toFixed(2)}×
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>
