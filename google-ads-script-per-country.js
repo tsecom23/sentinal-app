@@ -28,6 +28,7 @@ var COUNTRY_RULES = [
   // ── DOREVY ───────────────────────────────────────────────
   { keywords: ["canada", "_ca_", "-ca-", "|ca|"],                                  code: "CA" },
   { keywords: ["united states", "usa", "_us_", "-us-", "|us|"],                    code: "US" },
+  { keywords: ["united kingdom", "britain", "british", "_uk_", "-uk-", "|uk|", " uk ", "_gb_", "-gb-", "|gb|", " gb "], code: "GB" },
   // ── MARTALINE ────────────────────────────────────────────
   // (ook "france" / "fr" matcht hierop, geen aparte rij nodig)
 ];
