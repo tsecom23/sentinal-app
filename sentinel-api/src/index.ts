@@ -543,9 +543,6 @@ const MIGRATIONS = [
   `ALTER TABLE google_ads_products ADD COLUMN source TEXT DEFAULT 'windsor'`,
   `ALTER TABLE google_ads_products ADD COLUMN product_id TEXT DEFAULT ''`,
   `ALTER TABLE google_ads_products ADD COLUMN variant_id TEXT DEFAULT ''`,
-  `CREATE INDEX IF NOT EXISTS idx_gap_store_date ON google_ads_products(store_id, date)`,
-  `CREATE INDEX IF NOT EXISTS idx_gap_store_pid ON google_ads_products(store_id, product_item_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_gap_store_product ON google_ads_products(store_id, product_id)`,
   // Returns enrichment — reason classification + extra fields
   `ALTER TABLE returns ADD COLUMN event_type TEXT DEFAULT 'return'`,
   `ALTER TABLE returns ADD COLUMN sku TEXT DEFAULT ''`,
@@ -577,9 +574,31 @@ const MIGRATIONS = [
   `ALTER TABLE product_costs ADD COLUMN variant_title TEXT DEFAULT ''`,
 ];
 
+// Index builds are pure performance optimizations, not correctness-critical —
+// no route depends on an index existing to return correct results. On a table
+// the size google_ads_products has grown to, building these for the first time
+// can take long enough to blow the Worker's per-request CPU/wall-clock budget.
+// Kept out of MIGRATIONS (which every request awaits before it is routed) and
+// run in the background instead, so a slow/first-ever index build never hangs
+// or 500s the dashboard. See runIndexMigrations().
+const INDEX_MIGRATIONS = [
+  `CREATE INDEX IF NOT EXISTS idx_gap_store_date ON google_ads_products(store_id, date)`,
+  `CREATE INDEX IF NOT EXISTS idx_gap_store_pid ON google_ads_products(store_id, product_item_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_gap_store_product ON google_ads_products(store_id, product_id)`,
+];
+
 async function runMigrations(db: D1Database) {
   for (const sql of MIGRATIONS) {
     try { await db.prepare(sql).run(); } catch { /* table already exists */ }
+  }
+}
+
+let indexesMigrated = false;
+async function runIndexMigrationsOnce(db: D1Database) {
+  if (indexesMigrated) return;
+  indexesMigrated = true; // set before awaiting so concurrent requests don't re-trigger this
+  for (const sql of INDEX_MIGRATIONS) {
+    try { await db.prepare(sql).run(); } catch { /* already exists / best-effort */ }
   }
 }
 
@@ -828,11 +847,13 @@ async function syncOutlookAccount(account: Record<string, string>, accessToken: 
 // ─── Main Handler ─────────────────────────────────────────────────────────────
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     if (!migrated) {
       try { await runMigrations(env.DB); } catch { /* ignore */ }
       migrated = true;
     }
+    // Slow index builds run after the response is sent, never blocking a request.
+    ctx.waitUntil(runIndexMigrationsOnce(env.DB));
 
     const url = new URL(request.url);
     const path = url.pathname;
