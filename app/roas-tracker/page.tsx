@@ -6,6 +6,7 @@ import {
   Pencil, Check, X, Info, Calendar, ChevronDown,
 } from "lucide-react";
 import { useStores } from "../hooks/useStores";
+import { nlDate } from "../lib/date";
 
 const API = "https://sentinel-api.tssheets1.workers.dev";
 
@@ -28,7 +29,8 @@ function defaultCountry(storeId: string): string {
 
 // ─── Month options ────────────────────────────────────────────────────────────
 function getMonthOptions(): { label: string; start: string; end: string }[] {
-  const now = new Date();
+  const todayNl = nlDate(0);
+  const now = new Date(todayNl + "T12:00:00");
   const options = [];
   for (let i = 0; i < 13; i++) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
@@ -37,7 +39,7 @@ function getMonthOptions(): { label: string; start: string; end: string }[] {
     const start = `${year}-${String(month + 1).padStart(2, "0")}-01`;
     const lastDay = new Date(year, month + 1, 0).getDate();
     const end = i === 0
-      ? now.toISOString().slice(0, 10)
+      ? todayNl
       : `${year}-${String(month + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
     const label = d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
     options.push({ label, start, end });
@@ -149,9 +151,9 @@ export default function RoasTrackerPage() {
   const [mode, setMode]         = useState<"month" | "custom">("month");
   const [monthIdx, setMonthIdx] = useState(0);
   const [customStart, setCustomStart] = useState(() => {
-    const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10);
+    return nlDate(0).slice(0, 8) + "01";
   });
-  const [customEnd, setCustomEnd] = useState(() => new Date().toISOString().slice(0, 10));
+  const [customEnd, setCustomEnd] = useState(() => nlDate(0));
 
   const [rows, setRows]       = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);

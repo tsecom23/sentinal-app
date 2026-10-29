@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { nlDate } from "../lib/date";
 import {
   AlertTriangle, Bell, Box, CheckCircle,
   RefreshCw, RotateCcw, ShieldAlert, TrendingUp,
@@ -109,7 +110,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
     const val = parseFloat(spendInput.replace(",", "."));
     if (!val || isNaN(val) || val <= 0) return;
     setSpendSaving(true);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = nlDate(0);
     await fetch(`${API}/api/ads/import`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -123,7 +124,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
     const val = parseFloat(metaSpendInput.replace(",", "."));
     if (!val || isNaN(val) || val <= 0) return;
     setMetaSpendSaving(true);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = nlDate(0);
     await fetch(`${API}/api/meta/import`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

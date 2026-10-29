@@ -1,13 +1,13 @@
 "use client";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { nlDate } from "../lib/date";
 
 export interface DateRange { start: string; end: string; preset: string; }
 
+// Days are Amsterdam calendar days (see lib/date.ts).
 function daysAgo(n: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
+  return nlDate(-n);
 }
 export function today() { return daysAgo(0); }
 
