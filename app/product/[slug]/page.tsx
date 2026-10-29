@@ -51,8 +51,8 @@ export default function ProductDetailPage() {
   if (!product) {
     return (
       <div className="min-h-screen bg-[#f6f7f9] text-gray-900 p-10">
-        <a href="/product-insights" className="text-gray-500">
-          ← Back to Product Insights
+        <a href="/" className="text-gray-500">
+          ← Back to Dashboard
         </a>
 
         <h1 className="text-3xl font-bold mt-8">Product not found</h1>
@@ -72,10 +72,10 @@ export default function ProductDetailPage() {
   return (
     <div className="min-h-screen bg-[#f6f7f9] text-gray-900 p-10">
       <a
-        href="/product-insights"
+        href="/"
         className="text-gray-500 hover:text-gray-900"
       >
-        ← Back to Product Insights
+        ← Back to Dashboard
       </a>
 
       <div className="mt-8 mb-10">

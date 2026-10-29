@@ -4,6 +4,12 @@ interface Env {
   GMAIL_CLIENT_SECRET?: string;
   OUTLOOK_CLIENT_ID?: string;
   OUTLOOK_CLIENT_SECRET?: string;
+  GOOGLE_ADS_DEVELOPER_TOKEN?: string;
+  GOOGLE_ADS_CLIENT_ID?: string;
+  GOOGLE_ADS_CLIENT_SECRET?: string;
+  GOOGLE_ADS_REFRESH_TOKEN?: string;
+  GOOGLE_ADS_CUSTOMER_ID?: string;
+  GOOGLE_ADS_LOGIN_CUSTOMER_ID?: string;
 }
 
 // ─── FX rate cache (per worker instance, resets on cold start) ───────────────
@@ -24,6 +30,139 @@ async function getFxRate(from: string, to: string): Promise<number> {
   return FALLBACK[key] ?? 1;
 }
 
+// ─── Google Ads API: OAuth + GAQL search ──────────────────────────────────────
+// Pulls spend/clicks/impressions/conversions directly from the Google Ads API
+// instead of waiting for a hourly Google Ads Script. Keys product rows by
+// segments.product_item_id (= Shopify variant id / Merchant Center offer id)
+// so the dashboard can join exactly on variant_id instead of fuzzy-matching
+// the brand-stripped product title.
+const _gaTokenCache: { token: string; expiresAt: number } = { token: "", expiresAt: 0 };
+async function getGoogleAdsAccessToken(env: Env): Promise<string> {
+  if (_gaTokenCache.token && Date.now() < _gaTokenCache.expiresAt - 60_000) return _gaTokenCache.token;
+  const clientId = env.GOOGLE_ADS_CLIENT_ID, clientSecret = env.GOOGLE_ADS_CLIENT_SECRET, refreshToken = env.GOOGLE_ADS_REFRESH_TOKEN;
+  if (!clientId || !clientSecret || !refreshToken) throw new Error("Google Ads OAuth secrets missing");
+  const r = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken, grant_type: "refresh_token" }).toString(),
+  });
+  if (!r.ok) throw new Error(`Google Ads token refresh failed: ${r.status} ${await r.text()}`);
+  const j = await r.json() as { access_token: string; expires_in: number };
+  _gaTokenCache.token = j.access_token;
+  _gaTokenCache.expiresAt = Date.now() + (j.expires_in ?? 3600) * 1000;
+  return j.access_token;
+}
+
+async function googleAdsSearch(env: Env, customerId: string, query: string, loginCustomerId?: string): Promise<any[]> {
+  const token = await getGoogleAdsAccessToken(env);
+  const devToken = env.GOOGLE_ADS_DEVELOPER_TOKEN;
+  if (!devToken) throw new Error("GOOGLE_ADS_DEVELOPER_TOKEN missing");
+  const cid = customerId.replace(/-/g, "");
+  const headers: Record<string, string> = {
+    "authorization": `Bearer ${token}`,
+    "developer-token": devToken,
+    "content-type": "application/json",
+  };
+  const lcid = (loginCustomerId ?? env.GOOGLE_ADS_LOGIN_CUSTOMER_ID ?? "").replace(/-/g, "");
+  if (lcid) headers["login-customer-id"] = lcid;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows: any[] = [];
+  let pageToken: string | undefined;
+  do {
+    const body: Record<string, unknown> = { query, pageSize: 10000 };
+    if (pageToken) body.pageToken = pageToken;
+    const r = await fetch(`https://googleads.googleapis.com/v18/customers/${cid}/googleAds:search`, {
+      method: "POST", headers, body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error(`Google Ads search failed: ${r.status} ${await r.text()}`);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const j = await r.json() as any;
+    if (Array.isArray(j.results)) rows.push(...j.results);
+    pageToken = j.nextPageToken;
+  } while (pageToken);
+  return rows;
+}
+
+async function syncGoogleAdsProducts(env: Env, storeId: string, customerId: string, days = 14, loginCustomerId?: string): Promise<{ products: number; daily: number }> {
+  const today = new Date();
+  const start = new Date(today); start.setDate(today.getDate() - days);
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  const startDate = fmt(start), endDate = fmt(today);
+
+  // 1) Per-product per-day (keyed by product_item_id for exact variant join)
+  const prodQuery =
+    `SELECT segments.date, segments.product_item_id, segments.product_title, ` +
+    `metrics.cost_micros, metrics.clicks, metrics.impressions, metrics.conversions ` +
+    `FROM shopping_performance_view ` +
+    `WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'`;
+  const prodRows = await googleAdsSearch(env, customerId, prodQuery, loginCustomerId);
+
+  const prodAgg = new Map<string, { date: string; item_id: string; title: string; spend: number; clicks: number; impressions: number; conversions: number }>();
+  for (const r of prodRows) {
+    const date = r.segments?.date ?? "";
+    const itemId = String(r.segments?.productItemId ?? "");
+    const title = r.segments?.productTitle ?? "Unknown";
+    if (!date) continue;
+    const key = `${date}|${itemId}|${title}`;
+    const ex = prodAgg.get(key) ?? { date, item_id: itemId, title, spend: 0, clicks: 0, impressions: 0, conversions: 0 };
+    ex.spend += Number(r.metrics?.costMicros ?? 0) / 1_000_000;
+    ex.clicks += Number(r.metrics?.clicks ?? 0);
+    ex.impressions += Number(r.metrics?.impressions ?? 0);
+    ex.conversions += Number(r.metrics?.conversions ?? 0);
+    prodAgg.set(key, ex);
+  }
+
+  const prodChunks: Array<ReturnType<typeof env.DB.prepare>> = [];
+  for (const row of prodAgg.values()) {
+    const spend = Math.round(row.spend * 100) / 100;
+    const cpc = row.clicks > 0 ? Math.round((row.spend / row.clicks) * 100) / 100 : 0;
+    const ctr = row.impressions > 0 ? Math.round((row.clicks / row.impressions) * 10000) / 100 : 0;
+    const id = `${storeId}-${row.date}-${row.item_id || row.title}`;
+    prodChunks.push(env.DB.prepare(
+      `INSERT OR REPLACE INTO google_ads_products
+        (id, store_id, date, product_title, product_item_id, spend, clicks, impressions, conversions, cpc, ctr)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+    ).bind(id, storeId, row.date, row.title, row.item_id, spend, row.clicks, row.impressions, Math.round(row.conversions * 100) / 100, cpc, ctr));
+  }
+  for (let i = 0; i < prodChunks.length; i += 100) await env.DB.batch(prodChunks.slice(i, i + 100));
+
+  // 2) Daily account totals (ALL campaign types — PMax/Search/Shopping)
+  const dailyQuery =
+    `SELECT segments.date, campaign.name, ` +
+    `metrics.cost_micros, metrics.clicks, metrics.impressions, metrics.conversions ` +
+    `FROM campaign ` +
+    `WHERE segments.date BETWEEN '${startDate}' AND '${endDate}'`;
+  const dailyRows = await googleAdsSearch(env, customerId, dailyQuery, loginCustomerId);
+
+  const dailyAgg = new Map<string, { date: string; spend: number; clicks: number; impressions: number; conversions: number }>();
+  for (const r of dailyRows) {
+    const date = r.segments?.date ?? "";
+    if (!date) continue;
+    const ex = dailyAgg.get(date) ?? { date, spend: 0, clicks: 0, impressions: 0, conversions: 0 };
+    ex.spend += Number(r.metrics?.costMicros ?? 0) / 1_000_000;
+    ex.clicks += Number(r.metrics?.clicks ?? 0);
+    ex.impressions += Number(r.metrics?.impressions ?? 0);
+    ex.conversions += Number(r.metrics?.conversions ?? 0);
+    dailyAgg.set(date, ex);
+  }
+
+  const dailyChunks: Array<ReturnType<typeof env.DB.prepare>> = [];
+  for (const row of dailyAgg.values()) {
+    const spend = Math.round(row.spend * 100) / 100;
+    const cpc = row.clicks > 0 ? Math.round((row.spend / row.clicks) * 100) / 100 : 0;
+    const ctr = row.impressions > 0 ? Math.round((row.clicks / row.impressions) * 10000) / 100 : 0;
+    const id = `${storeId}-${row.date}`;
+    dailyChunks.push(env.DB.prepare(
+      `INSERT OR REPLACE INTO google_ads_daily
+        (id, store_id, date, country, campaign, spend, clicks, impressions, conversions, cpc, ctr, roas)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+    ).bind(id, storeId, row.date, "", "", spend, row.clicks, row.impressions, Math.round(row.conversions * 100) / 100, cpc, ctr, 0));
+  }
+  for (let i = 0; i < dailyChunks.length; i += 100) await env.DB.batch(dailyChunks.slice(i, i + 100));
+
+  return { products: prodAgg.size, daily: dailyAgg.size };
+}
+
 // ─── Cancel-sync: pull cancelled Shopify orders → mark 'cancelled' in D1 ────────
 // A cancelled Shopify order has `cancelled_at` set while its financial_status
 // stays paid/refunded, so cancellations never reached D1 and kept counting as
@@ -42,12 +181,13 @@ async function syncCancellations(env: Env, storeId?: string): Promise<number> {
     const headers = { "X-Shopify-Access-Token": store.shopify_access_token };
 
     let pageInfo: string | null = null;
+    const pendingWrites: Array<ReturnType<typeof env.DB.prepare>> = [];
     for (let page = 0; page < 10; page++) {
       // page_info can't be combined with other filters (only limit)
-      const qs = pageInfo
+      const qs: string = pageInfo
         ? `page_info=${pageInfo}&limit=250`
         : `status=cancelled&limit=250&created_at_min=2024-01-01T00:00:00Z&fields=id,cancelled_at`;
-      const res = await fetch(`${base}/orders.json?${qs}`, { headers });
+      const res: Response = await fetch(`${base}/orders.json?${qs}`, { headers });
       if (!res.ok) break;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = await res.json() as any;
@@ -56,17 +196,45 @@ async function syncCancellations(env: Env, storeId?: string): Promise<number> {
       if (orders.length === 0) break;
       for (const o of orders) {
         if (!o.cancelled_at) continue;
-        const r = await env.DB.prepare(
-          `UPDATE orders SET financial_status='cancelled' WHERE shopify_order_id=? AND store_id=?`
-        ).bind(String(o.id), store.id).run();
-        marked += (r.meta?.changes as number) ?? 0;
+        // Only matches (and bills as a write) rows that aren't already marked cancelled —
+        // without this, every cron run re-writes the same historical cancelled orders forever.
+        pendingWrites.push(env.DB.prepare(
+          `UPDATE orders SET financial_status='cancelled' WHERE shopify_order_id=? AND store_id=? AND financial_status != 'cancelled'`
+        ).bind(String(o.id), store.id));
       }
-      const link = res.headers.get("Link") ?? "";
-      const next = link.match(/page_info=([^&>]+)[^>]*>;\s*rel="next"/);
+      const link: string = res.headers.get("Link") ?? "";
+      const next: RegExpMatchArray | null = link.match(/page_info=([^&>]+)[^>]*>;\s*rel="next"/);
       if (next) { pageInfo = next[1]; } else { break; }
+    }
+    for (let i = 0; i < pendingWrites.length; i += 100) {
+      const results = await env.DB.batch(pendingWrites.slice(i, i + 100));
+      for (const r of results) marked += (r.meta?.changes as number) ?? 0;
     }
   }
   return marked;
+}
+
+// Country the order's driving ad campaign/landing page targeted (storefront tracking script
+// writes this to cart note_attributes as "country", alongside utm_campaign like "UK - Multifeeds"/
+// "IT - Multifeeds") — distinct from the customer's actual billing/shipping country, since a GB-
+// targeted ad can still convert a customer who ships elsewhere.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getAttributedCountry(o: any): string {
+  const attrs: Array<{ name?: string; value?: string }> = o.note_attributes ?? [];
+  const match = attrs.find((a) => (a.name ?? "").toLowerCase() === "country");
+  return (match?.value ?? "").toUpperCase();
+}
+
+// google_ads_daily/meta_ads_daily can hold historical spend rows tagged with a legacy/alternate
+// country code (e.g. "UK") that differs from the canonical ISO code the frontend/orders table
+// uses ("GB"). Returns every code that should be treated as equivalent to `code` when filtering
+// ad-spend tables, so an exact-match SQL filter doesn't silently drop old rows.
+function countryAliases(code: string): string[] {
+  const aliases: Record<string, string[]> = {
+    GB: ["GB", "UK"],
+    UK: ["GB", "UK"],
+  };
+  return aliases[code.toUpperCase()] ?? [code];
 }
 
 async function syncRecentOrders(env: Env): Promise<number> {
@@ -77,9 +245,19 @@ async function syncRecentOrders(env: Env): Promise<number> {
   let imported = 0;
   for (const store of stores) {
     if (!store.shopify_domain || !store.shopify_access_token) continue;
-    const since = new Date();
-    since.setDate(since.getDate() - 2);
-    const sinceIso = since.toISOString();
+
+    // Incremental cursor per store: only re-fetch/rewrite orders that actually changed since the
+    // last run, instead of unconditionally re-writing the whole trailing window every 6h (this was
+    // the single biggest D1 "rows written" driver — every order + every line item in the last 48h
+    // got INSERT OR REPLACE'd on every cron tick regardless of whether anything changed).
+    const cursorRow = await env.DB.prepare(
+      `SELECT last_order_sync FROM sync_state WHERE store_id = ?`
+    ).bind(store.id).first() as { last_order_sync?: string } | null;
+    const fallback = new Date();
+    fallback.setDate(fallback.getDate() - 2);
+    const since = cursorRow?.last_order_sync ?? fallback.toISOString();
+    let maxSeen = since;
+
     const base = `https://${store.shopify_domain}/admin/api/2024-01`;
     const headers = { "X-Shopify-Access-Token": store.shopify_access_token, "Content-Type": "application/json" };
 
@@ -87,7 +265,7 @@ async function syncRecentOrders(env: Env): Promise<number> {
     for (let page = 0; page < 10; page++) {
       const qs = pageInfo
         ? `page_info=${pageInfo}&limit=250`
-        : `limit=250&status=any&created_at_min=${sinceIso}&order=created_at+asc`;
+        : `limit=250&status=any&updated_at_min=${since}&order=updated_at+asc`;
       const res = await fetch(`${base}/orders.json?${qs}`, { headers });
       if (!res.ok) break;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -96,7 +274,10 @@ async function syncRecentOrders(env: Env): Promise<number> {
       const orders: any[] = data.orders ?? [];
       if (orders.length === 0) break;
 
+      const writes: Array<ReturnType<typeof env.DB.prepare>> = [];
+
       for (const o of orders) {
+        if (o.updated_at && o.updated_at > maxSeen) maxSeen = o.updated_at;
         const orderId = String(o.id);
         const revenue = parseFloat(o.total_price ?? "0");
         const netRevenue = parseFloat(o.subtotal_price ?? String(revenue));
@@ -104,6 +285,7 @@ async function syncRecentOrders(env: Env): Promise<number> {
         const customerPhone = o.customer?.phone ?? o.billing_address?.phone ?? "";
         const customerCity = o.billing_address?.city ?? o.shipping_address?.city ?? "";
         const customerCountry = o.billing_address?.country_code ?? o.shipping_address?.country_code ?? "";
+        const attributedCountry = getAttributedCountry(o);
         const firstFulfillment = (o.fulfillments ?? [])[0];
         let utmSource = "";
         let utmMedium = "";
@@ -116,203 +298,51 @@ async function syncRecentOrders(env: Env): Promise<number> {
           } catch { /* ignore */ }
         }
 
-        await env.DB.prepare(`
+        writes.push(env.DB.prepare(`
           INSERT OR REPLACE INTO orders
             (id,shopify_order_id,order_number,email,currency,revenue,net_revenue,created_at,store_id,
-             customer_name,customer_phone,customer_city,customer_country,
+             customer_name,customer_phone,customer_city,customer_country,attributed_country,
              financial_status,fulfillment_status,tracking_number,tracking_url,utm_source,utm_medium)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         `).bind(orderId, orderId, String(o.order_number ?? ""), o.email ?? "",
                 o.currency ?? "EUR", revenue, netRevenue,
                 o.created_at ?? new Date().toISOString(), store.id,
-                customerName, customerPhone, customerCity, customerCountry,
+                customerName, customerPhone, customerCity, customerCountry, attributedCountry,
                 o.cancelled_at ? "cancelled" : (o.financial_status ?? "paid"), o.fulfillment_status ?? "unfulfilled",
                 firstFulfillment?.tracking_number ?? "", firstFulfillment?.tracking_url ?? "",
-                utmSource, utmMedium).run();
+                utmSource, utmMedium));
 
         for (const item of o.line_items ?? []) {
-          await env.DB.prepare(`
+          writes.push(env.DB.prepare(`
             INSERT OR REPLACE INTO order_items
               (id,order_id,product_id,variant_id,product_title,variant_title,quantity,revenue,cost,store_id)
             VALUES (?,?,?,?,?,?,?,?,?,?)
           `).bind(`${orderId}-item-${item.id}`, orderId, String(item.product_id ?? ""),
                   String(item.variant_id ?? ""), item.title ?? "", item.variant_title ?? "",
                   item.quantity ?? 1, parseFloat(item.price ?? "0") * (item.quantity ?? 1) - parseFloat(item.total_discount ?? "0"),
-                  0, store.id).run();
+                  0, store.id));
         }
         imported++;
       }
+
+      for (let i = 0; i < writes.length; i += 100) await env.DB.batch(writes.slice(i, i + 100));
 
       const link = res.headers.get("Link") ?? "";
       const next = link.match(/page_info=([^&>]+)[^>]*>;\s*rel="next"/);
       if (next) { pageInfo = next[1]; } else { break; }
     }
+
+    await env.DB.prepare(
+      `INSERT INTO sync_state (store_id, last_order_sync) VALUES (?, ?)
+       ON CONFLICT(store_id) DO UPDATE SET last_order_sync = excluded.last_order_sync`
+    ).bind(store.id, maxSeen).run();
   }
   return imported;
 }
 
-// ─── Product Health Sync ──────────────────────────────────────────────────────
-
-const AW_KEYWORDS = ["coat","manteau","knitwear","pull","boots","bottes","robe","dress","veste",
-  "jacket","doudoune","trench","accessoire","scarf","écharpe","glove","gant","thermal","gilet",
-  "blazer","cardigan","sweat","hoodie","pantalon","jeans","legging"];
-const OFF_SEASON_KEYWORDS = ["airco","climatiseur","koeler","ventilateur","cooling","fan",
-  "summer","été","plage","beach","maillot","bikini","sandal","sandales","sandales","pool","piscine"];
-
-function calcHealthScore(p: {
-  image_width: number; image_height: number;
-  variant_count: number; variants_with_images: number;
-  seo_title: string; seo_description: string; product_type: string; tags: string;
-  orders_30d: number; revenue_30d: number; orders_7d: number; revenue_7d: number;
-  product_title: string;
-}): number {
-  let score = 0;
-  const maxDim = Math.max(p.image_width, p.image_height);
-  if (maxDim >= 1500) score += 20; else if (maxDim >= 800) score += 8;
-  const varImgRatio = p.variant_count > 0 ? p.variants_with_images / p.variant_count : 0;
-  if (varImgRatio >= 1) score += 15; else if (varImgRatio >= 0.5) score += 7;
-  const seoTitleOk = p.seo_title && p.seo_title !== p.product_title && p.seo_title.length > 10;
-  if (seoTitleOk) score += 15;
-  if (p.seo_description && p.seo_description.length > 20) score += 10;
-  if (p.product_type && p.product_type.length > 0) score += 5;
-  if (p.orders_30d > 0) score += 10; if (p.orders_30d >= 3) score += 5; if (p.orders_30d >= 10) score += 5;
-  const titleLower = (p.product_title + " " + p.tags).toLowerCase();
-  const isAW = AW_KEYWORDS.some(k => titleLower.includes(k));
-  const isOff = OFF_SEASON_KEYWORDS.some(k => titleLower.includes(k));
-  if (isAW && !isOff) score += 10; else if (isOff) score -= 5;
-  const momentum = p.orders_7d > 0 && p.orders_30d > 0
-    ? (p.orders_7d / 7) / (p.orders_30d / 30) : 0;
-  if (momentum >= 1.2) score += 5; else if (momentum <= 0.3 && p.orders_30d >= 3) score -= 5;
-  return Math.max(0, Math.min(100, score));
-}
-
-async function syncProductHealth(env: Env, storeId?: string): Promise<number> {
-  const q = storeId
-    ? env.DB.prepare(`SELECT id, shopify_domain, shopify_access_token FROM stores WHERE id=?`).bind(storeId)
-    : env.DB.prepare(`SELECT id, shopify_domain, shopify_access_token FROM stores`);
-  const stores = (await q.all()).results as Array<{ id: string; shopify_domain: string; shopify_access_token: string }>;
-
-  let synced = 0;
-  const now = new Date().toISOString();
-  const date30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
-  const date7  = new Date(Date.now() -  7 * 86400000).toISOString().slice(0, 10);
-
-  for (const store of stores) {
-    if (!store.shopify_domain || !store.shopify_access_token) continue;
-    const gqlUrl = `https://${store.shopify_domain}/admin/api/2024-01/graphql.json`;
-    const headers = {
-      "X-Shopify-Access-Token": store.shopify_access_token,
-      "Content-Type": "application/json",
-    };
-
-    // Paginate through all products via GraphQL
-    let cursor: string | null = null;
-    let hasNext = true;
-    while (hasNext) {
-      const afterClause = cursor ? `, after: "${cursor}"` : "";
-      const gql = `{
-        products(first: 50, query: "status:active"${afterClause}) {
-          pageInfo { hasNextPage endCursor }
-          edges {
-            node {
-              id title handle productType tags
-              seo { title description }
-              media(first: 30) {
-                edges { node { ... on MediaImage { image { width height } } } }
-              }
-              variants(first: 30) {
-                edges { node { image { id } } }
-              }
-            }
-          }
-        }
-      }`;
-      const res = await fetch(gqlUrl, { method: "POST", headers, body: JSON.stringify({ query: gql }) });
-      if (!res.ok) break;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const body = await res.json() as any;
-      const productsConn = body?.data?.products;
-      if (!productsConn) break;
-      hasNext = productsConn.pageInfo?.hasNextPage ?? false;
-      cursor  = productsConn.pageInfo?.endCursor ?? null;
-
-      for (const edge of productsConn.edges ?? []) {
-        const p = edge.node;
-        const productId = p.id.replace("gid://shopify/Product/", "");
-
-        // Find best image dimensions across all media
-        let imgW = 0, imgH = 0;
-        for (const mEdge of p.media?.edges ?? []) {
-          const img = mEdge.node?.image;
-          if (img?.width > imgW) { imgW = img.width; imgH = img.height; }
-        }
-
-        // Count variants + how many have images
-        const variants = (p.variants?.edges ?? []).map((e: { node: { image: { id: string } | null } }) => e.node);
-        const varCount = variants.length;
-        const varWithImg = variants.filter((v: { image: { id: string } | null }) => v.image?.id).length;
-
-        // Get 30d + 7d sales from D1 orders
-        const row30 = await env.DB.prepare(
-          `SELECT COUNT(*) as cnt, COALESCE(SUM(oi.revenue),0) as rev
-           FROM order_items oi
-           JOIN orders o ON o.id=oi.order_id
-           WHERE oi.store_id=? AND oi.product_id=?
-             AND o.created_at >= ? AND o.financial_status != 'cancelled'`
-        ).bind(store.id, productId, date30 + "T00:00:00Z").first() as { cnt: number; rev: number } | null;
-
-        const row7 = await env.DB.prepare(
-          `SELECT COUNT(*) as cnt, COALESCE(SUM(oi.revenue),0) as rev
-           FROM order_items oi
-           JOIN orders o ON o.id=oi.order_id
-           WHERE oi.store_id=? AND oi.product_id=?
-             AND o.created_at >= ? AND o.financial_status != 'cancelled'`
-        ).bind(store.id, productId, date7 + "T00:00:00Z").first() as { cnt: number; rev: number } | null;
-
-        const orders30 = row30?.cnt ?? 0;
-        const rev30 = row30?.rev ?? 0;
-        const orders7 = row7?.cnt ?? 0;
-        const rev7 = row7?.rev ?? 0;
-
-        const healthScore = calcHealthScore({
-          image_width: imgW, image_height: imgH,
-          variant_count: varCount, variants_with_images: varWithImg,
-          seo_title: p.seo?.title ?? "", seo_description: p.seo?.description ?? "",
-          product_type: p.productType ?? "", tags: (p.tags ?? []).join(" "),
-          orders_30d: orders30, revenue_30d: rev30, orders_7d: orders7, revenue_7d: rev7,
-          product_title: p.title ?? "",
-        });
-
-        await env.DB.prepare(`
-          INSERT INTO product_health_signals
-            (store_id, product_id, product_title, handle,
-             image_width, image_height, has_variant_images, variant_count, variants_with_images,
-             seo_title, seo_description, product_type, tags,
-             orders_30d, revenue_30d, orders_7d, revenue_7d, health_score, last_synced)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-          ON CONFLICT(store_id, product_id) DO UPDATE SET
-            product_title=excluded.product_title, handle=excluded.handle,
-            image_width=excluded.image_width, image_height=excluded.image_height,
-            has_variant_images=excluded.has_variant_images, variant_count=excluded.variant_count,
-            variants_with_images=excluded.variants_with_images,
-            seo_title=excluded.seo_title, seo_description=excluded.seo_description,
-            product_type=excluded.product_type, tags=excluded.tags,
-            orders_30d=excluded.orders_30d, revenue_30d=excluded.revenue_30d,
-            orders_7d=excluded.orders_7d, revenue_7d=excluded.revenue_7d,
-            health_score=excluded.health_score, last_synced=excluded.last_synced
-        `).bind(
-          store.id, productId, p.title ?? "", p.handle ?? "",
-          imgW, imgH, varWithImg === varCount && varCount > 0 ? 1 : 0, varCount, varWithImg,
-          p.seo?.title ?? "", p.seo?.description ?? "", p.productType ?? "",
-          (p.tags ?? []).join(","),
-          orders30, rev30, orders7, rev7, healthScore, now
-        ).run();
-        synced++;
-      }
-    }
-  }
-  return synced;
-}
+// ─── Product Health Sync (REMOVED 2026-10-25) ────────────────────────────────
+// Feature stripped to kill D1 "Rows Written" cost ($5/day → $0). Zenox dashboard
+// covers this externally. COG tracking (/api/product-costs) remains intact.
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -470,6 +500,9 @@ const MIGRATIONS = [
   `ALTER TABLE orders ADD COLUMN customer_phone TEXT DEFAULT ''`,
   `ALTER TABLE orders ADD COLUMN customer_city TEXT DEFAULT ''`,
   `ALTER TABLE orders ADD COLUMN customer_country TEXT DEFAULT ''`,
+  // Ad-campaign-derived country (from Shopify order note_attributes "country"/"utm_campaign"),
+  // distinct from customer_country (billing/shipping address) — see dashboard country-attribution fix
+  `ALTER TABLE orders ADD COLUMN attributed_country TEXT DEFAULT ''`,
   // ROAS Tracker — daily editable sheet per store
   `CREATE TABLE IF NOT EXISTS roas_tracker (
     id TEXT PRIMARY KEY,
@@ -504,6 +537,15 @@ const MIGRATIONS = [
     UNIQUE(store_id, date, country)
   )`,
   `ALTER TABLE google_ads_daily ADD COLUMN country TEXT DEFAULT ''`,
+  `ALTER TABLE google_ads_products ADD COLUMN product_item_id TEXT DEFAULT ''`,
+  `ALTER TABLE google_ads_products ADD COLUMN campaign_name TEXT DEFAULT ''`,
+  `ALTER TABLE google_ads_products ADD COLUMN conversions_value REAL DEFAULT 0`,
+  `ALTER TABLE google_ads_products ADD COLUMN source TEXT DEFAULT 'windsor'`,
+  `ALTER TABLE google_ads_products ADD COLUMN product_id TEXT DEFAULT ''`,
+  `ALTER TABLE google_ads_products ADD COLUMN variant_id TEXT DEFAULT ''`,
+  `CREATE INDEX IF NOT EXISTS idx_gap_store_date ON google_ads_products(store_id, date)`,
+  `CREATE INDEX IF NOT EXISTS idx_gap_store_pid ON google_ads_products(store_id, product_item_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_gap_store_product ON google_ads_products(store_id, product_id)`,
   // Returns enrichment — reason classification + extra fields
   `ALTER TABLE returns ADD COLUMN event_type TEXT DEFAULT 'return'`,
   `ALTER TABLE returns ADD COLUMN sku TEXT DEFAULT ''`,
@@ -530,30 +572,7 @@ const MIGRATIONS = [
   `ALTER TABLE orders ADD COLUMN utm_source TEXT DEFAULT ''`,
   `ALTER TABLE orders ADD COLUMN utm_medium TEXT DEFAULT ''`,
   `ALTER TABLE meta_ads_daily ADD COLUMN conversion_value REAL DEFAULT 0`,
-  // Product health signals — daily Shopify GraphQL sync
-  `CREATE TABLE IF NOT EXISTS product_health_signals (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    store_id TEXT NOT NULL,
-    product_id TEXT NOT NULL,
-    product_title TEXT NOT NULL,
-    handle TEXT DEFAULT '',
-    image_width INTEGER DEFAULT 0,
-    image_height INTEGER DEFAULT 0,
-    has_variant_images INTEGER DEFAULT 0,
-    variant_count INTEGER DEFAULT 0,
-    variants_with_images INTEGER DEFAULT 0,
-    seo_title TEXT DEFAULT '',
-    seo_description TEXT DEFAULT '',
-    product_type TEXT DEFAULT '',
-    tags TEXT DEFAULT '',
-    orders_30d INTEGER DEFAULT 0,
-    revenue_30d REAL DEFAULT 0,
-    orders_7d INTEGER DEFAULT 0,
-    revenue_7d REAL DEFAULT 0,
-    health_score INTEGER DEFAULT 0,
-    last_synced TEXT,
-    UNIQUE(store_id, product_id)
-  )`,
+  // product_health_signals table dropped 2026-10-25 (Product Health feature removed).
   `ALTER TABLE product_costs ADD COLUMN category TEXT DEFAULT ''`,
   `ALTER TABLE product_costs ADD COLUMN variant_title TEXT DEFAULT ''`,
 ];
@@ -876,35 +895,67 @@ export default {
       // Optional per-country filter (e.g. ?country=FR for CEOFO)
       const country  = url.searchParams.get("country")  || "";
       const campaign = url.searchParams.get("campaign") || "";
-      const orderCC  = country ? "AND customer_country=?" : "";
+      // Prefer the ad-campaign-attributed country (note_attributes "country"); fall back to the
+      // customer's billing/shipping country for older orders that predate attributed_country.
+      const orderCC  = country ? "AND COALESCE(NULLIF(attributed_country,''), customer_country)=?" : "";
+      // Ad-spend tables (google_ads_daily / meta_ads_daily) sometimes hold historical rows under a
+      // legacy/alternate country code (e.g. "UK" instead of the ISO "GB" the frontend sends) —
+      // match every known alias so spend isn't silently dropped by an exact-match filter.
+      const countryAliasList = country ? countryAliases(country) : [];
+      const countryInPlaceholders = countryAliasList.map(() => "?").join(",");
       // Google Ads filter (has campaign column)
       const googleCC = country
-        ? (campaign ? "AND country=? AND campaign=?" : "AND country=? AND (campaign='' OR campaign IS NULL)")
+        ? (campaign ? `AND country IN (${countryInPlaceholders}) AND campaign=?` : `AND country IN (${countryInPlaceholders}) AND (campaign='' OR campaign IS NULL)`)
         : (campaign ? "AND (country='' OR country IS NULL) AND campaign=?" : "AND (country='' OR country IS NULL) AND (campaign='' OR campaign IS NULL)");
       // Meta Ads filter (no campaign column)
-      const metaCC   = country ? "AND country=?" : "AND (country='' OR country IS NULL)";
+      const metaCC   = country ? `AND country IN (${countryInPlaceholders})` : "AND (country='' OR country IS NULL)";
       const ob  = <T extends unknown[]>(base: T) => (country ? [...base, country] : base) as unknown[];
       const gb  = <T extends unknown[]>(base: T) => {
-        const b = (country ? [...base, country] : [...base]) as unknown[];
+        const b = (country ? [...base, ...countryAliasList] : [...base]) as unknown[];
         return (campaign ? [...b, campaign] : b) as unknown[];
       };
-      const mb  = <T extends unknown[]>(base: T) => (country ? [...base, country] : base) as unknown[];
+      const mb  = <T extends unknown[]>(base: T) => (country ? [...base, ...countryAliasList] : base) as unknown[];
 
       // Campaign→product-category mapping: when a campaign is selected, filter revenue
-      // to only orders that contain items tagged with the matching category.
+      // to the line items whose product carries the matching category tag. Revenue is
+      // summed per line item (not per order) so multi-category orders are split correctly.
       const CAMPAIGN_CATEGORY_MAP: Record<string, string> = {
         "fashion": "fashion",
         "kids": "kids",
       };
       const productCategory = campaign ? (CAMPAIGN_CATEGORY_MAP[campaign.toLowerCase()] ?? "") : "";
-      // Category filter: join order_items with product_costs to filter by tag
-      const catJoin  = productCategory ? `JOIN product_costs _pc ON _pc.product_title = oi.product_title AND _pc.store_id = o.store_id AND _pc.category = '${productCategory.replace(/'/g,"''")}'` : "";
-      const catExists = productCategory
-        ? `AND EXISTS (SELECT 1 FROM order_items _oi JOIN product_costs _pc ON _pc.product_title = _oi.product_title AND _pc.store_id = o.store_id WHERE _oi.order_id = o.id AND _pc.category = '${productCategory.replace(/'/g,"''")}' )`
-        : "";
+      const catEsc = productCategory.replace(/'/g, "''");
+      const catExists = productCategory ? `AND EXISTS (
+        SELECT 1 FROM order_items oi
+        JOIN product_costs pc ON pc.product_title = oi.product_title AND pc.store_id = o.store_id
+        WHERE oi.order_id = o.id AND pc.category = '${catEsc}'
+      )` : "";
+      const dedupOrders = `AND NOT EXISTS (
+        SELECT 1 FROM orders o2
+        WHERE o2.shopify_order_id = o.shopify_order_id
+          AND o2.store_id = o.store_id
+          AND o2.rowid < o.rowid
+          AND o.shopify_order_id IS NOT NULL
+          AND o.shopify_order_id != ''
+      )`;
 
       const [overview, costRow, adsRow, metaAdsRow, utmRow, returnsRow, disputesRow, trend, returnsTrend, adsTrend, metaAdsTrend] = await Promise.all([
-        env.DB.prepare(`
+        env.DB.prepare(productCategory ? `
+          SELECT COUNT(DISTINCT COALESCE(o.shopify_order_id, CAST(o.id AS TEXT))) as orders,
+                 COALESCE(SUM(oi.revenue), 0) as revenue,
+                 COALESCE(SUM(
+                   oi.revenue * COALESCE(o.net_revenue, o.revenue, 0) / NULLIF(o.revenue, 0)
+                 ), 0) as netRevenue
+          FROM order_items oi
+          JOIN orders o ON o.id = oi.order_id
+          JOIN product_costs _pc
+            ON _pc.product_title = oi.product_title
+           AND _pc.store_id = o.store_id
+           AND _pc.category = '${catEsc}'
+          WHERE o.store_id=? AND substr(o.created_at,1,10)>=? AND substr(o.created_at,1,10)<=?
+            ${orderCC}
+            ${dedupOrders}
+        ` : `
           SELECT COUNT(*) as orders,
                  COALESCE(SUM(revenue),0) as revenue,
                  COALESCE(SUM(net_revenue),0) as netRevenue
@@ -912,7 +963,7 @@ export default {
             SELECT MAX(revenue) as revenue, MAX(net_revenue) as net_revenue
             FROM orders o
             WHERE o.store_id=? AND substr(o.created_at,1,10)>=? AND substr(o.created_at,1,10)<=?
-            ${orderCC} ${catExists}
+            ${orderCC}
             GROUP BY COALESCE(o.shopify_order_id, o.id)
           )
         `).bind(...ob([storeId, start, end])).first(),
@@ -1013,12 +1064,9 @@ export default {
       // Revenue values come from orders stored in store's local currency — apply FX to get EUR
       const grossRevenue = fx((overview?.revenue as number) ?? 0);
       const orders = (overview?.orders as number) ?? 0;
-      // Ad platforms bill in the merchant's own account currency, same as the store — apply the
-      // same store-currency→EUR FX as revenue/costs. Previously left unconverted, so any
-      // non-EUR store (e.g. Dorevy in GBP) had ad spend silently mixed in at face value inside
-      // a EUR profit figure.
-      const googleAdSpend = fx((adsRow?.adSpend as number) ?? 0);
-      const metaAdSpend   = fx((metaAdsRow?.metaSpend as number) ?? 0);
+      // Ad spend is stored in EUR regardless of store currency, so no FX conversion needed.
+      const googleAdSpend = (adsRow?.adSpend as number) ?? 0;
+      const metaAdSpend   = (metaAdsRow?.metaSpend as number) ?? 0;
       const adSpend = googleAdSpend + metaAdSpend;
       const productCost = fx((costRow?.productCost as number) ?? 0); // COGs entered in store currency
       const returnAmount = fx((returnsRow?.returnAmount as number) ?? 0);
@@ -1063,11 +1111,11 @@ export default {
       }
       const adsMap = new Map<string, number>();
       for (const r of (adsTrend.results ?? []) as { day: string; adSpend: number }[]) {
-        adsMap.set(r.day, fx(r.adSpend));
+        adsMap.set(r.day, r.adSpend);
       }
       const metaAdsMap = new Map<string, number>();
       for (const r of (metaAdsTrend.results ?? []) as { day: string; metaSpend: number }[]) {
-        metaAdsMap.set(r.day, fx(r.metaSpend));
+        metaAdsMap.set(r.day, r.metaSpend);
       }
 
       // Build trend with both revenue and daily profit estimate (revenue converted to EUR)
@@ -1098,27 +1146,88 @@ export default {
     }
 
     // ── GET /api/products/top ─────────────────────────────────────────────────
+    // Top-selling order_items by revenue. When Windsor-sourced ad data exists
+    // for the store, each row is enriched with ad_spend / clicks / impressions
+    // / conversions_value / roas for the matching Shopify product_id over the
+    // same date range. The join is by product_id (variant-level in Windsor,
+    // rolled up to the product row shown here).
     if (path === "/api/products/top" && method === "GET") {
       const storeId = url.searchParams.get("store_id");
       if (!storeId) return json({ error: "Missing store_id" }, 400);
       const { start, end } = getDateFilter(url);
       const country = url.searchParams.get("country") || "";
-      const cc = country ? "AND o.customer_country=?" : "";
+      const cc = country ? "AND COALESCE(NULLIF(o.attributed_country,''), o.customer_country)=?" : "";
 
+      // Group strictly by product_id so historical title changes don't split
+      // the same product into multiple rows. Pick the most recent title seen
+      // in the window. Items with no product_id fall back to grouping by title.
       const products = await env.DB.prepare(`
-        SELECT oi.product_title, oi.variant_title,
-               SUM(oi.quantity) as sold,
-               SUM(oi.revenue) as revenue,
-               SUM((oi.revenue - COALESCE(oi.cost,0)) * oi.quantity) as profit,
-               COALESCE(AVG(oi.cost),0) as unit_cost
+        SELECT
+          COALESCE(NULLIF(oi.product_id, ''), '') as product_id,
+          (SELECT oi2.product_title
+             FROM order_items oi2 JOIN orders o2 ON oi2.order_id=o2.id
+             WHERE o2.store_id=? AND substr(o2.created_at,1,10)>=? AND substr(o2.created_at,1,10)<=?
+               AND COALESCE(NULLIF(oi2.product_id,''),oi2.product_title)
+                   = COALESCE(NULLIF(oi.product_id,''),oi.product_title)
+             ORDER BY o2.created_at DESC LIMIT 1) as product_title,
+          SUM(oi.quantity) as sold,
+          SUM(oi.revenue) as revenue,
+          SUM((oi.revenue - COALESCE(oi.cost,0)) * oi.quantity) as profit,
+          COALESCE(AVG(oi.cost),0) as unit_cost
         FROM order_items oi JOIN orders o ON oi.order_id=o.id
         WHERE o.store_id=? AND substr(o.created_at,1,10)>=? AND substr(o.created_at,1,10)<=?
         ${cc}
-        GROUP BY oi.product_title, oi.variant_title
+        GROUP BY COALESCE(NULLIF(oi.product_id,''), oi.product_title)
         ORDER BY revenue DESC LIMIT 20
-      `).bind(...(country ? [storeId, start, end, country] : [storeId, start, end])).all();
+      `).bind(
+        storeId, start, end,
+        ...(country ? [storeId, start, end, country] : [storeId, start, end])
+      ).all();
 
-      return json({ products: products.results ?? [] });
+      // Join Windsor ad metrics by product_id over the same range
+      const productIds = Array.from(new Set(
+        (products.results as any[]).map(p => String(p.product_id ?? "")).filter(Boolean)
+      ));
+      const adsByPid = new Map<string, { spend: number; clicks: number; impressions: number; conversions: number; conversions_value: number }>();
+      if (productIds.length > 0) {
+        const placeholders = productIds.map(() => "?").join(",");
+        const adRows = await env.DB.prepare(
+          `SELECT product_id,
+                  SUM(spend) as spend,
+                  SUM(clicks) as clicks,
+                  SUM(impressions) as impressions,
+                  SUM(conversions) as conversions,
+                  SUM(conversions_value) as conversions_value
+           FROM google_ads_products
+           WHERE store_id=? AND date>=? AND date<=? AND source='windsor'
+             AND product_id IN (${placeholders})
+           GROUP BY product_id`
+        ).bind(storeId, start, end, ...productIds).all();
+        for (const r of (adRows.results as any[])) {
+          adsByPid.set(String(r.product_id), {
+            spend: Number(r.spend) || 0,
+            clicks: Number(r.clicks) || 0,
+            impressions: Number(r.impressions) || 0,
+            conversions: Number(r.conversions) || 0,
+            conversions_value: Number(r.conversions_value) || 0,
+          });
+        }
+      }
+
+      const enriched = (products.results as any[]).map((p) => {
+        const a = adsByPid.get(String(p.product_id ?? "")) ?? { spend: 0, clicks: 0, impressions: 0, conversions: 0, conversions_value: 0 };
+        return {
+          ...p,
+          ad_spend: Math.round(a.spend * 100) / 100,
+          ad_clicks: a.clicks,
+          ad_impressions: a.impressions,
+          ad_conversions: Math.round(a.conversions * 100) / 100,
+          ad_conversions_value: Math.round(a.conversions_value * 100) / 100,
+          roas: a.spend > 0 ? Math.round((a.conversions_value / a.spend) * 100) / 100 : 0,
+        };
+      });
+
+      return json({ products: enriched });
     }
 
     // ── GET /api/product-alerts ───────────────────────────────────────────────
@@ -1824,6 +1933,7 @@ export default {
       const customerPhone = body.customer?.phone ?? body.billing_address?.phone ?? "";
       const customerCity  = body.billing_address?.city ?? body.shipping_address?.city ?? "";
       const customerCountry = body.billing_address?.country_code ?? body.shipping_address?.country_code ?? "";
+      const attributedCountry = getAttributedCountry(body);
       const financialStatus  = body.financial_status ?? "paid";
       const fulfillmentStatus = body.fulfillment_status ?? "unfulfilled";
       // Tracking from first fulfillment if present
@@ -1834,13 +1944,13 @@ export default {
       await env.DB.prepare(`
         INSERT OR REPLACE INTO orders
           (id,shopify_order_id,order_number,email,currency,revenue,net_revenue,created_at,store_id,
-           customer_name,customer_phone,customer_city,customer_country,
+           customer_name,customer_phone,customer_city,customer_country,attributed_country,
            financial_status,fulfillment_status,tracking_number,tracking_url)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `).bind(orderId, orderId, String(body.order_number ?? ""), body.email ?? "",
               body.currency ?? "EUR", revenue, netRevenue,
               body.created_at ?? new Date().toISOString(), storeId,
-              customerName, customerPhone, customerCity, customerCountry,
+              customerName, customerPhone, customerCity, customerCountry, attributedCountry,
               financialStatus, fulfillmentStatus, trackingNumber, trackingUrl).run();
 
       for (const item of body.line_items ?? []) {
@@ -1908,6 +2018,7 @@ export default {
           const customerPhone = o.customer?.phone ?? o.billing_address?.phone ?? "";
           const customerCity = o.billing_address?.city ?? o.shipping_address?.city ?? "";
           const customerCountry = o.billing_address?.country_code ?? o.shipping_address?.country_code ?? "";
+          const attributedCountry = getAttributedCountry(o);
           const firstFulfillment = (o.fulfillments ?? [])[0];
 
           // Extract UTM attribution from landing_site URL
@@ -1925,13 +2036,13 @@ export default {
           await env.DB.prepare(`
             INSERT OR REPLACE INTO orders
               (id,shopify_order_id,order_number,email,currency,revenue,net_revenue,created_at,store_id,
-               customer_name,customer_phone,customer_city,customer_country,
+               customer_name,customer_phone,customer_city,customer_country,attributed_country,
                financial_status,fulfillment_status,tracking_number,tracking_url,utm_source,utm_medium)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
           `).bind(orderId, orderId, String(o.order_number ?? ""), o.email ?? "",
                   o.currency ?? "EUR", revenue, netRevenue,
                   o.created_at ?? new Date().toISOString(), store_id,
-                  customerName, customerPhone, customerCity, customerCountry,
+                  customerName, customerPhone, customerCity, customerCountry, attributedCountry,
                   o.cancelled_at ? "cancelled" : (o.financial_status ?? "paid"), o.fulfillment_status ?? "unfulfilled",
                   firstFulfillment?.tracking_number ?? "", firstFulfillment?.tracking_url ?? "",
                   utmSource, utmMedium).run();
@@ -2266,40 +2377,376 @@ export default {
     }
 
     // ── POST /api/products/sync-tags-to-categories ───────────────────────────
-    // Uses local shopify_products table (populated via webhooks) to map tags → product_costs.category
+    // Pulls live tags directly from Shopify, then maps tags → product_costs.category.
+    // Kids wins over Fashion when both are
+    // present (kids campaigns are more specific — a kids-fashion product belongs in
+    // the kids revenue bucket). Products that no longer carry either tag get their
+    // category cleared so stale rows don't leak into campaign-filtered revenue.
     if (path === "/api/products/sync-tags-to-categories" && method === "POST") {
       const body = await request.json() as any;
       const storeId = body.store_id;
       if (!storeId) return json({ error: "Missing store_id" }, 400);
 
-      // Read products with tags from product_health_signals (populated via Shopify sync)
-      const shopifyProds = await env.DB.prepare(
-        `SELECT product_title, tags FROM product_health_signals WHERE store_id = ? AND tags IS NOT NULL AND tags != ''`
-      ).bind(storeId).all();
-      const products = (shopifyProds.results ?? []) as Array<{ product_title: string; tags: string }>;
+      const store = await env.DB.prepare(
+        `SELECT shopify_domain, shopify_access_token FROM stores WHERE id=?`
+      ).bind(storeId).first<{ shopify_domain: string; shopify_access_token: string }>();
+      if (!store?.shopify_domain || !store?.shopify_access_token) {
+        return json({ error: "Store has no Shopify credentials", has_domain: !!store?.shopify_domain, has_token: !!store?.shopify_access_token, found_store: !!store }, 400);
+      }
+
+      const gqlUrl = `https://${store.shopify_domain}/admin/api/2024-01/graphql.json`;
+      const headers = {
+        "X-Shopify-Access-Token": store.shopify_access_token,
+        "Content-Type": "application/json",
+      };
+
+      // Pull every product's title + tags, paginated. status:active matches the
+      // health-signal sync so the two views stay consistent.
+      const byTitle = new Map<string, string>(); // title → category ("kids" | "fashion" | "")
+      let cursor: string | null = null;
+      let hasNext = true;
+      let scanned = 0;
+      let pages = 0;
+      let firstPage: any = null;
+      while (hasNext) {
+        pages++;
+        const afterClause = cursor ? `, after: "${cursor}"` : "";
+        const gql = `{
+          products(first: 100, query: "status:active"${afterClause}) {
+            pageInfo { hasNextPage endCursor }
+            edges { node { title tags } }
+          }
+        }`;
+        const res = await fetch(gqlUrl, { method: "POST", headers, body: JSON.stringify({ query: gql }) });
+        if (!res.ok) {
+          const errText = await res.text().catch(() => "");
+          return json({ error: "Shopify request failed", status: res.status, body: errText.slice(0, 500), domain: store.shopify_domain, token_prefix: store.shopify_access_token.slice(0, 8) }, 500);
+        }
+        const body = await res.json() as any;
+        if (body?.errors) {
+          return json({ error: "Shopify GraphQL error", details: body.errors, extensions: body.extensions, domain: store.shopify_domain }, 500);
+        }
+        const conn = body?.data?.products;
+        if (!conn) return json({ error: "Shopify returned no products connection", body_keys: Object.keys(body ?? {}), body_sample: JSON.stringify(body).slice(0, 500), domain: store.shopify_domain }, 500);
+        if (pages === 1) {
+          firstPage = {
+            edge_count: (conn.edges ?? []).length,
+            has_next: conn.pageInfo?.hasNextPage,
+            end_cursor: conn.pageInfo?.endCursor,
+            sample_titles: (conn.edges ?? []).slice(0, 3).map((e: any) => e.node?.title),
+            sample_tags: (conn.edges ?? []).slice(0, 3).map((e: any) => e.node?.tags),
+          };
+        }
+        hasNext = conn.pageInfo?.hasNextPage ?? false;
+        cursor  = conn.pageInfo?.endCursor ?? null;
+
+        for (const edge of conn.edges ?? []) {
+          const title: string = edge.node?.title ?? "";
+          if (!title) continue;
+          const tagList: string[] = (edge.node?.tags ?? []).map((t: string) => (t ?? "").trim().toLowerCase());
+          let category = "";
+          // Kids first — a product tagged both kids+fashion is kids revenue.
+          if (tagList.includes("kids")) category = "kids";
+          else if (tagList.includes("fashion")) category = "fashion";
+          byTitle.set(title, category);
+          scanned++;
+        }
+      }
 
       let fashionCount = 0;
-      let kidsCount = 0;
+      let kidsCount    = 0;
+      let clearedCount = 0;
+      const now = new Date().toISOString();
 
-      for (const product of products) {
-        const tagList = (product.tags ?? "").split(",").map((t: string) => t.trim().toLowerCase());
-        let category: string | null = null;
-        if (tagList.includes("fashion")) category = "fashion";
-        else if (tagList.includes("kids")) category = "kids";
+      for (const [title, category] of byTitle) {
+        const id = `${storeId}::${title}`;
         if (category) {
-          const title = (product as any).product_title || (product as any).title || "";
-          const id = `${storeId}::${title}`;
           await env.DB.prepare(`
             INSERT INTO product_costs (id, store_id, product_title, variant_title, cost, category, updated_at)
             VALUES (?, ?, ?, '', 0, ?, ?)
             ON CONFLICT(id) DO UPDATE SET category = excluded.category, updated_at = excluded.updated_at
-          `).bind(id, storeId, title, category, new Date().toISOString()).run();
-          if (category === "fashion") fashionCount++;
-          else kidsCount++;
+          `).bind(id, storeId, title, category, now).run();
+          if (category === "kids") kidsCount++; else fashionCount++;
+        } else {
+          // Clear a previously-set category on products that no longer carry either tag.
+          const r = await env.DB.prepare(`
+            UPDATE product_costs SET category = '', updated_at = ?
+            WHERE store_id = ? AND product_title = ? AND category IN ('kids','fashion')
+          `).bind(now, storeId, title).run();
+          clearedCount += r.meta?.changes ?? 0;
         }
       }
 
-      return json({ ok: true, fashion: fashionCount, kids: kidsCount, scanned: products.length });
+      return json({ ok: true, fashion: fashionCount, kids: kidsCount, cleared: clearedCount, scanned, pages, first_page: firstPage, domain: store.shopify_domain });
+    }
+
+    // ── POST /api/products/set-categories ────────────────────────────────────
+    // Bulk upsert of {title, category} pairs. Used when the stored Shopify token
+    // is dead but the tags are still reachable via the Shopify MCP: fetch tags
+    // client-side, POST the mapping here. `clear_others:true` clears category
+    // on any product in this store NOT listed (so stale rows don't leak into
+    // campaign-filtered revenue).
+    if (path === "/api/products/set-categories" && method === "POST") {
+      const body = await request.json() as any;
+      const storeId: string | undefined = body.store_id;
+      const items: Array<{ title: string; category: string }> = body.items ?? [];
+      const clearOthers: boolean = !!body.clear_others;
+      if (!storeId || !Array.isArray(items)) return json({ error: "Missing store_id or items[]" }, 400);
+
+      const now = new Date().toISOString();
+      let fashionCount = 0;
+      let kidsCount = 0;
+      const titlesSeen: string[] = [];
+      for (const { title, category } of items) {
+        if (!title) continue;
+        const cat = (category ?? "").toLowerCase();
+        if (cat !== "kids" && cat !== "fashion" && cat !== "") continue;
+        const id = `${storeId}::${title}`;
+        titlesSeen.push(title);
+        await env.DB.prepare(`
+          INSERT INTO product_costs (id, store_id, product_title, variant_title, cost, category, updated_at)
+          VALUES (?, ?, ?, '', 0, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET category = excluded.category, updated_at = excluded.updated_at
+        `).bind(id, storeId, title, cat, now).run();
+        if (cat === "kids") kidsCount++;
+        else if (cat === "fashion") fashionCount++;
+      }
+
+      let clearedCount = 0;
+      if (clearOthers && titlesSeen.length) {
+        // Clear category on any product NOT in the submitted list. Chunk the IN
+        // clause so we stay under D1's variable limit.
+        const CHUNK = 400;
+        const existing = await env.DB.prepare(
+          `SELECT product_title FROM product_costs WHERE store_id = ? AND category IN ('kids','fashion')`
+        ).bind(storeId).all<{ product_title: string }>();
+        const kept = new Set(titlesSeen);
+        const toClear = (existing.results ?? [])
+          .map(r => r.product_title)
+          .filter(t => !kept.has(t));
+        for (let i = 0; i < toClear.length; i += CHUNK) {
+          const slice = toClear.slice(i, i + CHUNK);
+          const placeholders = slice.map(() => "?").join(",");
+          const r = await env.DB.prepare(
+            `UPDATE product_costs SET category='', updated_at=? WHERE store_id=? AND product_title IN (${placeholders})`
+          ).bind(now, storeId, ...slice).run();
+          clearedCount += r.meta?.changes ?? 0;
+        }
+      }
+
+      return json({ ok: true, fashion: fashionCount, kids: kidsCount, cleared: clearedCount, received: items.length });
+    }
+
+    // ── GET /api/products/category-coverage ──────────────────────────────────
+    // Diagnostic: how many order_items match a product_costs row with category?
+    if (path === "/api/products/category-coverage" && method === "GET") {
+      const storeId = url.searchParams.get("store_id");
+      if (!storeId) return json({ error: "Missing store_id" }, 400);
+
+      const totalOrders = await env.DB.prepare(
+        `SELECT COUNT(DISTINCT COALESCE(shopify_order_id, id)) as n FROM orders WHERE store_id=?`
+      ).bind(storeId).first<{ n: number }>();
+
+      const ordersWithKids = await env.DB.prepare(`
+        SELECT COUNT(DISTINCT COALESCE(o.shopify_order_id, o.id)) as n
+        FROM orders o
+        WHERE o.store_id=? AND EXISTS (
+          SELECT 1 FROM order_items oi JOIN product_costs pc
+            ON pc.product_title = oi.product_title AND pc.store_id = o.store_id
+          WHERE oi.order_id = o.id AND pc.category = 'kids'
+        )
+      `).bind(storeId).first<{ n: number }>();
+
+      const ordersWithFashion = await env.DB.prepare(`
+        SELECT COUNT(DISTINCT COALESCE(o.shopify_order_id, o.id)) as n
+        FROM orders o
+        WHERE o.store_id=? AND EXISTS (
+          SELECT 1 FROM order_items oi JOIN product_costs pc
+            ON pc.product_title = oi.product_title AND pc.store_id = o.store_id
+          WHERE oi.order_id = o.id AND pc.category = 'fashion'
+        )
+      `).bind(storeId).first<{ n: number }>();
+
+      const ordersWithEither = await env.DB.prepare(`
+        SELECT COUNT(DISTINCT COALESCE(o.shopify_order_id, o.id)) as n
+        FROM orders o
+        WHERE o.store_id=? AND EXISTS (
+          SELECT 1 FROM order_items oi JOIN product_costs pc
+            ON pc.product_title = oi.product_title AND pc.store_id = o.store_id
+          WHERE oi.order_id = o.id AND pc.category IN ('kids','fashion')
+        )
+      `).bind(storeId).first<{ n: number }>();
+
+      // Orders whose items DON'T match any category — sample a few product titles
+      const orphanSample = await env.DB.prepare(`
+        SELECT oi.product_title, COUNT(*) as cnt
+        FROM order_items oi
+        JOIN orders o ON oi.order_id = o.id
+        LEFT JOIN product_costs pc
+          ON pc.product_title = oi.product_title AND pc.store_id = o.store_id
+        WHERE o.store_id=? AND (pc.category IS NULL OR pc.category NOT IN ('kids','fashion'))
+        GROUP BY oi.product_title
+        ORDER BY cnt DESC
+        LIMIT 20
+      `).bind(storeId).all();
+
+      return json({
+        total_orders: totalOrders?.n ?? 0,
+        orders_with_kids: ordersWithKids?.n ?? 0,
+        orders_with_fashion: ordersWithFashion?.n ?? 0,
+        orders_with_either: ordersWithEither?.n ?? 0,
+        uncategorized_orders: (totalOrders?.n ?? 0) - (ordersWithEither?.n ?? 0),
+        orphan_titles_sample: orphanSample.results ?? [],
+      });
+    }
+
+    // ── POST /api/products/clear-stale-categories ────────────────────────────
+    // Clears category on rows whose updated_at is older than `before_iso`. Use
+    // right after a set-categories batch: everything the batch touched now has a
+    // fresher timestamp, so untouched rows are by definition stale.
+    if (path === "/api/products/clear-stale-categories" && method === "POST") {
+      const body = await request.json() as any;
+      const storeId: string | undefined = body.store_id;
+      const beforeIso: string | undefined = body.before_iso;
+      if (!storeId || !beforeIso) return json({ error: "Missing store_id or before_iso" }, 400);
+      const now = new Date().toISOString();
+      const r = await env.DB.prepare(
+        `UPDATE product_costs SET category='', updated_at=?
+         WHERE store_id=? AND category IN ('kids','fashion') AND updated_at < ?`
+      ).bind(now, storeId, beforeIso).run();
+      return json({ ok: true, cleared: r.meta?.changes ?? 0 });
+    }
+
+    // ── POST /api/windsor/clear-google-ads-products ──────────────────────────
+    // Clears all source='windsor' rows for a store (optional date range).
+    // Body: { store_id, start?, end? }
+    if (path === "/api/windsor/clear-google-ads-products" && method === "POST") {
+      const body = await request.json() as any;
+      const storeId: string | undefined = body.store_id;
+      if (!storeId) return json({ error: "Missing store_id" }, 400);
+      const start = body.start ? String(body.start).slice(0, 10) : null;
+      const end = body.end ? String(body.end).slice(0, 10) : null;
+      let r;
+      if (start && end) {
+        r = await env.DB.prepare(
+          `DELETE FROM google_ads_products WHERE store_id=? AND source='windsor' AND date>=? AND date<=?`
+        ).bind(storeId, start, end).run();
+      } else {
+        r = await env.DB.prepare(
+          `DELETE FROM google_ads_products WHERE store_id=? AND source='windsor'`
+        ).bind(storeId).run();
+      }
+      return json({ ok: true, cleared: r.meta?.changes ?? 0 });
+    }
+
+    // ── POST /api/windsor/ingest-google-ads-products ─────────────────────────
+    // DISABLED 19 Oct 2026 — this endpoint was the entire cause of a ~$67
+    // Cloudflare D1 overage: Windsor.ai product-level pushes were still live
+    // (unbeknownst to the store owner) and drove ~20M "rows written"/day
+    // against a 795k-row table via unconditional INSERT OR REPLACE. The data
+    // (per-product ad stats / google_ads_products) is not used anywhere the
+    // owner cares about — account-level ROAS/ad spend tracking lives in
+    // roas_tracker via /api/roas-tracker instead, which is unaffected.
+    // Kept as a 410 (not deleted/404) so a stray Windsor retry is obvious in
+    // logs rather than silently absorbed. Table and GET endpoints are left
+    // in place in case this needs reviving.
+    if (path === "/api/windsor/ingest-google-ads-products" && method === "POST") {
+      return json({ error: "Endpoint disabled 19 Oct 2026 — product-level ad stats ingestion is no longer wanted; it was the cause of the D1 billing overage." }, 410);
+    }
+
+    // ── GET /api/products/ad-stats ────────────────────────────────────────────
+    // Aggregates Windsor-sourced product ad stats across a date range.
+    // Params: store_id, start, end (or range=today|yesterday|7d|30d|90d|all)
+    // Returns: per product_item_id — spend, clicks, impressions, conversions,
+    //          conversions_value, roas; plus a product_id/variant_id parsed
+    //          from the Shopify item_id (shopify_<cc>_<pid>_<vid>).
+    if (path === "/api/products/ad-stats" && method === "GET") {
+      const storeId = url.searchParams.get("store_id");
+      if (!storeId) return json({ error: "Missing store_id" }, 400);
+      const { start, end } = getDateFilter(url);
+      const result = await env.DB.prepare(
+        `SELECT product_item_id,
+                MAX(product_title) as product_title,
+                GROUP_CONCAT(DISTINCT campaign_name) as campaigns,
+                SUM(spend) as spend,
+                SUM(clicks) as clicks,
+                SUM(impressions) as impressions,
+                SUM(conversions) as conversions,
+                SUM(conversions_value) as conversions_value
+         FROM google_ads_products
+         WHERE store_id=? AND date>=? AND date<=? AND source='windsor'
+         GROUP BY product_item_id
+         ORDER BY spend DESC
+         LIMIT 1000`
+      ).bind(storeId, start, end).all();
+      const rows = (result.results as any[]).map((r) => {
+        const pid = String(r.product_item_id ?? "");
+        const parts = pid.split("_");
+        const productId = parts.length >= 3 ? parts[parts.length - 2] : "";
+        const variantId = parts.length >= 3 ? parts[parts.length - 1] : "";
+        const spend = Number(r.spend) || 0;
+        const convValue = Number(r.conversions_value) || 0;
+        return {
+          product_item_id: pid,
+          product_id: productId,
+          variant_id: variantId,
+          product_title: r.product_title ?? "",
+          campaigns: r.campaigns ?? "",
+          spend: Math.round(spend * 100) / 100,
+          clicks: Number(r.clicks) || 0,
+          impressions: Number(r.impressions) || 0,
+          conversions: Math.round((Number(r.conversions) || 0) * 100) / 100,
+          conversions_value: Math.round(convValue * 100) / 100,
+          roas: spend > 0 ? Math.round((convValue / spend) * 100) / 100 : 0,
+        };
+      });
+      return json({ start, end, rows });
+    }
+
+    // ── GET /api/products/ad-stats/by-product ─────────────────────────────────
+    // Same as /api/products/ad-stats but aggregated per Shopify product_id
+    // (summing all variant rows). Useful for the dashboard per-product view.
+    if (path === "/api/products/ad-stats/by-product" && method === "GET") {
+      const storeId = url.searchParams.get("store_id");
+      if (!storeId) return json({ error: "Missing store_id" }, 400);
+      const { start, end } = getDateFilter(url);
+      const result = await env.DB.prepare(
+        `SELECT product_item_id, product_title, spend, clicks, impressions,
+                conversions, conversions_value, campaign_name
+         FROM google_ads_products
+         WHERE store_id=? AND date>=? AND date<=? AND source='windsor'`
+      ).bind(storeId, start, end).all();
+      const agg = new Map<string, any>();
+      for (const r of (result.results as any[])) {
+        const pid = String(r.product_item_id ?? "");
+        const parts = pid.split("_");
+        if (parts.length < 3) continue;
+        const productId = parts[parts.length - 2];
+        const ex = agg.get(productId) ?? {
+          product_id: productId, product_title: r.product_title ?? "",
+          spend: 0, clicks: 0, impressions: 0, conversions: 0, conversions_value: 0,
+          campaigns: new Set<string>(),
+        };
+        ex.spend += Number(r.spend) || 0;
+        ex.clicks += Number(r.clicks) || 0;
+        ex.impressions += Number(r.impressions) || 0;
+        ex.conversions += Number(r.conversions) || 0;
+        ex.conversions_value += Number(r.conversions_value) || 0;
+        if (r.campaign_name) ex.campaigns.add(r.campaign_name);
+        agg.set(productId, ex);
+      }
+      const rows = Array.from(agg.values()).map((e: any) => ({
+        product_id: e.product_id,
+        product_title: e.product_title,
+        campaigns: Array.from(e.campaigns).join(", "),
+        spend: Math.round(e.spend * 100) / 100,
+        clicks: e.clicks,
+        impressions: e.impressions,
+        conversions: Math.round(e.conversions * 100) / 100,
+        conversions_value: Math.round(e.conversions_value * 100) / 100,
+        roas: e.spend > 0 ? Math.round((e.conversions_value / e.spend) * 100) / 100 : 0,
+      })).sort((a, b) => b.spend - a.spend);
+      return json({ start, end, rows });
     }
 
     // ── GET /api/product-costs/debug ──────────────────────────────────────────
@@ -2413,8 +2860,17 @@ export default {
       });
     }
 
-    // ── GET /api/products/stats ───────────────────────────────────────────────
+    // ── GET /api/products/stats — REMOVED 2026-10-25 (Zenox replaces it) ─────
+    // Full endpoint body stripped; return 410 so any stale caller surfaces instead
+    // of silently 404ing. COG endpoints (/api/product-costs*) remain untouched.
     if (path === "/api/products/stats" && method === "GET") {
+      return json({ error: "removed", message: "Product Stats endpoint removed 2026-10-25 — use Zenox" }, 410);
+    }
+    // Dead-code block below is kept temporarily sealed off via the `false` guard
+    // to avoid a huge single-shot diff; the real cost driver was Product Health
+    // (writes), not this read endpoint. Will be fully deleted in a follow-up.
+    // eslint-disable-next-line no-constant-condition
+    if (false) {
       const storeId = url.searchParams.get("store_id");
       if (!storeId) return json({ error: "Missing store_id" }, 400);
       const { start, end } = getDateFilter(url);
@@ -2456,7 +2912,7 @@ export default {
                  COALESCE(SUM(clicks),0)      as ad_clicks,
                  COALESCE(SUM(impressions),0) as ad_impressions
           FROM google_ads_products
-          WHERE store_id=? AND date>=? AND date<=?
+          WHERE store_id=? AND date>=? AND date<=? AND source='windsor' AND product_item_id != '' AND product_item_id IS NOT NULL
           GROUP BY product_title
         `).bind(storeId, start, end).all(),
 
@@ -2477,7 +2933,7 @@ export default {
         env.DB.prepare(`
           SELECT product_title, COALESCE(SUM(spend),0) as ad_spend
           FROM google_ads_products
-          WHERE store_id=? AND date>=? AND date<=?
+          WHERE store_id=? AND date>=? AND date<=? AND source='windsor' AND product_item_id != '' AND product_item_id IS NOT NULL
           GROUP BY product_title
         `).bind(storeId, prevStart, prevEnd).all(),
 
@@ -2525,22 +2981,16 @@ export default {
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       function fuzzyFind(agg: Map<string, any>, rawTitle: string, claimed?: Set<string>): any {
-        // Normalise the Shopify title the same way we normalised Google Ads titles
+        // Normalise the Shopify title the same way we normalised Google Ads titles.
+        // Exact match only — a startsWith/prefix match here previously let one short or
+        // generic product title match hundreds of unrelated ad-title buckets, summing the
+        // same ad spend into many different products (confirmed: inflated Martaline's
+        // reported ad_spend by ~39x on 2026-10-08).
         const title = normAdTitle(rawTitle);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const hits: any[] = [];
-        for (const [k, v] of agg) {
-          if (k === title || k.startsWith(title) || title.startsWith(k)) {
-            hits.push(v);
-            claimed?.add(k);
-          }
-        }
-        if (!hits.length) return { ad_spend: 0, ad_clicks: 0, ad_impressions: 0 };
-        return hits.reduce((a, c) => ({
-          ad_spend:       a.ad_spend       + c.ad_spend,
-          ad_clicks:      a.ad_clicks      + c.ad_clicks,
-          ad_impressions: a.ad_impressions + c.ad_impressions,
-        }), { ad_spend: 0, ad_clicks: 0, ad_impressions: 0 });
+        const hit = agg.get(title);
+        if (!hit) return { ad_spend: 0, ad_clicks: 0, ad_impressions: 0 };
+        claimed?.add(title);
+        return hit;
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2711,6 +3161,27 @@ export default {
       });
     }
 
+    // ── POST /api/ads/sync — Google Ads API pull (replaces push-scripts) ──────
+    // Pulls last N days of per-product + daily spend from the Google Ads API
+    // directly, keyed by product_item_id (= Shopify variant_id) for exact joins.
+    if (path === "/api/ads/sync" && method === "POST") {
+      const storeId = url.searchParams.get("store_id");
+      if (!storeId) return json({ error: "Missing store_id" }, 400);
+      const days = parseInt(url.searchParams.get("days") ?? "14", 10);
+      // Resolve customer_id: per-store (stores.google_ads_customer_id) else ENV default
+      const storeRow = await env.DB.prepare(
+        `SELECT google_ads_customer_id FROM stores WHERE id=?`
+      ).bind(storeId).first<{ google_ads_customer_id: string }>();
+      const customerId = (storeRow?.google_ads_customer_id || env.GOOGLE_ADS_CUSTOMER_ID || "").trim();
+      if (!customerId) return json({ error: "No google_ads_customer_id configured for store, and no ENV default" }, 400);
+      try {
+        const result = await syncGoogleAdsProducts(env, storeId, customerId, isNaN(days) ? 14 : days);
+        return json({ ok: true, store_id: storeId, customer_id: customerId, days, ...result });
+      } catch (e) {
+        return json({ ok: false, error: (e as Error).message }, 500);
+      }
+    }
+
     // ── POST /api/ads/products/import ─────────────────────────────────────────
     if (path === "/api/ads/products/import" && method === "POST") {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2783,7 +3254,7 @@ export default {
       const trackingNumber = firstFulfillment?.tracking_number ?? "";
       const trackingUrl    = firstFulfillment?.tracking_url ?? "";
 
-      await env.DB.prepare(`
+      const writes: Array<ReturnType<typeof env.DB.prepare>> = [env.DB.prepare(`
         UPDATE orders
         SET revenue=?, net_revenue=?,
             financial_status=?, fulfillment_status=?,
@@ -2796,19 +3267,21 @@ export default {
         trackingNumber, trackingNumber,
         trackingUrl, trackingUrl,
         orderId, storeId
-      ).run();
+      )];
 
       // Upsert all current line_items (AfterSell adds new ones after order creation)
       for (const item of body.line_items ?? []) {
-        await env.DB.prepare(`
+        writes.push(env.DB.prepare(`
           INSERT OR REPLACE INTO order_items
             (id,order_id,product_id,variant_id,product_title,variant_title,quantity,revenue,cost,store_id)
           VALUES (?,?,?,?,?,?,?,?,?,?)
         `).bind(`${orderId}-item-${item.id}`, orderId, String(item.product_id ?? ""),
                 String(item.variant_id ?? ""), item.title ?? "", item.variant_title ?? "",
                 item.quantity ?? 1, parseFloat(item.price ?? "0") * (item.quantity ?? 1) - parseFloat(item.total_discount ?? "0"),
-                0, storeId).run();
+                0, storeId));
       }
+
+      await env.DB.batch(writes);
 
       return json({ ok: true });
     }
@@ -3100,7 +3573,7 @@ export default {
           recommendation = `Margin is only ${margin}% — negotiate with supplier or raise price by €${Math.ceil(netRev * 0.1 / (p.sold as number))} per unit to reach 25%.`;
         } else if (cost === 0 && p.sold >= 3) {
           label = "SET COST"; severity = "warning";
-          recommendation = "No cost entered for this product — go to Product Insights and set your COGS to get accurate margin calculations.";
+          recommendation = "No cost entered for this product — set COGS via the /api/product-costs endpoint to get accurate margin calculations.";
         } else if (roas !== null && roas >= 2 && roas < 3) {
           label = "OPTIMIZE"; severity = "info";
           recommendation = `ROAS ${roas.toFixed(2)}x — decent but room to improve. Try optimising ad creatives or testing a higher price point.`;
@@ -3234,7 +3707,7 @@ export default {
           : "";
 
       } else if (isAbout("margin", "profit", "winst", "marge")) {
-        reply = `To see full margin and profit data, go to **Product Insights** — you can set your cost per product there and see net margin after returns and ad spend.\n\nTip: any product below 20% margin should be flagged for supplier renegotiation.`;
+        reply = `To see full margin and profit data, check the external Zenox dashboard — Sentinel's COGs are set via the \`/api/product-costs\` endpoint.\n\nTip: any product below 20% margin should be flagged for supplier renegotiation.`;
 
       } else if (isAbout("supplier", "leverancier", "cost", "inkoop")) {
         const milestones20 = miles.filter((m: { milestone: number }) => m.milestone >= 20);
@@ -3537,6 +4010,42 @@ export default {
       const deletedItems = await env.DB.prepare(`
         DELETE FROM order_items WHERE order_id NOT IN (SELECT id FROM orders)
       `).run();
+
+      return json({
+        ok: true,
+        deletedOrders: deletedOrders.meta?.changes ?? 0,
+        deletedItems: deletedItems.meta?.changes ?? 0,
+      });
+    }
+
+    // ── POST /api/admin/delete-order ─────────────────────────────────────────
+    // Removes a single order (and its order_items) by id or order_number,
+    // scoped to store_id for safety. For test/junk orders that get deleted in
+    // Shopify but linger in the dashboard's own synced copy.
+    if (path === "/api/admin/delete-order" && method === "POST") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const body = await request.json() as any;
+      const storeId = body.store_id ?? "";
+      const orderId = body.order_id ?? "";
+      const orderNumber = body.order_number ?? "";
+      if (!storeId || (!orderId && !orderNumber)) {
+        return json({ error: "store_id and (order_id or order_number) required" }, 400);
+      }
+
+      const idRow = orderId
+        ? { id: orderId }
+        : await env.DB.prepare(
+            `SELECT id FROM orders WHERE store_id = ? AND order_number = ?`,
+          ).bind(storeId, orderNumber).first<{ id: string }>();
+
+      if (!idRow) return json({ ok: true, deletedOrders: 0, deletedItems: 0, note: "no matching order" });
+
+      const deletedItems = await env.DB.prepare(
+        `DELETE FROM order_items WHERE order_id = ?`,
+      ).bind(idRow.id).run();
+      const deletedOrders = await env.DB.prepare(
+        `DELETE FROM orders WHERE id = ? AND store_id = ?`,
+      ).bind(idRow.id, storeId).run();
 
       return json({
         ok: true,
@@ -3985,7 +4494,7 @@ export default {
               SELECT substr(created_at,1,10) as day, MAX(revenue) as rev, 1 as cnt
               FROM orders
               WHERE store_id=? AND substr(created_at,1,10)>=? AND substr(created_at,1,10)<=?
-                AND customer_country=?
+                AND COALESCE(NULLIF(attributed_country,''), customer_country)=?
               GROUP BY COALESCE(shopify_order_id, id)
             ) GROUP BY day
           `).bind(storeId, start, end, country).all()
@@ -4001,15 +4510,19 @@ export default {
       // Ad spend:
       // - country tab active → read per-country rows from google_ads_daily WHERE country=?
       //   (Google Ads Script must send per-country rows for this to auto-fill)
+      //   google_ads_daily can hold legacy rows under an alternate code (e.g. "UK" for "GB"),
+      //   so match every known alias (see countryAliases) instead of an exact-match filter.
       // - no country (global view) → auto-fill from untagged google_ads_daily (country='' or NULL)
+      const rtCountryAliases = country ? countryAliases(country) : [];
+      const rtCountryPlaceholders = rtCountryAliases.map(() => "?").join(",");
       const adsRows = country
         ? await env.DB.prepare(`
             SELECT date, spend, clicks, impressions,
               CASE WHEN impressions>0 THEN CAST(clicks AS REAL)/impressions*100 ELSE 0 END as ctr,
               CASE WHEN clicks>0 THEN spend/clicks ELSE 0 END as cpc
             FROM google_ads_daily
-            WHERE store_id=? AND date>=? AND date<=? AND country=?
-          `).bind(storeId, start, end, country).all()
+            WHERE store_id=? AND date>=? AND date<=? AND country IN (${rtCountryPlaceholders})
+          `).bind(storeId, start, end, ...rtCountryAliases).all()
         : await env.DB.prepare(`
             SELECT date, spend, clicks, impressions,
               CASE WHEN impressions>0 THEN CAST(clicks AS REAL)/impressions*100 ELSE 0 END as ctr,
@@ -4022,8 +4535,8 @@ export default {
       const manualRows = country
         ? await env.DB.prepare(`
             SELECT * FROM roas_tracker_country
-            WHERE store_id=? AND country=? AND date>=? AND date<=?
-          `).bind(storeId, country, start, end).all()
+            WHERE store_id=? AND country IN (${rtCountryPlaceholders}) AND date>=? AND date<=?
+          `).bind(storeId, ...rtCountryAliases, start, end).all()
         : await env.DB.prepare(`
             SELECT * FROM roas_tracker WHERE store_id=? AND date>=? AND date<=?
           `).bind(storeId, start, end).all();
@@ -4228,151 +4741,23 @@ export default {
       return json({ ok: true, marked });
     }
 
-    // ── GET /api/product-health — product health scores ──────────────────────
-    if (path === "/api/product-health" && method === "GET") {
-      const storeId = url.searchParams.get("store_id");
-      const sort = url.searchParams.get("sort") || "score_asc";
-      const limit = Math.min(parseInt(url.searchParams.get("limit") || "200"), 500);
-
-      const orderClause = sort === "score_asc"  ? "health_score ASC" :
-                          sort === "score_desc" ? "health_score DESC" :
-                          sort === "revenue"    ? "revenue_30d DESC" :
-                          "orders_30d DESC";
-
-      const q = storeId
-        ? env.DB.prepare(
-            `SELECT * FROM product_health_signals WHERE store_id=? ORDER BY ${orderClause} LIMIT ?`
-          ).bind(storeId, limit)
-        : env.DB.prepare(
-            `SELECT * FROM product_health_signals ORDER BY ${orderClause} LIMIT ?`
-          ).bind(limit);
-
-      const rows = (await q.all()).results;
-
-      // Compute signal breakdown per product
-      const products = rows.map((r: Record<string, unknown>) => {
-        const signals: string[] = [];
-        const imgMax = Math.max(Number(r.image_width) || 0, Number(r.image_height) || 0);
-        if (imgMax < 1500) signals.push("photo_quality");
-        const varCount = Number(r.variant_count) || 0;
-        const varImg = Number(r.variants_with_images) || 0;
-        if (varCount > 1 && varImg < varCount) signals.push("variant_images");
-        if (!r.seo_title || String(r.seo_title).length < 5) signals.push("seo_title");
-        if (!r.seo_description || String(r.seo_description).length < 10) signals.push("seo_description");
-        if (!r.product_type) signals.push("product_type");
-        const titleTags = (String(r.product_title || "") + " " + String(r.tags || "")).toLowerCase();
-        const isOff = OFF_SEASON_KEYWORDS.some(k => titleTags.includes(k));
-        if (isOff) signals.push("off_season");
-        if (Number(r.orders_30d) === 0) signals.push("no_sales");
-        const orders30 = Number(r.orders_30d) || 0;
-        const orders7 = Number(r.orders_7d) || 0;
-        const momentum = orders30 >= 3 ? (orders7 / 7) / (orders30 / 30) : 1;
-        if (momentum <= 0.3 && orders30 >= 3) signals.push("declining");
-        return { ...r, failed_signals: signals };
-      });
-
-      return json({ products, total: products.length });
-    }
-
-    // ── POST /api/product-health/sync — trigger manual sync ─────────────────
-    if (path === "/api/product-health/sync" && method === "POST") {
-      const body = await request.json() as { store_id?: string };
-      const synced = await syncProductHealth(env, body.store_id);
-      return json({ ok: true, synced });
-    }
-
-    // ── POST /api/product-health/import — bulk import from external source ───
-    if (path === "/api/product-health/import" && method === "POST") {
-      const body = await request.json() as { store_id: string; products: Array<{
-        product_id: string; product_title: string; handle: string;
-        image_width: number; image_height: number;
-        variant_count: number; variants_with_images: number;
-        seo_title: string; seo_description: string;
-        product_type: string; tags: string;
-      }> };
-      if (!body.store_id || !Array.isArray(body.products)) return json({ error: "missing store_id or products" }, 400);
-      const now = new Date().toISOString();
-      const date30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
-      const date7  = new Date(Date.now() -  7 * 86400000).toISOString().slice(0, 10);
-      let synced = 0;
-      for (const p of body.products) {
-        const row30 = await env.DB.prepare(
-          `SELECT COUNT(*) as cnt, COALESCE(SUM(oi.revenue),0) as rev
-           FROM order_items oi JOIN orders o ON o.id=oi.order_id
-           WHERE oi.store_id=? AND oi.product_id=? AND o.created_at>=? AND o.financial_status!='cancelled'`
-        ).bind(body.store_id, p.product_id, date30 + "T00:00:00Z").first() as { cnt: number; rev: number } | null;
-        const row7 = await env.DB.prepare(
-          `SELECT COUNT(*) as cnt, COALESCE(SUM(oi.revenue),0) as rev
-           FROM order_items oi JOIN orders o ON o.id=oi.order_id
-           WHERE oi.store_id=? AND oi.product_id=? AND o.created_at>=? AND o.financial_status!='cancelled'`
-        ).bind(body.store_id, p.product_id, date7 + "T00:00:00Z").first() as { cnt: number; rev: number } | null;
-        const orders30 = row30?.cnt ?? 0; const rev30 = row30?.rev ?? 0;
-        const orders7 = row7?.cnt ?? 0;   const rev7 = row7?.rev ?? 0;
-        const healthScore = calcHealthScore({
-          image_width: p.image_width, image_height: p.image_height,
-          variant_count: p.variant_count, variants_with_images: p.variants_with_images,
-          seo_title: p.seo_title, seo_description: p.seo_description,
-          product_type: p.product_type, tags: p.tags,
-          orders_30d: orders30, revenue_30d: rev30, orders_7d: orders7, revenue_7d: rev7,
-          product_title: p.product_title,
-        });
-        await env.DB.prepare(`
-          INSERT INTO product_health_signals
-            (store_id,product_id,product_title,handle,image_width,image_height,has_variant_images,
-             variant_count,variants_with_images,seo_title,seo_description,product_type,tags,
-             orders_30d,revenue_30d,orders_7d,revenue_7d,health_score,last_synced)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-          ON CONFLICT(store_id,product_id) DO UPDATE SET
-            product_title=excluded.product_title, handle=excluded.handle,
-            image_width=excluded.image_width, image_height=excluded.image_height,
-            has_variant_images=excluded.has_variant_images, variant_count=excluded.variant_count,
-            variants_with_images=excluded.variants_with_images, seo_title=excluded.seo_title,
-            seo_description=excluded.seo_description, product_type=excluded.product_type,
-            tags=excluded.tags, orders_30d=excluded.orders_30d, revenue_30d=excluded.revenue_30d,
-            orders_7d=excluded.orders_7d, revenue_7d=excluded.revenue_7d,
-            health_score=excluded.health_score, last_synced=excluded.last_synced
-        `).bind(
-          body.store_id, p.product_id, p.product_title, p.handle,
-          p.image_width, p.image_height,
-          p.variants_with_images === p.variant_count && p.variant_count > 0 ? 1 : 0,
-          p.variant_count, p.variants_with_images,
-          p.seo_title, p.seo_description, p.product_type, p.tags,
-          orders30, rev30, orders7, rev7, healthScore, now
-        ).run();
-        synced++;
-      }
-      return json({ ok: true, synced });
-    }
-
-    // ── GET /api/product-health/debug — test Shopify GraphQL connection ──────
-    if (path === "/api/product-health/debug" && method === "GET") {
-      const storeId = url.searchParams.get("store_id") || "ceofo";
-      const store = (await env.DB.prepare(
-        `SELECT id, shopify_domain, shopify_access_token FROM stores WHERE id=?`
-      ).bind(storeId).first()) as { id: string; shopify_domain: string; shopify_access_token: string } | null;
-      if (!store) return json({ error: "store not found" }, 404);
-      if (!store.shopify_access_token) return json({ error: "no token", domain: store.shopify_domain });
-      const gqlUrl = `https://${store.shopify_domain}/admin/api/2024-01/graphql.json`;
-      const gql = `{ products(first: 3) { edges { node { id title } } } }`;
-      const res = await fetch(gqlUrl, {
-        method: "POST",
-        headers: { "X-Shopify-Access-Token": store.shopify_access_token, "Content-Type": "application/json" },
-        body: JSON.stringify({ query: gql }),
-      });
-      const text = await res.text();
-      return json({ status: res.status, ok: res.ok, domain: store.shopify_domain, body: text.slice(0, 2000) });
+    // ── /api/product-health/* — REMOVED 2026-10-25 ───────────────────────────
+    // Entire Product Health feature stripped to kill D1 "Rows Written" cost
+    // ($5/day → $0). Zenox dashboard replaces it. Any stale caller gets a
+    // clear 410 so it surfaces instead of silently 404ing.
+    if (path.startsWith("/api/product-health")) {
+      return json({ error: "removed", message: "Product Health endpoints removed 2026-10-25 — use Zenox" }, 410);
     }
 
     return json({ error: "Not found", path }, 404);
   },
 
-  // Cron: sync recent orders + cancellations + product health every 6h.
+  // Cron: sync recent orders + cancellations every 6h.
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(
       Promise.all([
         syncRecentOrders(env),
         syncCancellations(env),
-        syncProductHealth(env),
       ]).then(() => undefined)
     );
   },

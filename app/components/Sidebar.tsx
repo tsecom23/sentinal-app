@@ -6,7 +6,7 @@ import {
   BarChart3, Bell, Bot, Box,
   LayoutDashboard, LineChart, LogOut, MessageCircle,
   RotateCcw, ShoppingCart, Skull, Store,
-  Target, TrendingUp, Trophy, Users, Wifi, Heart, X,
+  Target, TrendingUp, Trophy, Users, Wifi, X,
 } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 import { createClient } from "../../utils/supabase/client";
@@ -32,7 +32,6 @@ const NAV = [
       { label: "ROAS Tracker",  href: "/roas-tracker",     icon: LineChart },
       { label: "Google Ads",    href: "/google-ads",       icon: BarChart3 },
       { label: "Product Ads",   href: "/product-ads",      icon: Box },
-      { label: "Product Stats", href: "/product-insights", icon: Box },
       { label: "Scale",         href: "/scale-command",    icon: Target },
     ],
   },
@@ -40,9 +39,8 @@ const NAV = [
     section: "OPS",
     color: "#fb923c",
     items: [
-      { label: "Product Health", href: "/product-health", icon: Heart },
-      { label: "Returns",        href: "/returns",        icon: RotateCcw },
-      { label: "Dead Stock",     href: "/dead-stock",     icon: Skull },
+      { label: "Returns",    href: "/returns",    icon: RotateCcw },
+      { label: "Dead Stock", href: "/dead-stock", icon: Skull },
     ],
   },
   {

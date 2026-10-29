@@ -25,7 +25,7 @@ const REAL_STORES = STORES.filter(s => s.key !== "all");
 // Per-store country config — same as ROAS tracker
 const STORE_COUNTRIES: Record<string, { code: string; name: string; flag: string }[]> = {
   ceofo:     [{ code: "FR", name: "France", flag: "🇫🇷" }, { code: "ES", name: "Spain", flag: "🇪🇸" }, { code: "IT", name: "Italy", flag: "🇮🇹" }],
-  dorevy:    [{ code: "GB", name: "United Kingdom", flag: "🇬🇧" }, { code: "IT", name: "Italy", flag: "🇮🇹" }],
+  dorevy:    [{ code: "GB", name: "United Kingdom", flag: "🇬🇧" }, { code: "IT", name: "Italy", flag: "🇮🇹" }, { code: "FR", name: "France", flag: "🇫🇷" }, { code: "BE", name: "Belgium", flag: "🇧🇪" }, { code: "DE", name: "Germany", flag: "🇩🇪" }],
   martaline: [],
 };
 

@@ -7,10 +7,23 @@
  *  3. Plak deze volledige code
  *  4. Pas STORE_ID aan ("ceofo" of "martaline")
  *  5. Klik "Autoriseren" en daarna "Opslaan"
- *  6. Zet frequentie op "Uurlijks"
+ *  6. Zet frequentie op "Uurlijks" — dat mag weer, zie D1-kosten-incident-notitie hieronder
  *
  * Vereist: Google Shopping campagnes.
  * Bij alleen Search campagnes is product-level data niet beschikbaar.
+ *
+ * ── D1-KOSTEN-INCIDENT (okt 2026) ──
+ * Dit script stuurde voorheen elk UUR een rolling 14-DAGEN window van elk product
+ * naar /api/ads/products/import, wat bij élke run een INSERT OR REPLACE deed voor
+ * alle product×dag-rijen van die 14 dagen — ook als er niets veranderd was.
+ * Resultaat: 97.391.913 query-executies / 293M rows written in 30 dagen op Cloudflare
+ * D1 → ver over de 50M/maand gratis-inbegrepen writes van het Workers Paid-plan →
+ * ±$262 extra kosten (die $250-factuur).
+ * FIX: window verkleind naar 2 dagen (vandaag + gisteren, voor laat-toegeschreven
+ * conversies). Dat is een 7x-reductie t.o.v. 14 dagen: 97,4M / 7 ≈ 13,9M rows/maand
+ * voor deze query — samen met de rest (~14M) en de Windsor-import (~5M) ruim onder de
+ * 50M/maand gratis-grens. Uurlijks blijft dus prima (en gratis) zolang het window op
+ * 2 dagen blijft staan. Nooit meer terugzetten naar 14 dagen zonder expliciet akkoord.
  * ─────────────────────────────────────────────────────────────
  */
 
@@ -21,7 +34,8 @@ function main() {
   var rows = {};
 
   // Build explicit date range — DURING keyword not supported in shopping_performance_view
-  // 14 days is enough for daily updates; run hourly to keep data fresh
+  // 2 days (today + yesterday) is enough to catch late-attributed conversions while
+  // keeping the per-run write volume sane — see D1-KOSTEN-INCIDENT note above.
   // Use the ad account's own timezone (not the script sandbox's) so "today" lines up with
   // what segments.date actually reports — otherwise spend near midnight can land on the
   // wrong calendar day relative to Sentinel's date-range picker.
@@ -31,7 +45,7 @@ function main() {
   }
   var today = new Date();
   var startDate = new Date(today);
-  startDate.setDate(today.getDate() - 14);
+  startDate.setDate(today.getDate() - 1);
   var dateRange = "segments.date >= '" + fmt(startDate) + "' AND segments.date <= '" + fmt(today) + "'";
 
   try {

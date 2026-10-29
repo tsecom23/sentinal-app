@@ -29,7 +29,8 @@ var COUNTRY_RULES = [
   { keywords: ["canada", "_ca_", "-ca-", "|ca|", " ca "],                                       code: "CA" },
   { keywords: ["united states", "usa", "_us_", "-us-", "|us|", " us "],                         code: "US" },
   { keywords: ["united kingdom", "britain", "british", "_uk_", "-uk-", "|uk|", " uk ", "_gb_", "-gb-", "|gb|", " gb "], code: "GB" },
-  { keywords: ["belgium", "belgique", "belgië", "_be_", "-be-"],                                code: "BE" },
+  { keywords: ["belgium", "belgique", "belgië", "_be_", "-be-", "|be|", " be "],                code: "BE" },
+  { keywords: ["germany", "deutschland", "duitsland", "allemagne", "_de_", "-de-", "|de|", "de - "], code: "DE" },
   { keywords: ["netherlands", "nederland", "pays-bas", "_nl_", "-nl-"],                         code: "NL" },
 ];
 
