@@ -19,6 +19,7 @@ const FALLBACK_STORES: Store[] = [
   // Dorevy sells in GBP, not EUR — only matters if the live /api/stores call fails and this
   // fallback is used, but a wrong currency here silently skews every FX-converted figure.
   { id: "dorevy",   name: "Dorevy",   shopify_domain: "gfauyv-wi.myshopify.com", google_ads_customer_id: "", currency: "GBP" },
+  { id: "tumsie",   name: "Tumsie",   shopify_domain: "szpy5s-45.myshopify.com", google_ads_customer_id: "", currency: "EUR" },
 ];
 
 let _cache: Store[] | null = null;

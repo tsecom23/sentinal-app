@@ -2,11 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Bell } from "lucide-react";
-
-const STORES = [
-  { key: "ceofo",     name: "Melvoire"  },
-  { key: "martaline", name: "Martaline" },
-];
+import { useStores } from "../hooks/useStores";
 
 const API = "https://sentinel-api.tssheets1.workers.dev";
 
@@ -50,9 +46,10 @@ function Toggle({
 }
 
 export default function NotificationsPage() {
-  const [storeId, setStoreId] = useState(STORES[0].key);
+  const { stores } = useStores();
+  const [storeId, setStoreId] = useState("ceofo");
   const [settings, setSettings] = useState<NotificationSettings>({
-    store_id:            STORES[0].key,
+    store_id:            "ceofo",
     slack_webhook:       "",
     whatsapp_phone:      "",
     notify_milestones:   0,
@@ -171,12 +168,12 @@ export default function NotificationsPage() {
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-500">Store:</span>
           <div className="flex gap-2">
-            {STORES.map((s) => (
+            {stores.map((s) => (
               <button
-                key={s.key}
-                onClick={() => setStoreId(s.key)}
+                key={s.id}
+                onClick={() => setStoreId(s.id)}
                 className={`px-4 py-1.5 rounded-xl text-sm font-medium transition-all ${
-                  storeId === s.key
+                  storeId === s.id
                     ? "bg-blue-600 text-gray-900"
                     : "bg-black/5 text-gray-500 hover:bg-black/10 hover:text-gray-900"
                 }`}

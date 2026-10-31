@@ -2,13 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Loader2, MessageSquare, Send, Sparkles } from "lucide-react";
+import { useStores } from "../hooks/useStores";
 
 const API = "https://sentinel-api.tssheets1.workers.dev";
-const STORES = [
-  { key: "ceofo", name: "Melvoire" },
-  { key: "martaline", name: "Martaline" },
-];
-
 const SUGGESTIONS = [
   "How is today going?",
   "Which products should I kill?",
@@ -61,6 +57,7 @@ function RenderReply({ text }: { text: string }) {
 }
 
 export default function AIChatPage() {
+  const { stores } = useStores();
   const [storeId, setStoreId] = useState("martaline");
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -133,12 +130,12 @@ export default function AIChatPage() {
           </div>
           {/* Store selector */}
           <div className="flex gap-1 bg-black/5 rounded-xl p-1">
-            {STORES.map((s) => (
+            {stores.map((s) => (
               <button
-                key={s.key}
-                onClick={() => setStoreId(s.key)}
+                key={s.id}
+                onClick={() => setStoreId(s.id)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  storeId === s.key
+                  storeId === s.id
                     ? "bg-blue-600 text-gray-900"
                     : "text-gray-500 hover:text-gray-900"
                 }`}

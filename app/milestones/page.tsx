@@ -2,13 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Bell, BellOff, CheckCheck, ChevronRight, Trophy } from "lucide-react";
+import { useStores } from "../hooks/useStores";
 
 const API = "https://sentinel-api.tssheets1.workers.dev";
-const STORES = [
-  { key: "ceofo",     name: "Melvoire" },
-  { key: "martaline", name: "Martaline" },
-];
-
 const MILESTONE_CFG: Record<number, {
   emoji: string; title: string; action: string;
   color: string; bg: string; border: string; badge: string;
@@ -67,6 +63,7 @@ function timeAgo(iso: string) {
 }
 
 export default function MilestonesPage() {
+  const { stores } = useStores();
   const [store, setStore]           = useState("martaline");
   const [alerts, setAlerts]         = useState<Alert[]>([]);
   const [approaching, setApproaching] = useState<Approaching[]>([]);
@@ -112,10 +109,10 @@ export default function MilestonesPage() {
         <div className="flex items-center gap-3">
           {/* Store toggle */}
           <div className="flex gap-1 bg-black/5 rounded-xl p-1">
-            {STORES.map(s => (
-              <button key={s.key} onClick={() => setStore(s.key)}
+            {stores.map(s => (
+              <button key={s.id} onClick={() => setStore(s.id)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  store === s.key ? "bg-blue-600 text-gray-900" : "text-gray-500 hover:text-gray-900"
+                  store === s.id ? "bg-blue-600 text-gray-900" : "text-gray-500 hover:text-gray-900"
                 }`}>
                 {s.name}
               </button>

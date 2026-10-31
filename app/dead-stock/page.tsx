@@ -2,13 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { ChevronLeft, PackageX, Skull, Trash2 } from "lucide-react";
+import { useStores } from "../hooks/useStores";
 
 const API = "https://sentinel-api.tssheets1.workers.dev";
-
-const STORES = [
-  { key: "ceofo", name: "Melvoire" },
-  { key: "martaline", name: "Martaline" },
-];
 
 type DeadProduct = {
   id: string;
@@ -22,6 +18,7 @@ type DeadProduct = {
 };
 
 export default function DeadStockPage() {
+  const { stores } = useStores();
   const [storeId, setStoreId] = useState("ceofo");
   const [products, setProducts] = useState<DeadProduct[]>([]);
   const [loading, setLoading] = useState(false);
@@ -71,7 +68,7 @@ export default function DeadStockPage() {
               onChange={e => { setStoreId(e.target.value); setArchived(new Set()); }}
               className="bg-gray-50 border border-black/8 rounded-xl px-3 py-2 text-sm text-gray-900"
             >
-              {STORES.map(s => <option key={s.key} value={s.key}>{s.name}</option>)}
+              {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>
         </div>

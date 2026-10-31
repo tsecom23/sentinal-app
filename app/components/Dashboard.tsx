@@ -12,16 +12,9 @@ import {
   Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { DateRangePicker, DateRange, initRange, toQueryString } from "./DateRangePicker";
+import { useStores } from "../hooks/useStores";
 
 const API = "https://sentinel-api.tssheets1.workers.dev";
-
-const STORES = [
-  { key: "all",       name: "All Stores", domain: "" },
-  { key: "ceofo",     name: "Melvoire",   domain: "c4r0ex-0k.myshopify.com" },
-  { key: "martaline", name: "Martaline",  domain: "cqb72v-if.myshopify.com" },
-  { key: "dorevy",    name: "Dorevy",     domain: "gfauyv-wi.myshopify.com" },
-];
-const REAL_STORES = STORES.filter(s => s.key !== "all");
 
 // Per-store country config — same as ROAS tracker
 const STORE_COUNTRIES: Record<string, { code: string; name: string; flag: string }[]> = {
@@ -60,6 +53,7 @@ function fmt(n: number) {
 const MILESTONES_LIST = [5, 10, 20, 50, 100, 200, 500, 1000];
 
 export default function Dashboard({ activeStoreId }: { activeStoreId?: string }) {
+  const { stores } = useStores();
   const [storeId,    setStoreId]    = useState(activeStoreId || "ceofo");
   const [country,    setCountry]    = useState("");           // "" = all countries
   const [dateRange,  setDateRange]  = useState<DateRange>(initRange("30d"));
@@ -142,10 +136,10 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
       if (storeId === "all") {
         // Fetch all stores in parallel and aggregate
         const results = await Promise.all(
-          REAL_STORES.map(s =>
-            fetch(`${API}/api/dashboard/overview?store_id=${s.key}&${dq}`, { cache: "no-store" })
+          stores.map(s =>
+            fetch(`${API}/api/dashboard/overview?store_id=${s.id}&${dq}`, { cache: "no-store" })
               .then(r => r.json())
-              .then(ov => ({ key: s.key, name: s.name, ov }))
+              .then(ov => ({ key: s.id, name: s.name, ov }))
           )
         );
         setStoreBreakdown(results);
@@ -223,6 +217,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
   useEffect(() => { if (activeStoreId) setStoreId(activeStoreId); }, [activeStoreId]);
   useEffect(() => { setCountry(""); setCampaign(""); setAdChannel("combined"); }, [storeId]);
   useEffect(() => { loadData(); }, [storeId, country, campaign, dateRange]); // eslint-disable-line
+  useEffect(() => { if (storeId === "all") loadData(); }, [stores]); // eslint-disable-line
 
   const ov           = overview;
   const countries    = getCountries(storeId);
@@ -270,7 +265,7 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
   const roasVsBreakEven      = breakEvenRoas && adSpend > 0 ? roas / breakEvenRoas : null;
   const isProfitable         = roasVsBreakEven != null && roasVsBreakEven >= 1;
   const chartData            = ov?.revenueTrend?.length ? ov.revenueTrend : [{ day: "—", revenue: 0, profit: 0 }];
-  const activeStore          = STORES.find(s => s.key === storeId);
+  const activeStore          = stores.find(s => s.id === storeId);
 
   const actionableAlerts = alerts.filter(
     a => a.alert_type !== "WATCH_PRODUCT" && a.alert_type !== "NEW_PRODUCT"
@@ -300,9 +295,10 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
               className="rounded-xl px-3 py-2 text-sm font-mono font-semibold text-slate-200 min-w-[160px] cursor-pointer focus:outline-none"
               style={{ background: "rgba(139,92,246,0.05)", border: "1px solid rgba(139,92,246,0.12)" }}
             >
-              {STORES.map(s => <option key={s.key} value={s.key}>{s.name}</option>)}
+              <option value="all">All Stores</option>
+              {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
-            <span className="hidden sm:inline text-[11px] text-zinc-400">{activeStore?.domain}</span>
+            <span className="hidden sm:inline text-[11px] text-zinc-400">{activeStore?.shopify_domain}</span>
           </div>
         </div>
 
