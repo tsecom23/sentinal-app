@@ -3204,34 +3204,14 @@ export default {
     }
 
     // ── POST /api/ads/products/import ─────────────────────────────────────────
+    // DISABLED 31 Oct 2026 — the hourly Google Ads products scripts drove ~645k
+    // INSERT OR REPLACE statements / ~3.2M rows written per day into D1 (99.5% of
+    // all writes), which is what pushed the account past the included writes.
+    // The owner only needs account-level spend/revenue/ROAS on the dashboard home,
+    // which comes from google_ads_daily via /api/ads/import and is unaffected.
+    // Same treatment as the Windsor ingest: kept as a 410 so stray runs are obvious.
     if (path === "/api/ads/products/import" && method === "POST") {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const body = await request.json() as any;
-      const rows = (body.rows ?? []) as Array<{
-        store_id: string; date: string; product_title: string;
-        spend: number; clicks: number; impressions: number;
-        conversions: number; cpc: number; ctr: number;
-      }>;
-      const CHUNK = 100;
-      let count = 0;
-      for (let i = 0; i < rows.length; i += CHUNK) {
-        const chunk = rows.slice(i, i + CHUNK);
-        const stmts = chunk.map(row => {
-          // Full title, not truncated — a 40-char slice caused different products with the
-          // same prefix (common with auto-generated dropshipping titles) to collide on the
-          // same primary key, silently overwriting each other's spend.
-          const id = `${row.store_id}-${row.date}-${row.product_title}`;
-          return env.DB.prepare(`
-            INSERT OR REPLACE INTO google_ads_products
-              (id,store_id,date,product_title,spend,clicks,impressions,conversions,cpc,ctr)
-            VALUES (?,?,?,?,?,?,?,?,?,?)
-          `).bind(id, row.store_id, row.date, row.product_title,
-                  row.spend, row.clicks, row.impressions, row.conversions, row.cpc, row.ctr);
-        });
-        await env.DB.batch(stmts);
-        count += chunk.length;
-      }
-      return json({ ok: true, imported: count });
+      return json({ error: "Endpoint disabled 31 Oct 2026 — product-level ad stats ingestion caused D1 write costs." }, 410);
     }
 
     // ── POST /api/webhooks/shopify/orders-cancelled ──────────────────────────
