@@ -11,12 +11,15 @@ interface EditDraft {
   name: string;
   shopify_domain: string;
   shopify_access_token: string;
+  shopify_client_id: string;
+  shopify_client_secret: string;
   google_ads_customer_id: string;
   currency: string;
 }
 
 const EMPTY_DRAFT: EditDraft = {
   name: "", shopify_domain: "", shopify_access_token: "",
+  shopify_client_id: "", shopify_client_secret: "",
   google_ads_customer_id: "", currency: "EUR",
 };
 
@@ -115,6 +118,8 @@ export default function StoresPage() {
       name: s.name,
       shopify_domain: s.shopify_domain ?? "",
       shopify_access_token: "",
+      shopify_client_id: "",
+      shopify_client_secret: "",
       google_ads_customer_id: s.google_ads_customer_id ?? "",
       currency: s.currency ?? "EUR",
     });
@@ -159,6 +164,19 @@ export default function StoresPage() {
               placeholder="Shopify Admin Access Token"
               value={draft.shopify_access_token}
               onChange={e => setDraft(p => ({ ...p, shopify_access_token: e.target.value }))}
+            />
+            <input
+              className="bg-black/5 border border-black/10 rounded-xl px-4 py-2.5 text-sm text-gray-900 placeholder-zinc-600 focus:outline-none focus:border-blue-500/50"
+              placeholder="Shopify Client ID (Dev Dashboard app, optional)"
+              value={draft.shopify_client_id}
+              onChange={e => setDraft(p => ({ ...p, shopify_client_id: e.target.value }))}
+            />
+            <input
+              type="password"
+              className="bg-black/5 border border-black/10 rounded-xl px-4 py-2.5 text-sm text-gray-900 placeholder-zinc-600 focus:outline-none focus:border-blue-500/50"
+              placeholder="Shopify Client Secret (token is refreshed automatically)"
+              value={draft.shopify_client_secret}
+              onChange={e => setDraft(p => ({ ...p, shopify_client_secret: e.target.value }))}
             />
             <input
               className="bg-black/5 border border-black/10 rounded-xl px-4 py-2.5 text-sm text-gray-900 placeholder-zinc-600 focus:outline-none focus:border-blue-500/50"
@@ -217,6 +235,19 @@ export default function StoresPage() {
                     value={editDraft.shopify_access_token}
                     placeholder="Access token (leave empty = keep current)"
                     onChange={e => setEditDraft(p => ({ ...p, shopify_access_token: e.target.value }))}
+                  />
+                  <input
+                    className="w-full bg-black/5 border border-black/10 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-blue-500/50"
+                    value={editDraft.shopify_client_id}
+                    placeholder="Client ID (leave empty = keep current)"
+                    onChange={e => setEditDraft(p => ({ ...p, shopify_client_id: e.target.value }))}
+                  />
+                  <input
+                    type="password"
+                    className="w-full bg-black/5 border border-black/10 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-blue-500/50"
+                    value={editDraft.shopify_client_secret}
+                    placeholder="Client secret (leave empty = keep current)"
+                    onChange={e => setEditDraft(p => ({ ...p, shopify_client_secret: e.target.value }))}
                   />
                   <input
                     className="w-full bg-black/5 border border-black/10 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-blue-500/50"

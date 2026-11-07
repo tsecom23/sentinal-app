@@ -163,6 +163,50 @@ async function syncGoogleAdsProducts(env: Env, storeId: string, customerId: stri
   return { products: prodAgg.size, daily: dailyAgg.size };
 }
 
+// ─── Shopify token: refresh via client credentials ──────────────────────────
+// Apps created in the Shopify Dev Dashboard (all new apps since 2026) hand out
+// access tokens that expire after ~24h. When a store has a client ID + secret,
+// fetch a new token through the client-credentials grant whenever the stored
+// one is missing or about to expire. Stores with a permanent token are untouched.
+async function freshShopifyToken(
+  env: Env,
+  storeId: string,
+  store: { shopify_domain: string; shopify_access_token: string },
+): Promise<string> {
+  let creds: { shopify_client_id?: string; shopify_client_secret?: string; shopify_token_expires_at?: string } | null = null;
+  try {
+    creds = await env.DB.prepare(
+      `SELECT shopify_client_id, shopify_client_secret, shopify_token_expires_at FROM stores WHERE id=?`
+    ).bind(storeId).first();
+  } catch { /* columns not migrated yet */ }
+  if (!creds?.shopify_client_id || !creds?.shopify_client_secret || !store.shopify_domain) return store.shopify_access_token;
+
+  const expiresAt = Date.parse(creds.shopify_token_expires_at ?? "");
+  if (store.shopify_access_token && expiresAt && expiresAt - Date.now() > 10 * 60 * 1000) return store.shopify_access_token;
+
+  const res = await fetch(`https://${store.shopify_domain}/admin/oauth/access_token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: creds.shopify_client_id,
+      client_secret: creds.shopify_client_secret,
+    }).toString(),
+  });
+  if (!res.ok) {
+    console.error(`Shopify token refresh failed for ${storeId}: ${res.status} ${(await res.text()).slice(0, 200)}`);
+    return store.shopify_access_token;
+  }
+  const data = await res.json() as { access_token?: string; expires_in?: number };
+  if (!data.access_token) return store.shopify_access_token;
+  const newExpiry = new Date(Date.now() + (data.expires_in ?? 86399) * 1000).toISOString();
+  await env.DB.prepare(
+    `UPDATE stores SET shopify_access_token=?, shopify_token_expires_at=? WHERE id=?`
+  ).bind(data.access_token, newExpiry, storeId).run();
+  store.shopify_access_token = data.access_token;
+  return data.access_token;
+}
+
 // ─── Cancel-sync: pull cancelled Shopify orders → mark 'cancelled' in D1 ────────
 // A cancelled Shopify order has `cancelled_at` set while its financial_status
 // stays paid/refunded, so cancellations never reached D1 and kept counting as
@@ -176,6 +220,7 @@ async function syncCancellations(env: Env, storeId?: string): Promise<number> {
 
   let marked = 0;
   for (const store of stores) {
+    await freshShopifyToken(env, store.id, store);
     if (!store.shopify_domain || !store.shopify_access_token) continue;
     const base = `https://${store.shopify_domain}/admin/api/2024-01`;
     const headers = { "X-Shopify-Access-Token": store.shopify_access_token };
@@ -244,6 +289,7 @@ async function syncRecentOrders(env: Env): Promise<number> {
 
   let imported = 0;
   for (const store of stores) {
+    await freshShopifyToken(env, store.id, store);
     if (!store.shopify_domain || !store.shopify_access_token) continue;
 
     // Incremental cursor per store: only re-fetch/rewrite orders that actually changed since the
@@ -487,6 +533,10 @@ const MIGRATIONS = [
   // Add google_ads_customer_id and shopify_access_token to stores if they don't exist yet
   `ALTER TABLE stores ADD COLUMN google_ads_customer_id TEXT DEFAULT ''`,
   `ALTER TABLE stores ADD COLUMN shopify_access_token TEXT DEFAULT ''`,
+  // Dev Dashboard apps: client credentials for 24h token refresh (see freshShopifyToken)
+  `ALTER TABLE stores ADD COLUMN shopify_client_id TEXT DEFAULT ''`,
+  `ALTER TABLE stores ADD COLUMN shopify_client_secret TEXT DEFAULT ''`,
+  `ALTER TABLE stores ADD COLUMN shopify_token_expires_at TEXT DEFAULT ''`,
   // Tags on CS tickets
   `ALTER TABLE cs_tickets ADD COLUMN tags TEXT DEFAULT ''`,
   `ALTER TABLE cs_tickets ADD COLUMN source TEXT DEFAULT 'manual'`,
@@ -873,24 +923,30 @@ export default {
 
     // ── POST /api/stores ──────────────────────────────────────────────────────
     if (path === "/api/stores" && method === "POST") {
-      const body = await request.json() as { name: string; shopify_domain?: string; shopify_access_token?: string; google_ads_customer_id?: string; currency?: string };
+      const body = await request.json() as { name: string; shopify_domain?: string; shopify_access_token?: string; shopify_client_id?: string; shopify_client_secret?: string; google_ads_customer_id?: string; currency?: string };
       if (!body.name) return json({ error: "name required" }, 400);
       const id = body.name.toLowerCase().trim().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
       await env.DB.prepare(
-        `INSERT OR IGNORE INTO stores (id,name,shopify_domain,shopify_access_token,google_ads_customer_id,currency,created_at) VALUES (?,?,?,?,?,?,?)`
-      ).bind(id, body.name.trim(), body.shopify_domain ?? "", body.shopify_access_token ?? "", body.google_ads_customer_id ?? "", body.currency ?? "EUR", new Date().toISOString()).run();
-      const store = await env.DB.prepare(`SELECT * FROM stores WHERE id=?`).bind(id).first();
+        `INSERT OR IGNORE INTO stores (id,name,shopify_domain,shopify_access_token,shopify_client_id,shopify_client_secret,google_ads_customer_id,currency,created_at) VALUES (?,?,?,?,?,?,?,?,?)`
+      ).bind(id, body.name.trim(), body.shopify_domain ?? "", body.shopify_access_token ?? "", body.shopify_client_id?.trim() ?? "", body.shopify_client_secret?.trim() ?? "", body.google_ads_customer_id ?? "", body.currency ?? "EUR", new Date().toISOString()).run();
+      const store = await env.DB.prepare(`SELECT id,name,shopify_domain,google_ads_customer_id,currency,created_at FROM stores WHERE id=?`).bind(id).first();
       return json({ ok: true, store });
     }
 
     // ── PUT /api/stores/:id ───────────────────────────────────────────────────
     if (path.startsWith("/api/stores/") && method === "PUT") {
       const id = path.split("/")[3];
-      const body = await request.json() as { name?: string; shopify_domain?: string; shopify_access_token?: string; google_ads_customer_id?: string; currency?: string };
+      const body = await request.json() as { name?: string; shopify_domain?: string; shopify_access_token?: string; shopify_client_id?: string; shopify_client_secret?: string; google_ads_customer_id?: string; currency?: string };
       await env.DB.prepare(
         `UPDATE stores SET name=COALESCE(?,name), shopify_domain=COALESCE(?,shopify_domain), shopify_access_token=COALESCE(?,shopify_access_token), google_ads_customer_id=COALESCE(?,google_ads_customer_id), currency=COALESCE(?,currency) WHERE id=?`
       ).bind(body.name || null, body.shopify_domain || null, body.shopify_access_token || null, body.google_ads_customer_id || null, body.currency || null, id).run();
-      const store = await env.DB.prepare(`SELECT * FROM stores WHERE id=?`).bind(id).first();
+      // New client credentials: store them and expire the current token so the next call refreshes it
+      if (body.shopify_client_id?.trim() || body.shopify_client_secret?.trim()) {
+        await env.DB.prepare(
+          `UPDATE stores SET shopify_client_id=COALESCE(?,shopify_client_id), shopify_client_secret=COALESCE(?,shopify_client_secret), shopify_token_expires_at='' WHERE id=?`
+        ).bind(body.shopify_client_id?.trim() || null, body.shopify_client_secret?.trim() || null, id).run();
+      }
+      const store = await env.DB.prepare(`SELECT id,name,shopify_domain,google_ads_customer_id,currency,created_at FROM stores WHERE id=?`).bind(id).first();
       return json({ ok: true, store });
     }
 
@@ -2007,6 +2063,7 @@ export default {
       if (!store_id) return json({ error: "Missing store_id" }, 400);
 
       const store = await env.DB.prepare(`SELECT shopify_domain, shopify_access_token FROM stores WHERE id=?`).bind(store_id).first() as { shopify_domain: string; shopify_access_token: string } | null;
+      if (store) await freshShopifyToken(env, store_id, store);
       if (!store?.shopify_domain || !store?.shopify_access_token) return json({ error: "Store not configured with Shopify credentials" }, 400);
 
       const since = new Date();
@@ -2411,6 +2468,7 @@ export default {
       const store = await env.DB.prepare(
         `SELECT shopify_domain, shopify_access_token FROM stores WHERE id=?`
       ).bind(storeId).first<{ shopify_domain: string; shopify_access_token: string }>();
+      if (store) await freshShopifyToken(env, storeId, store);
       if (!store?.shopify_domain || !store?.shopify_access_token) {
         return json({ error: "Store has no Shopify credentials", has_domain: !!store?.shopify_domain, has_token: !!store?.shopify_access_token, found_store: !!store }, 400);
       }
@@ -3313,6 +3371,7 @@ export default {
       if (!store_id || !shopify_order_id || !action) return json({ error: "Missing fields" }, 400);
 
       const store = await env.DB.prepare(`SELECT shopify_domain, shopify_access_token FROM stores WHERE id=?`).bind(store_id).first() as { shopify_domain: string; shopify_access_token: string } | null;
+      if (store) await freshShopifyToken(env, store_id, store);
       if (!store?.shopify_domain || !store?.shopify_access_token) return json({ error: "Store not configured with Shopify credentials" }, 400);
 
       const shopifyBase = `https://${store.shopify_domain}/admin/api/2024-01`;
