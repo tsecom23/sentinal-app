@@ -3,18 +3,17 @@
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-  BarChart3, Bell, Bot, Box,
-  LayoutDashboard, LineChart, LogOut, MessageCircle,
-  RotateCcw, ShoppingCart, Skull, Store,
-  Target, TrendingUp, Trophy, Users, Wifi, X,
+  LayoutDashboard, LogOut,
+  RotateCcw, ShoppingCart, Store,
+  TrendingUp, Trophy, Users, Wifi, X,
 } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 import { createClient } from "../../utils/supabase/client";
-import { canAccess } from "../lib/roles";
+import { canAccess, getAllowedPaths } from "../lib/roles";
 
 const NAV = [
   {
-    section: "COMMAND",
+    section: "DASHBOARD",
     color: "#8b5cf6",
     items: [
       { label: "Dashboard",  href: "/",           icon: LayoutDashboard },
@@ -23,33 +22,8 @@ const NAV = [
       { label: "Customers",  href: "/customers",  icon: Users },
       { label: "Milestones", href: "/milestones", icon: Trophy },
       { label: "Stores",     href: "/stores",     icon: Store },
-    ],
-  },
-  {
-    section: "MEDIA",
-    color: "#a855f7",
-    items: [
-      { label: "ROAS Tracker",  href: "/roas-tracker",     icon: LineChart },
-      { label: "Google Ads",    href: "/google-ads",       icon: BarChart3 },
-      { label: "Product Ads",   href: "/product-ads",      icon: Box },
-      { label: "Scale",         href: "/scale-command",    icon: Target },
-    ],
-  },
-  {
-    section: "OPS",
-    color: "#fb923c",
-    items: [
-      { label: "Returns",    href: "/returns",    icon: RotateCcw },
-      { label: "Dead Stock", href: "/dead-stock", icon: Skull },
-    ],
-  },
-  {
-    section: "AI",
-    color: "#f472b6",
-    items: [
-      { label: "AI Chat",         href: "/ai-chat",            icon: MessageCircle },
-      { label: "Recommendations", href: "/ai-recommendations", icon: Bot },
-      { label: "Notifications",   href: "/notifications",      icon: Bell },
+      // Only shown to restricted users (VA accounts limited to /returns)
+      { label: "Returns",    href: "/returns",    icon: RotateCcw, restrictedOnly: true },
     ],
   },
 ];
@@ -85,7 +59,10 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
 
   const visibleNav = NAV.map(g => ({
     ...g,
-    items: g.items.filter(i => canAccess(email, i.href)),
+    items: g.items.filter(i =>
+      canAccess(email, i.href) &&
+      (!("restrictedOnly" in i && i.restrictedOnly) || getAllowedPaths(email) !== null)
+    ),
   })).filter(g => g.items.length > 0);
 
   return (
@@ -239,7 +216,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose
           </div>
           <div className="flex items-center justify-between">
             <span className="text-[9px] font-mono" style={{ color: "var(--status-label)" }}>STORES</span>
-            <span className="text-[9px] font-mono text-violet-500 font-bold">3 LIVE</span>
+            <span className="text-[9px] font-mono text-violet-500 font-bold">4 LIVE</span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-[9px] font-mono" style={{ color: "var(--status-label)" }}>ENGINE</span>

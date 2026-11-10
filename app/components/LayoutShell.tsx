@@ -8,10 +8,9 @@ import { createClient } from "../../utils/supabase/client";
 import { canAccess, defaultPath } from "../lib/roles";
 
 const WITH_SIDEBAR = [
-  "/", "/orders", "/returns", "/dead-stock", "/stores",
-  "/ai-chat", "/ai-recommendations", "/google-ads", "/product-ads",
-  "/scale-command", "/milestones", "/pnl", "/customers", "/notifications",
-  "/roas-tracker", "/inbox", "/customer-service",
+  "/", "/orders", "/returns", "/stores",
+  "/milestones", "/pnl", "/customers",
+  "/inbox", "/customer-service",
 ];
 
 export default function LayoutShell({ children }: { children: React.ReactNode }) {

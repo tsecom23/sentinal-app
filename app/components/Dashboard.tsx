@@ -5,7 +5,7 @@ import { nlDate } from "../lib/date";
 import {
   AlertTriangle, Bell, Box, CheckCircle,
   RefreshCw, RotateCcw, ShieldAlert, TrendingUp,
-  ArrowUpRight, ArrowDownRight, Lightbulb, Skull,
+  ArrowUpRight, ArrowDownRight, Lightbulb,
   Target, Zap,
 } from "lucide-react";
 import {
@@ -157,11 +157,14 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
         const beRoas       = totalRevenue > 0 ? totalRevenue / (totalRevenue - totalCost) : null;
 
         // Merge daily trend (sum by day)
-        const trendMap = new Map<string, { revenue: number; profit: number }>();
+        const trendMap = new Map<string, { revenue: number; profit: number; googleSpend: number; metaSpend: number }>();
         for (const { ov } of results) {
           for (const pt of ov.revenueTrend ?? []) {
-            const ex = trendMap.get(pt.day) ?? { revenue: 0, profit: 0 };
-            trendMap.set(pt.day, { revenue: ex.revenue + pt.revenue, profit: ex.profit + pt.profit });
+            const ex = trendMap.get(pt.day) ?? { revenue: 0, profit: 0, googleSpend: 0, metaSpend: 0 };
+            trendMap.set(pt.day, {
+              revenue: ex.revenue + pt.revenue, profit: ex.profit + pt.profit,
+              googleSpend: ex.googleSpend + (pt.googleSpend ?? 0), metaSpend: ex.metaSpend + (pt.metaSpend ?? 0),
+            });
           }
         }
         const revenueTrend = [...trendMap.entries()]
@@ -712,6 +715,43 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
         </div>
       </div>
 
+      {/* ── Per day (replaces ROAS Tracker) ─────────────────────── */}
+      {(ov?.revenueTrend?.length ?? 0) > 0 && (
+        <div className="card p-5 mb-6">
+          <div className="flex items-center gap-2 mb-4">
+            <TrendingUp size={13} className="text-violet-400" />
+            <h3 className="text-[10px] font-mono font-bold uppercase tracking-widest text-slate-400">Per Day</h3>
+          </div>
+          <div className="overflow-x-auto max-h-96 overflow-y-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">
+                  <th className="text-left pb-2 pr-6 font-semibold">Day</th>
+                  <th className="text-right pb-2 px-4 font-semibold">Revenue</th>
+                  <th className="text-right pb-2 px-4 font-semibold">Ad Spend</th>
+                  <th className="text-right pb-2 px-4 font-semibold">Profit</th>
+                  <th className="text-right pb-2 pl-4 font-semibold">ROAS</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {[...(ov?.revenueTrend ?? [])].reverse().map(pt => {
+                  const spend = (pt.googleSpend ?? 0) + (pt.metaSpend ?? 0);
+                  return (
+                    <tr key={pt.day} className="hover:bg-violet-500/5 transition-colors">
+                      <td className="py-2 pr-6 font-mono text-slate-400">{pt.day}</td>
+                      <td className="py-2 px-4 text-right text-slate-300 tabular-nums">€{fmt(pt.revenue)}</td>
+                      <td className="py-2 px-4 text-right text-slate-500 tabular-nums">€{fmt(spend)}</td>
+                      <td className={`py-2 px-4 text-right font-bold font-mono ${pt.profit >= 0 ? "text-emerald-400" : "text-red-400"}`}>€{fmt(pt.profit)}</td>
+                      <td className="py-2 pl-4 text-right text-slate-400">{spend > 0 ? `${(pt.revenue / spend).toFixed(2)}×` : "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* ── All-stores breakdown ───────────────────────────────── */}
       {storeId === "all" && storeBreakdown.length > 0 && (
         <div className="card p-5 mb-6">
@@ -865,12 +905,6 @@ export default function Dashboard({ activeStoreId }: { activeStoreId?: string })
               className="flex-1 h-8 rounded-lg transition flex items-center justify-center gap-1.5 text-[11px] font-mono text-slate-500 hover:text-slate-200" style={{background:"rgba(139,92,246,0.03)",border:"1px solid rgba(139,92,246,0.08)"}}
             >
               <RotateCcw size={11} /> Returns
-            </a>
-            <a
-              href="/dead-stock"
-              className="flex-1 h-8 rounded-lg transition flex items-center justify-center gap-1.5 text-[11px] font-mono text-slate-500 hover:text-slate-200" style={{background:"rgba(139,92,246,0.03)",border:"1px solid rgba(139,92,246,0.08)"}}
-            >
-              <Skull size={11} /> Dead Stock
             </a>
           </div>
         </div>
