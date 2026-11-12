@@ -12,15 +12,23 @@ import { MELVOIRE_TARGETS } from "../lib/melvoireTargets";
 
 const API = "https://sentinel-api.tssheets1.workers.dev";
 const GOAL_ROAS = 2.5;
-const BREAK_EVEN = 1.67;
 
 // Per winkel: doelen + winstformule. Nieuwe winkel = hier toevoegen. Sleutel = store_id in ecomts.
-const STORES: Record<string, { name: string; targets: DayTarget[] | null; fee: number }> = {
-  martaline: { name: "Martaline", targets: MARTALINE_TARGETS, fee: 0.965 },
-  dorevy: { name: "Dorevy", targets: DOREVY_TARGETS, fee: 0.955 },
-  ceofo: { name: "Melvoire", targets: MELVOIRE_TARGETS, fee: 0.955 },
-  tumsie: { name: "Tumsie", targets: null, fee: 0.955 },
+// ret = retourpercentage (Shopify returns / omzet na korting, laatste 60 dagen, gemeten 12 nov 2026).
+// Een retour kost de omzet, de inkoop is meestal al betaald: winst = omzet × fee × (60% − ret) − spend.
+const STORES: Record<string, { name: string; targets: DayTarget[] | null; fee: number; ret: number }> = {
+  martaline: { name: "Martaline", targets: MARTALINE_TARGETS, fee: 0.965, ret: 0.06 },
+  dorevy: { name: "Dorevy", targets: DOREVY_TARGETS, fee: 0.955, ret: 0.035 },
+  ceofo: { name: "Melvoire", targets: MELVOIRE_TARGETS, fee: 0.955, ret: 0.03 },
+  tumsie: { name: "Tumsie", targets: null, fee: 0.955, ret: 0.04 },
 };
+const MARGIN = 0.6;
+const profitOf = (id: string, rev: number, spend: number) => rev * STORES[id].fee * (MARGIN - STORES[id].ret) - spend;
+// Doelwinst per winkel opnieuw rekenen met retouren (de targets-bestanden rekenen zonder).
+const targetProfit = (id: string, x: DayTarget) => (x.t == null || x.s == null ? null : profitOf(id, x.t, x.s));
+const withRefunds = (id: string, ts: DayTarget[] | null) => (ts ? ts.map(x => ({ ...x, p: targetProfit(id, x) })) : null);
+for (const id of Object.keys(STORES)) STORES[id].targets = withRefunds(id, STORES[id].targets);
+const breakEven = (ids: string[]) => Math.max(...ids.map(id => 1 / (STORES[id].fee * (MARGIN - STORES[id].ret))));
 const TOTAL = "totaal";
 const sumN = (vals: (number | null)[]) => (vals.some(v => v != null) ? vals.reduce<number>((a, v) => a + (v ?? 0), 0) : null);
 // Doelen van alle winkels per dag opgeteld (vorig jaar alleen Martaline, dus leeg bij totaal).
@@ -48,6 +56,7 @@ export default function DoelenPage() {
   const [updated, setUpdated] = useState<string>("");
   const [error, setError] = useState("");
   const isTotal = storeId === TOTAL;
+  const BREAK_EVEN_V = breakEven(isTotal ? Object.keys(STORES) : [storeId]);
   const cfg = isTotal ? { name: "Alle winkels", targets: TOTAL_TARGETS, fee: 0.96 } : { ...STORES[storeId], targets: STORES[storeId].targets ?? TOTAL_TARGETS };
   const [perStore, setPerStore] = useState<{ id: string; name: string; rev: number; spend: number }[]>([]);
   const today = nlDate();
@@ -68,7 +77,7 @@ export default function DoelenPage() {
           t.push({ day: today, revenue: now.netRevenue ?? now.revenue, googleSpend: now.googleAdSpend ?? now.adSpend ?? 0, metaSpend: now.metaAdSpend ?? 0 });
         }
         // winst per winkel met eigen fee, zodat het totaal klopt
-        return { id, t: t.map(d => ({ ...d, profit: (d.revenue || 0) * STORES[id].fee * 0.6 - (d.googleSpend || 0) - (d.metaSpend || 0) })) };
+        return { id, t: t.map(d => ({ ...d, profit: profitOf(id, d.revenue || 0, (d.googleSpend || 0) + (d.metaSpend || 0)) })) };
       }));
       const merged = new Map<string, TrendDay>();
       for (const { t } of perId) for (const d of t) {
@@ -216,7 +225,7 @@ export default function DoelenPage() {
 
       <div className="card p-4 overflow-x-auto">
         <h2 className="font-semibold text-slate-900 dark:text-white mb-1">Elke dag</h2>
-        <p className="text-xs text-slate-500 mb-3">ROAS onder {r2(BREAK_EVEN)} = verlies, doel {r2(GOAL_ROAS)}. Winst = netto × {isTotal ? "fee per winkel" : cfg.fee.toLocaleString("nl-NL")} × 60% marge − spend. Alles in EUR.</p>
+        <p className="text-xs text-slate-500 mb-3">ROAS onder {r2(BREAK_EVEN_V)} = verlies, doel {r2(GOAL_ROAS)}. Winst = omzet × fee × (60% marge − retouren) − spend; retouren {isTotal ? "per winkel (Martaline 6%, Dorevy 3,5%, Melvoire 3%, Tumsie 4%)" : (STORES[storeId].ret * 100).toLocaleString("nl-NL") + "%"}. Alles in EUR.</p>
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs text-slate-500 border-b border-slate-200 dark:border-slate-700">
@@ -242,7 +251,7 @@ export default function DoelenPage() {
                   <td className="py-1.5 px-2 text-right">{eur(r.rev)}</td>
                   <td className={`py-1.5 px-2 text-right ${r.t ? pctColor(p) : ""}`}>{r.t ? pct(p) : ""}</td>
                   <td className="py-1.5 px-2 text-right whitespace-nowrap">{eur(r.spend)} / {eur(r.s)}</td>
-                  <td className={`py-1.5 px-2 text-right ${r.roas == null ? "" : r.roas >= GOAL_ROAS ? "text-emerald-600 dark:text-emerald-400" : r.roas < BREAK_EVEN ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}>{r2(r.roas)}</td>
+                  <td className={`py-1.5 px-2 text-right ${r.roas == null ? "" : r.roas >= GOAL_ROAS ? "text-emerald-600 dark:text-emerald-400" : r.roas < BREAK_EVEN_V ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}>{r2(r.roas)}</td>
                   <td className={`py-1.5 px-2 text-right whitespace-nowrap ${r.profit != null && r.profit < 0 ? "text-red-600 dark:text-red-400" : ""}`}>{eur(r.profit)} / {eur(r.p)}</td>
                 </tr>
               );
