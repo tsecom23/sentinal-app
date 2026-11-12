@@ -8,18 +8,28 @@ import { RefreshCw, Target } from "lucide-react";
 import { nlDate } from "../lib/date";
 import { MARTALINE_TARGETS, type DayTarget } from "../lib/martalineTargets";
 import { DOREVY_TARGETS } from "../lib/dorevyTargets";
+import { MELVOIRE_TARGETS } from "../lib/melvoireTargets";
 
 const API = "https://sentinel-api.tssheets1.workers.dev";
 const GOAL_ROAS = 2.5;
 const BREAK_EVEN = 1.67;
 
-// Per winkel: doelen + winstformule. Nieuwe winkel = hier toevoegen.
-const STORES: Record<string, { name: string; targets: DayTarget[]; fee: number }> = {
+// Per winkel: doelen + winstformule. Nieuwe winkel = hier toevoegen. Sleutel = store_id in ecomts.
+const STORES: Record<string, { name: string; targets: DayTarget[] | null; fee: number }> = {
   martaline: { name: "Martaline", targets: MARTALINE_TARGETS, fee: 0.965 },
   dorevy: { name: "Dorevy", targets: DOREVY_TARGETS, fee: 0.955 },
+  ceofo: { name: "Melvoire", targets: MELVOIRE_TARGETS, fee: 0.955 },
+  tumsie: { name: "Tumsie", targets: null, fee: 0.955 },
 };
+const TOTAL = "totaal";
+const sumN = (vals: (number | null)[]) => (vals.some(v => v != null) ? vals.reduce<number>((a, v) => a + (v ?? 0), 0) : null);
+// Doelen van alle winkels per dag opgeteld (vorig jaar alleen Martaline, dus leeg bij totaal).
+const TOTAL_TARGETS: DayTarget[] = MARTALINE_TARGETS.map(m => {
+  const ts = Object.values(STORES).map(c => c.targets?.find(x => x.d === m.d) ?? null).filter(Boolean) as DayTarget[];
+  return { d: m.d, ly: null, lyS: null, lyR: null, lo: sumN(ts.map(x => x.lo)), t: sumN(ts.map(x => x.t)), hi: sumN(ts.map(x => x.hi)), s: sumN(ts.map(x => x.s)), p: sumN(ts.map(x => x.p)) };
+});
 
-type TrendDay = { day: string; revenue: number; googleSpend: number; metaSpend: number };
+type TrendDay = { day: string; revenue: number; googleSpend: number; metaSpend: number; profit?: number };
 type Row = DayTarget & { rev: number | null; spend: number | null; roas: number | null; profit: number | null };
 
 const eur = (v: number | null | undefined, digits = 0) =>
@@ -32,12 +42,14 @@ const pctColor = (p: number | null) =>
   p == null ? "text-slate-400" : p >= 1 ? "text-emerald-600 dark:text-emerald-400" : p >= 0.85 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400";
 
 export default function DoelenPage() {
-  const [storeId, setStoreId] = useState("martaline");
+  const [storeId, setStoreId] = useState(TOTAL);
   const [trend, setTrend] = useState<TrendDay[]>([]);
   const [loading, setLoading] = useState(true);
   const [updated, setUpdated] = useState<string>("");
   const [error, setError] = useState("");
-  const cfg = STORES[storeId];
+  const isTotal = storeId === TOTAL;
+  const cfg = isTotal ? { name: "Alle winkels", targets: TOTAL_TARGETS, fee: 0.96 } : { ...STORES[storeId], targets: STORES[storeId].targets ?? TOTAL_TARGETS };
+  const [perStore, setPerStore] = useState<{ id: string; name: string; rev: number; spend: number }[]>([]);
   const today = nlDate();
 
   const load = useCallback(async () => {
@@ -45,22 +57,37 @@ export default function DoelenPage() {
     setError("");
     try {
       const first = cfg.targets[0].d;
-      const [all, now] = await Promise.all([
-        fetch(`${API}/api/dashboard/overview?store_id=${storeId}&start=${first}&end=${today}`).then(r => r.json()),
-        fetch(`${API}/api/dashboard/overview?store_id=${storeId}&start=${today}&end=${today}`).then(r => r.json()),
-      ]);
-      const t: TrendDay[] = Array.isArray(all?.revenueTrend) ? all.revenueTrend : [];
-      if (!t.some(d => d.day === today) && now && typeof now.revenue === "number") {
-        t.push({ day: today, revenue: now.netRevenue ?? now.revenue, googleSpend: now.googleAdSpend ?? now.adSpend ?? 0, metaSpend: now.metaAdSpend ?? 0 });
+      const ids = isTotal ? Object.keys(STORES) : [storeId];
+      const perId = await Promise.all(ids.map(async id => {
+        const [all, now] = await Promise.all([
+          fetch(`${API}/api/dashboard/overview?store_id=${id}&start=${first}&end=${today}`).then(r => r.json()),
+          fetch(`${API}/api/dashboard/overview?store_id=${id}&start=${today}&end=${today}`).then(r => r.json()),
+        ]);
+        const t: TrendDay[] = Array.isArray(all?.revenueTrend) ? all.revenueTrend : [];
+        if (!t.some(d => d.day === today) && now && typeof now.revenue === "number") {
+          t.push({ day: today, revenue: now.netRevenue ?? now.revenue, googleSpend: now.googleAdSpend ?? now.adSpend ?? 0, metaSpend: now.metaAdSpend ?? 0 });
+        }
+        // winst per winkel met eigen fee, zodat het totaal klopt
+        return { id, t: t.map(d => ({ ...d, profit: (d.revenue || 0) * STORES[id].fee * 0.6 - (d.googleSpend || 0) - (d.metaSpend || 0) })) };
+      }));
+      const merged = new Map<string, TrendDay>();
+      for (const { t } of perId) for (const d of t) {
+        const m = merged.get(d.day) ?? { day: d.day, revenue: 0, googleSpend: 0, metaSpend: 0, profit: 0 };
+        m.revenue += d.revenue || 0; m.googleSpend += d.googleSpend || 0; m.metaSpend += d.metaSpend || 0; m.profit = (m.profit ?? 0) + (d.profit ?? 0);
+        merged.set(d.day, m);
       }
-      setTrend(t);
+      setTrend([...merged.values()]);
+      setPerStore(perId.map(({ id, t }) => {
+        const tt = t.filter(d => d.day >= "2026-11-12" && d.day <= today);
+        return { id, name: STORES[id].name, rev: tt.reduce((a, d) => a + (d.revenue || 0), 0), spend: tt.reduce((a, d) => a + (d.googleSpend || 0) + (d.metaSpend || 0), 0) };
+      }));
       setUpdated(new Date().toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" }));
     } catch {
       setError("Kon de cijfers niet laden. Probeer opnieuw.");
     } finally {
       setLoading(false);
     }
-  }, [cfg, storeId, today]);
+  }, [cfg, storeId, today, isTotal]);
 
   useEffect(() => {
     load();
@@ -79,7 +106,7 @@ export default function DoelenPage() {
         rev,
         spend,
         roas: rev != null && spend ? rev / spend : null,
-        profit: rev != null && spend != null ? rev * cfg.fee * 0.6 - spend : null,
+        profit: a && a.profit != null ? a.profit : null,
       };
     });
   }, [trend, cfg, today]);
@@ -127,7 +154,7 @@ export default function DoelenPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {Object.entries(STORES).map(([id, s]) => (
+          {[[TOTAL, { name: "Alle winkels" }] as const, ...Object.entries(STORES)].map(([id, s]) => (
             <button key={id} onClick={() => setStoreId(id)}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium ${id === storeId ? "bg-violet-600 text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"}`}>
               {s.name}
@@ -140,6 +167,21 @@ export default function DoelenPage() {
       </div>
 
       {error && <div className="card p-4 text-red-600">{error}</div>}
+      {!isTotal && !STORES[storeId].targets && <div className="card p-3 text-sm text-slate-500">{cfg.name} heeft nog geen eigen dagdoelen: het doel hieronder is dat van alle winkels samen. Kijk vooral naar de werkelijke omzet.</div>}
+      {isTotal && perStore.length > 0 && (
+        <div className="card p-4">
+          <h2 className="font-semibold text-slate-900 dark:text-white mb-2">Per winkel sinds 12 nov (EUR)</h2>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+            {perStore.map(p => (
+              <button key={p.id} onClick={() => setStoreId(p.id)} className="text-left rounded-lg bg-slate-50 dark:bg-slate-800 p-3">
+                <div className="text-slate-500">{p.name}</div>
+                <div className="text-xl font-bold text-slate-900 dark:text-white">{eur(p.rev)}</div>
+                <div className="text-xs text-slate-500">spend {eur(p.spend)} · ROAS {r2(p.spend ? p.rev / p.spend : null)}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <Tile title="Vandaag" big={eur(tr?.rev ?? 0)} sub={`doel ${eur(tr?.t)} (${eur(tr?.lo)}–${eur(tr?.hi)})`}
@@ -174,7 +216,7 @@ export default function DoelenPage() {
 
       <div className="card p-4 overflow-x-auto">
         <h2 className="font-semibold text-slate-900 dark:text-white mb-1">Elke dag</h2>
-        <p className="text-xs text-slate-500 mb-3">ROAS onder {r2(BREAK_EVEN)} = verlies, doel {r2(GOAL_ROAS)}. Winst = netto × {cfg.fee.toLocaleString("nl-NL")} × 60% marge − spend.</p>
+        <p className="text-xs text-slate-500 mb-3">ROAS onder {r2(BREAK_EVEN)} = verlies, doel {r2(GOAL_ROAS)}. Winst = netto × {isTotal ? "fee per winkel" : cfg.fee.toLocaleString("nl-NL")} × 60% marge − spend. Alles in EUR.</p>
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs text-slate-500 border-b border-slate-200 dark:border-slate-700">
