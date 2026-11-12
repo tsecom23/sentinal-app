@@ -7,6 +7,7 @@ import {
 import { RefreshCw, Target } from "lucide-react";
 import { nlDate } from "../lib/date";
 import { MARTALINE_TARGETS, type DayTarget } from "../lib/martalineTargets";
+import { DOREVY_TARGETS } from "../lib/dorevyTargets";
 
 const API = "https://sentinel-api.tssheets1.workers.dev";
 const GOAL_ROAS = 2.5;
@@ -15,6 +16,7 @@ const BREAK_EVEN = 1.67;
 // Per winkel: doelen + winstformule. Nieuwe winkel = hier toevoegen.
 const STORES: Record<string, { name: string; targets: DayTarget[]; fee: number }> = {
   martaline: { name: "Martaline", targets: MARTALINE_TARGETS, fee: 0.965 },
+  dorevy: { name: "Dorevy", targets: DOREVY_TARGETS, fee: 0.955 },
 };
 
 type TrendDay = { day: string; revenue: number; googleSpend: number; metaSpend: number };
@@ -144,7 +146,7 @@ export default function DoelenPage() {
           extra={<span className={pctColor(todayPct)}>{pct(todayPct)} van doel · spend {eur(tr?.spend)} / doel {eur(tr?.s)}</span>} />
         <Tile title="Deze week" big={eur(k.weekRev)} sub={`doel ${eur(k.weekT)}`}
           extra={<span className={pctColor(k.weekT ? k.weekRev / k.weekT : null)}>{pct(k.weekT ? k.weekRev / k.weekT : null)} van doel</span>} />
-        <Tile title="Sinds 12 nov" big={eur(k.cumRev)} sub={`doel ${eur(k.cumT)} · vorig jaar ${eur(k.cumLy)}`}
+        <Tile title="Sinds 12 nov" big={eur(k.cumRev)} sub={`doel ${eur(k.cumT)}${k.cumLy ? ` · vorig jaar ${eur(k.cumLy)}` : ""}`}
           extra={<span className={pctColor(k.doneT ? k.doneRev / k.doneT : null)}>t/m gisteren {pct(k.doneT ? k.doneRev / k.doneT : null)} van doel · ×{r2(k.cumLy ? k.cumRev / k.cumLy : null)} vorig jaar</span>} />
         <Tile title="Winst sinds 12 nov" big={eur(k.cumProfit)} sub={`doel ${eur(k.cumProfitT)} · ROAS ${r2(k.cumSpend ? k.cumRev / k.cumSpend : null)} (doel ${r2(GOAL_ROAS)})`}
           extra={<span className="text-slate-500">Totaal doel 12 nov–31 dec: {eur(k.totalT)} omzet, {eur(k.totalP)} winst. Nog te gaan: {eur(k.rest)}</span>} />
