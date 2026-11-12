@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import {
   LayoutDashboard, LogOut,
   RotateCcw, ShoppingCart, Store,
-  TrendingUp, Trophy, Users, Wifi, X,
+  Target, TrendingUp, Trophy, Users, Wifi, X,
 } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 import { createClient } from "../../utils/supabase/client";
@@ -17,6 +17,7 @@ const NAV = [
     color: "#8b5cf6",
     items: [
       { label: "Dashboard",  href: "/",           icon: LayoutDashboard },
+      { label: "Doelen",     href: "/doelen",     icon: Target },
       { label: "Orders",     href: "/orders",     icon: ShoppingCart },
       { label: "P&L",        href: "/pnl",        icon: TrendingUp },
       { label: "Customers",  href: "/customers",  icon: Users },
