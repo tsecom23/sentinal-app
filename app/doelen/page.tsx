@@ -57,7 +57,12 @@ export default function DoelenPage() {
   const [error, setError] = useState("");
   const isTotal = storeId === TOTAL;
   const BREAK_EVEN_V = breakEven(isTotal ? Object.keys(STORES) : [storeId]);
-  const cfg = isTotal ? { name: "Alle winkels", targets: TOTAL_TARGETS, fee: 0.96 } : { ...STORES[storeId], targets: STORES[storeId].targets ?? TOTAL_TARGETS };
+  // useMemo: een nieuw cfg-object per render gaf load() elke render een nieuwe identiteit -> eindeloze
+  // fetch-lus (174 overview-calls in 2 min) -> "D1 DB is overloaded" en het hele dashboard hing (13 nov 2026).
+  const cfg = useMemo(
+    () => (storeId === TOTAL ? { name: "Alle winkels", targets: TOTAL_TARGETS, fee: 0.96 } : { ...STORES[storeId], targets: STORES[storeId].targets ?? TOTAL_TARGETS }),
+    [storeId],
+  );
   const [perStore, setPerStore] = useState<{ id: string; name: string; rev: number; spend: number }[]>([]);
   const today = nlDate();
 
