@@ -9,6 +9,7 @@ import { nlDate } from "../lib/date";
 import { MARTALINE_TARGETS, type DayTarget } from "../lib/martalineTargets";
 import { DOREVY_TARGETS } from "../lib/dorevyTargets";
 import { MELVOIRE_TARGETS } from "../lib/melvoireTargets";
+import { TUMSIE_TARGETS } from "../lib/tumsieTargets";
 
 const API = "https://sentinel-api.tssheets1.workers.dev";
 const GOAL_ROAS = 2.5;
@@ -20,7 +21,7 @@ const STORES: Record<string, { name: string; targets: DayTarget[] | null; fee: n
   martaline: { name: "Martaline", targets: MARTALINE_TARGETS, fee: 0.965, ret: 0.06 },
   dorevy: { name: "Dorevy", targets: DOREVY_TARGETS, fee: 0.955, ret: 0.035 },
   ceofo: { name: "Melvoire", targets: MELVOIRE_TARGETS, fee: 0.955, ret: 0.03 },
-  tumsie: { name: "Tumsie", targets: null, fee: 0.955, ret: 0.04 },
+  tumsie: { name: "Tumsie", targets: TUMSIE_TARGETS, fee: 0.955, ret: 0.04 },
 };
 const MARGIN = 0.6;
 const profitOf = (id: string, rev: number, spend: number) => rev * STORES[id].fee * (MARGIN - STORES[id].ret) - spend;
