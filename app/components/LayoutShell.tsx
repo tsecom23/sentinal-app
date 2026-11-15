@@ -19,6 +19,14 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
   const [ready, setReady]           = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // Thema na elke route opnieuw zetten: een hydration-fout laat React de <html>-className resetten
+  // en dan viel 'light' weg (Doelen werd donker met donkere tekst, 15 nov 2026).
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("sentinel-theme") === "light") document.documentElement.classList.add("light");
+    } catch { /* geen storage */ }
+  }, [pathname]);
+
   useEffect(() => {
     const supabase = createClient();
     supabase.auth.getUser().then(({ data }) => {

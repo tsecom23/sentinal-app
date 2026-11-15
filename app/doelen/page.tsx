@@ -50,7 +50,15 @@ const dayLabel = (d: string) =>
 const pctColor = (p: number | null) =>
   p == null ? "text-slate-400" : p >= 1 ? "text-emerald-600 dark:text-emerald-400" : p >= 0.85 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400";
 
+// Alleen in de browser renderen: 'vandaag' (nlDate) verschilt anders tussen build en browser
+// -> hydration-fout #418 -> thema-class weg. (15 nov 2026)
 export default function DoelenPage() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  return mounted ? <Doelen /> : null;
+}
+
+function Doelen() {
   const [storeId, setStoreId] = useState(TOTAL);
   const [trend, setTrend] = useState<TrendDay[]>([]);
   const [loading, setLoading] = useState(true);
