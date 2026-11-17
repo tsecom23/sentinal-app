@@ -1,3 +1,4 @@
+// 12–16 nov = basistempo (opschalen begon pas 17 nov; vorig jaar al rond 15 nov), bijgewerkt 17 nov 2026.
 // Martaline dagdoelen nov–dec 2026, HERSCHREVEN 17 nov 2026 (2e versie, harder): curve vorig jaar × huidige basis 3–16 nov (FR €900/dag + Polen ±€130/dag = €1.030/dag = 1,75× vorig jaar).
 // ly/lyS/lyR = vorig jaar dezelfde weekdag (Shopify netto + Google Ads).
 // Model (gebruiker 17 nov: "volg de grafiek van vorig jaar … op piek deden we 6k … harder zelfs, we draaien nu al voor"):
@@ -131,55 +132,55 @@ export const MARTALINE_TARGETS: DayTarget[] = [
 "ly": 392.24,
 "lyS": 243.57,
 "lyR": 1.61,
-"lo": 836,
-"t": 1019,
-"hi": 1202,
-"s": 445,
-"p": 145
+"lo": 738,
+"t": 900,
+"hi": 1062,
+"s": 396,
+"p": 125
 },
 {
 "d": "2026-11-13",
 "ly": 411.31,
 "lyS": 263.32,
 "lyR": 1.56,
-"lo": 754,
-"t": 920,
-"hi": 1085,
-"s": 399,
-"p": 133
+"lo": 738,
+"t": 900,
+"hi": 1062,
+"s": 396,
+"p": 125
 },
 {
 "d": "2026-11-14",
 "ly": 776.54,
 "lyS": 396.38,
 "lyR": 1.96,
-"lo": 1098,
-"t": 1339,
-"hi": 1580,
-"s": 544,
-"p": 231
+"lo": 738,
+"t": 900,
+"hi": 1062,
+"s": 396,
+"p": 125
 },
 {
 "d": "2026-11-15",
 "ly": 1113.17,
 "lyS": 275.16,
 "lyR": 4.05,
-"lo": 1328,
-"t": 1620,
-"hi": 1912,
-"s": 682,
-"p": 256
+"lo": 845,
+"t": 1030,
+"hi": 1215,
+"s": 454,
+"p": 143
 },
 {
 "d": "2026-11-16",
 "ly": 894.29,
 "lyS": 255.19,
 "lyR": 3.5,
-"lo": 1779,
-"t": 2169,
-"hi": 2560,
-"s": 841,
-"p": 415
+"lo": 845,
+"t": 1030,
+"hi": 1215,
+"s": 454,
+"p": 143
 },
 {
 "d": "2026-11-17",
