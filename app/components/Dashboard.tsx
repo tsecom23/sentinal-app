@@ -21,7 +21,7 @@ const STORE_COUNTRIES: Record<string, { code: string; name: string; flag: string
   ceofo:     [{ code: "FR", name: "France", flag: "🇫🇷" }, { code: "ES", name: "Spain", flag: "🇪🇸" }, { code: "IT", name: "Italy", flag: "🇮🇹" }],
   // FR en DE staan offline (gebruiker 17 nov 2026), niet meer tonen.
   dorevy:    [{ code: "GB", name: "United Kingdom", flag: "🇬🇧" }, { code: "IT", name: "Italy", flag: "🇮🇹" }, { code: "BE", name: "Belgium", flag: "🇧🇪" }],
-  martaline: [],
+  martaline: [{ code: "FR", name: "France", flag: "🇫🇷" }, { code: "PL", name: "Poland", flag: "🇵🇱" }],
 };
 
 function getCountries(storeId: string) {
